@@ -535,6 +535,8 @@ def downloadSeries(series_data,
         if number > 0:
             print("Downloaded", success, "out of", number, "requested series from a total of",
                   len(series_data), "Series Instance UIDs (scans).")
+            print(failed, "failed to download.")
+            print(previous, "previously downloaded.")
         else:
             print("Downloaded", success, "out of", len(series_data), "Series Instance UIDs (scans).")
             print(failed, "failed to download.")
