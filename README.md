@@ -12,4 +12,4 @@ To import functions related to the NBIA software that holds TCIA's DICOM data:
 ```
 from tcia_utils import nbia
 ```
-Examples notebooks demonstrating tcia_utils functionality can be found at https://github.com/kirbyju/TCIA_Notebooks.
+Example notebooks demonstrating tcia_utils functionality can be found at https://github.com/kirbyju/TCIA_Notebooks.
