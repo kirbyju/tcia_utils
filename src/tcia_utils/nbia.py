@@ -883,14 +883,25 @@ def makeVizLinks(series_data, csv_filename=""):
 # Visualize a Series (scan) you've downloaded in the notebook
 # Requires EITHER a seriesUid or path parameter
 # Leave seriesUid empty if you want to provide a custom path
-# The function assumes "tciaDownload/<seriesUid>/" as path if seriesUid is provided
-#   since this is how downloadSeries() saves things
+# The function assumes "tciaDownload/<seriesUid>/" as path if seriesUid is 
+#   provided since this is where downloadSeries() saves data
 
 def viewSeries(seriesUid = "", path = ""):
 
-    # set path where downloadSeries() saves the data if seriesUid is provide
+    # set path where downloadSeries() saves the data if seriesUid is provided
     if seriesUid != "":
         path = "tciaDownload/" + seriesUid
+
+    # error message function for when series doesn't exist or is invalid data
+    def seriesInvalid(uid):
+        print("Cannot find a valid DICOM series at:")
+        print(path)
+        print("Try running downloadSeries(seriesUid, input_type = \"uid\") to download it first.")
+        print("If the data isn't restricted, you can alternatively view it in your browser (without downloading) using this link:")
+        if seriesUid != "":
+            print("https://nbia.cancerimagingarchive.net/viewer/?series=" + seriesUid)
+        else:
+            print("https://nbia.cancerimagingarchive.net/viewer/?series=YOUR_SERIES_UID")
 
     # Verify series exists before visualizing
     if os.path.isdir(path):
@@ -898,33 +909,17 @@ def viewSeries(seriesUid = "", path = ""):
         slices = [pydicom.dcmread(path + '/' + s) for s in               
                   os.listdir(path) if s.endswith(".dcm")]
 
-        # todo: figure out why this breaks in some cases or if it's even needed
-        #slices = [s for s in slices if 'SliceLocation' in s]
-
         slices.sort(key = lambda x: int(x.InstanceNumber))
 
         try:
             modality = slices[0].Modality
         except IndexError:
-            print("Cannot find a valid DICOM series at:")
-            print(path)
-            print("Try running downloadSeries(seriesUid, input_type = \"uid\") to download it first.")
-            print("If the data isn't restricted, you can alternatively view it in your browser (without downloading) using this link:")
-            print("https://nbia.cancerimagingarchive.net/viewer/?series=" + seriesUid)
+            seriesInvalid(seriesUid)
             raise StopExecution
-
-        try:
-            slice_thickness = np.abs(slices[0].ImagePositionPatient[2] -   
-                              slices[1].ImagePositionPatient[2])
-        except:
-            slice_thickness = np.abs(slices[0].SliceLocation - 
-                                    slices[1].SliceLocation)
-        for s in slices:
-            s.SliceThickness = slice_thickness
 
         image = np.stack([s.pixel_array for s in slices])
         image = image.astype(np.int16)
-
+        
         if modality == "CT":
             # Set outside-of-scan pixels to 0
             # The intercept is usually -1024, so air is approximately 0
@@ -939,18 +934,14 @@ def viewSeries(seriesUid = "", path = ""):
                 image = image.astype(np.int16)
                 
             image += np.int16(intercept)
-        
+     
         pixel_data = np.array(image, dtype=np.int16)
 
-        # slide through dicom images using a slide bar 
-        plt.figure(1)
+        # slide through dicom images using a slide bar         
         def dicom_animation(x):
+            plt.figure(figsize=[10,10])
             plt.imshow(pixel_data[x], cmap = plt.cm.gray)
             return x
         interact(dicom_animation, x=(0, len(pixel_data)-1))
     else:
-        print("Cannot find a valid DICOM series at:")
-        print(path)
-        print("Try running downloadSeries(seriesUid, input_type = \"uid\") to download it first.")
-        print("If the data isn't restricted, you can alternatively view it in your browser (without downloading) using this link:")
-        print("https://nbia.cancerimagingarchive.net/viewer/?series=" + seriesUid)
+        seriesInvalid(seriesUid)
