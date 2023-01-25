@@ -806,7 +806,7 @@ def makeSeriesReport(series_data):
 
     # Summarize Collections
     print("Series Counts - Collections:")
-    print(df['Collection'].value_counts(dropna=False))
+    print(df['Collection'].value_counts(dropna=False),'\n')
 
     # Summarize modalities
     print("Series Counts - Modality:")
