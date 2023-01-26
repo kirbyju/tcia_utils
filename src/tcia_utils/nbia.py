@@ -98,11 +98,12 @@ def setApiUrl(endpoint, api_url):
 
 ####### getToken()
 # Retrieves security token to access APIs that require authorization 
+# Provides interactive prompts for user/pw if they're not specified as parameters
 # Use getToken() for querying restricted collections with "Search API"
-# Use getToken("nlst") for "Advanced API" queries of National Lung Screening Trial
+# Use getToken(api_url = "nlst") for "Advanced API" queries of National Lung Screening Trial
 # Sets expiration time for tokens (2 hours from creation)
 
-def getToken(api_url = ""): 
+def getToken(user = "", pw = "", api_url = ""): 
 
     global token_exp_time, nlst_token_exp_time, api_call_headers, nlst_api_call_headers
 
@@ -111,9 +112,15 @@ def getToken(api_url = ""):
     nlst_token_url = "https://nlst.cancerimagingarchive.net/nbia-api/oauth/token?username="
 
     # set user name and password
-    print("Enter User: ")
-    userName = input()
-    passWord = getpass.getpass(prompt = 'Enter Password: ')
+    if user == "":
+        print("Enter User: ")
+        userName = input()
+    else:
+        userName = user
+    if pw == "":
+        passWord = getpass.getpass(prompt = 'Enter Password: ')
+    else:
+        passWord = pw
 
     # create API token
     if api_url == "nlst":
@@ -153,14 +160,21 @@ def getToken(api_url = ""):
         
 ####### makeCredentialFile()
 # Create a credential file to use with NBIA Data Retriever
+# Provides interactive prompts for user/pw if they're not specified as parameters
 # Documentation at https://wiki.cancerimagingarchive.net/x/2QKPBQ
 
-def makeCredentialFile(): 
+def makeCredentialFile(user = "", pw = ""): 
 
     # set user name and password
-    print("Enter User: ")
-    userName = input()
-    passWord = getpass.getpass(prompt = 'Enter Password: ')
+    if user == "":
+        print("Enter User: ")
+        userName = input()
+    else:
+        userName = user
+    if pw == "":
+        passWord = getpass.getpass(prompt = 'Enter Password: ')
+    else:
+        passWord = pw
 
     # create credential file to use with NBIA Data Retriever  
     lines = ['userName=' + userName, 'passWord=' + passWord]
@@ -806,7 +820,7 @@ def makeSeriesReport(series_data):
 
     # Summarize Collections
     print("Series Counts - Collections:")
-    print(df['Collection'].value_counts(dropna=False))
+    print(df['Collection'].value_counts(dropna=False),'\n')
 
     # Summarize modalities
     print("Series Counts - Modality:")
