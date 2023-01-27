@@ -35,7 +35,7 @@ def setApiUrl(endpoint, api_url):
                         "getSOPInstanceUIDs", "getSeriesMetaData", "getContentsByName",
                        "getImage", "getSingleImage"]
     advancedEndpoints = ["getModalityValuesAndCounts", "getBodyPartValuesAndCounts", 
-                         "getDicomTags", "getSeriesMetadata2"]
+                         "getDicomTags", "getSeriesMetadata2", "getCollectionOrSeriesForDOI"]
 
     if not endpoint in searchEndpoints and not endpoint in advancedEndpoints:
         print("Endpoint not supported by tcia_utils: " + endpoint)
@@ -50,11 +50,11 @@ def setApiUrl(endpoint, api_url):
                 base_url = "https://services.cancerimagingarchive.net/nbia-api/services/v1/"
             if endpoint in advancedEndpoints:
                 # Using "Advanced" API (login required): https://wiki.cancerimagingarchive.net/x/YoATBg
-                if datetime.now() < token_exp_time:
-                    base_url = "https://services.cancerimagingarchive.net/nbia-api/services/"
-                else:
-                    print("Your security token for accessing the Advanced API is expired or does not exist. Create one using getToken().")
-                    raise StopExecution       
+                # check if valid token exists, use anonymous login if not
+                if datetime.now() > token_exp_time:
+                    print("Accessing Advanced API anonymously. To access restricted data use nbia.getToken() with your credentials.")
+                    getToken(user = "nbia_guest")  
+                base_url = "https://services.cancerimagingarchive.net/nbia-api/services/"
         elif api_url == "nlst":
             if endpoint in searchEndpoints:
                 # Using "Search" API with NLST server (no login required): https://wiki.cancerimagingarchive.net/x/fILTB
@@ -62,11 +62,9 @@ def setApiUrl(endpoint, api_url):
             if endpoint in advancedEndpoints:
                 # Using "Advanced" API docs (login required): https://wiki.cancerimagingarchive.net/x/YoATBg
                 # Checking to see if a valid NLST authentication token exists
-                if datetime.now() < nlst_token_exp_time:
-                    base_url = "https://nlst.cancerimagingarchive.net/nbia-api/services/"
-                else:
-                    print("Your security token for accessing the NLST Advanced API is expired or does not exist. Create one using getToken(\"nlst\").")
-                    raise StopExecution
+                if datetime.now() > nlst_token_exp_time:
+                    getToken(user = "nbia_guest", api_url = "nlst")
+                base_url = "https://nlst.cancerimagingarchive.net/nbia-api/services/"
         elif api_url == "restricted":
             if endpoint in searchEndpoints:
                 # Using "Search with Authentication" API (login required): https://wiki.cancerimagingarchive.net/x/X4ATBg
@@ -117,7 +115,7 @@ def getToken(user = "", pw = "", api_url = ""):
         userName = input()
     else:
         userName = user
-    if pw == "":
+    if pw == "" and user != "nbia_guest":
         passWord = getpass.getpass(prompt = 'Enter Password: ')
     else:
         passWord = pw
@@ -750,7 +748,6 @@ def getDicomTags(seriesUid,
 
 def getDoiMetadata(doi, output, api_url = "", format = ""):
 
-#DOI=https://doifor-CBIS-DDSM&CollectionOrSeries=collection
     param = {'DOI': doi,
              'CollectionOrSeries': output}
     
