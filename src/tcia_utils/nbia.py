@@ -35,7 +35,8 @@ def setApiUrl(endpoint, api_url):
                         "getSOPInstanceUIDs", "getSeriesMetaData", "getContentsByName",
                        "getImage", "getSingleImage"]
     advancedEndpoints = ["getModalityValuesAndCounts", "getBodyPartValuesAndCounts", 
-                         "getDicomTags", "getSeriesMetadata2", "getCollectionOrSeriesForDOI"]
+                         "getDicomTags", "getSeriesMetadata2", "getCollectionOrSeriesForDOI", 
+                         "getCollectionValuesAndCounts"]
 
     if not endpoint in searchEndpoints and not endpoint in advancedEndpoints:
         print("Endpoint not supported by tcia_utils: " + endpoint)
@@ -631,6 +632,17 @@ def downloadImage(seriesUID,
 ##########################
 ##########################
 # Advanced API Endpoints
+
+####### getCollectionPatientCounts function (Advanced)
+# Get patient counts by collection from Advanced API
+
+def getCollectionPatientCounts(api_url = "", format = ""):
+
+    endpoint = "getCollectionValuesAndCounts"
+    options = {}
+    
+    data = queryData(endpoint, options, api_url, format)
+    return data
 
 ####### getModalityCounts function (Advanced)
 # Get counts of Modality metadata from Advanced API
