@@ -33,7 +33,9 @@ def setApiUrl(endpoint, api_url):
     searchEndpoints = ["getCollectionValues", "getBodyPartValues", "getModalityValues",
                         "getPatient", "getPatientStudy", "getSeries", "getManufacturerValues",
                         "getSOPInstanceUIDs", "getSeriesMetaData", "getContentsByName",
-                       "getImage", "getSingleImage"]
+                       "getImage", "getSingleImage", "getPatientByCollectionAndModality",
+                       "NewPatientsInCollection", "NewStudiesInPatientCollection",
+                       "getSeriesSize", "getUpdatedSeries"]
     advancedEndpoints = ["getModalityValuesAndCounts", "getBodyPartValuesAndCounts", 
                          "getDicomTags", "getSeriesMetadata2", "getCollectionOrSeriesForDOI", 
                          "getCollectionValuesAndCounts"]
@@ -307,6 +309,46 @@ def getPatient(collection = "",
     data = queryData(endpoint, options, api_url, format)
     return data
         
+####### getPatientByCollectionAndModality function
+# Gets Patient IDs from a specified api_url
+# Requires specifying collection and modality
+# Returns a list of patient IDs
+
+def getPatientByCollectionAndModality(collection,
+                                      modality,
+                                      api_url = "",
+                                      format = ""):
+    
+    endpoint = "getPatientByCollectionAndModality"
+    
+    # create options dict to construct URL
+    options = {}
+    options['Collection'] = collection
+    options['Modality'] = modality
+
+    data = queryData(endpoint, options, api_url, format)
+    return data
+
+####### getNewPatientsInCollection function
+# Gets "new" patient metadata from a specified api_url
+# Requires specifying collection and date
+# Date format is YYYY/MM/DD
+
+def getNewPatientsInCollection(collection,
+                               date,
+                               api_url = "",
+                               format = ""):
+    
+    endpoint = "NewPatientsInCollection"
+    
+    # create options dict to construct URL
+    options = {}
+    options['Collection'] = collection
+    options['Date'] = date
+
+    data = queryData(endpoint, options, api_url, format)
+    return data
+
 ####### getStudy function
 # Gets Study (visit/timepoint) metadata from a specified api_url
 # Requires filtering by collection
@@ -331,7 +373,29 @@ def getStudy(collection,
 
     data = queryData(endpoint, options, api_url, format)
     return data
-        
+
+####### getNewStudiesInPatient function
+# Gets "new" patient metadata from a specified api_url
+# Requires specifying collection, patient ID and date
+# Date format is YYYY/MM/DD
+
+def getNewStudiesInPatient(collection,
+                           patientId,
+                           date,
+                           api_url = "",
+                           format = ""):
+    
+    endpoint = "NewStudiesInPatientCollection"
+    
+    # create options dict to construct URL
+    options = {}
+    options['Collection'] = collection
+    options['PatientID'] = patientId
+    options['Date'] = date
+
+    data = queryData(endpoint, options, api_url, format)
+    return data
+
 ####### getSeries function
 # Gets Series (scan) metadata from a specified api_url
 # Allows filtering by collection, patient ID, study UID,
@@ -372,7 +436,30 @@ def getSeries(collection = "",
 
     data = queryData(endpoint, options, api_url, format)
     return data
-        
+
+####### getUpdatedSeries function
+# Gets "new" series metadata from a specified api_url
+# Requires specifying date
+# Date format is YYYY/MM/DD
+# NOTE: NBIA API expects MM/DD/YYYY (unlike any other API endpoint!) 
+#        so we'll convert from YYYY/MM/DD so tcia-utils is consistent
+
+def getUpdatedSeries(date,
+                     api_url = "",
+                     format = ""):
+    
+    endpoint = "getUpdatedSeries"
+    
+    # convert to NBIA's expected date format
+    nbiaDate = datetime.strptime(date, "%Y/%m/%d").strftime("%m/%d/%Y")
+
+    # create options dict to construct URL
+    options = {}
+    options['fromDate'] = nbiaDate
+
+    data = queryData(endpoint, options, api_url, format)
+    return data
+
 ####### getSeriesMetadata function
 # Gets Series (scan) metadata from a specified api_url
 # Requires a specific Series Instance UID as input
@@ -390,7 +477,24 @@ def getSeriesMetadata(seriesUid,
 
     data = queryData(endpoint, options, api_url, format)
     return data
-        
+
+####### getSeriesSize function
+# Gets the file count and disk size of a series/scan
+# Requires Series Instance UID as input
+
+def getSeriesSize(seriesUid,
+                  api_url = "",
+                  format = ""):
+    
+    endpoint = "getSeriesSize"
+    
+    # create options dict to construct URL
+    options = {}
+    options['SeriesInstanceUID'] = seriesUid
+
+    data = queryData(endpoint, options, api_url, format)
+    return data
+
 ####### getSopInstanceUids function
 # Gets SOP Instance UIDs from a specific series/scan
 # Requires a specific Series Instance UID as input
