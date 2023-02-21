@@ -9,6 +9,7 @@ import io
 import os
 from datetime import datetime
 from datetime import timedelta
+from enum import Enum
 import matplotlib.pyplot as plt
 import pydicom
 import numpy as np
@@ -27,6 +28,23 @@ logging.basicConfig(
     , level=logging.INFO
 )
 
+class Criteria(Enum):
+    Collection = "CollectionCriteria"
+    Species = "SpeciesCriteria"
+    ImageModality = "ImageModalityCriteria"
+    BodyPart = "AnatomicalSiteCriteria"
+    Manufacturer = "ManufacturerCriteria"
+    DateRange = "DateRangeCriteria"
+    Patient = "PatientCriteria"
+    NumStudies = "MinNumberOfStudiesCriteria"
+    ModalityAnded = "ModalityAndedSearchCriteria"
+
+NPEXSpecies = {
+    "human": 337915000
+    , "mouse": 447612001
+    , "dog": 448771007
+}
+
 ####### setApiUrl()
 # Called by other functions to select base URL
 # Checks for valid security tokens where needed
@@ -44,7 +62,8 @@ def setApiUrl(endpoint, api_url):
                        "getSeriesSize", "getUpdatedSeries"]
     advancedEndpoints = ["getModalityValuesAndCounts", "getBodyPartValuesAndCounts",
                          "getDicomTags", "getSeriesMetadata2", "getCollectionOrSeriesForDOI",
-                         "getCollectionValuesAndCounts", "getCollectionDescriptions"]
+                         "getCollectionValuesAndCounts", "getCollectionDescriptions",
+                         "getSimpleSearchWithModalityAndBodyPartPaged"]
 
     if not endpoint in searchEndpoints and not endpoint in advancedEndpoints:
         _log.error(
@@ -944,6 +963,164 @@ def getDoiMetadata(doi, output, api_url = "", format = ""):
                 df = pd.DataFrame(metadata)
                 df.to_csv(endpoint + ".csv")
                 _log.info(f"CSV saved to: {endpoint}.csv")
+                return df
+            else:
+                return metadata
+        else:
+            _log.info("No results found.")
+
+    except requests.exceptions.HTTPError as errh:
+        _log.error(errh)
+    except requests.exceptions.ConnectionError as errc:
+        _log.error(errc)
+    except requests.exceptions.Timeout as errt:
+        _log.error(errt)
+    except requests.exceptions.RequestException as err:
+        _log.error(err)
+
+####### getSimpleSearchCriteriaValues function
+# Takes the same parameters as the SimpleSearch GUI
+# Using more parameters narrows the number of subjects received.
+def getSimpleSearchWithModalityAndBodyPartPaged(
+    collections = [],
+    species = [],
+    modalities = [],
+    bodyParts = [],
+    manufacturers  = [],
+    fromDate = "",
+    toDate = "",
+    patients = [],
+    minStudies: int = 0,
+    modalityAnded = False,
+    start = 0,
+    size = 10,
+    sortDirection = 'ascending',
+    sortField = 'subject',
+    api_url = "",
+    format = ""):
+    """
+    Takes the same parameters as the SimpleSearch GUI; using more parameters narrows
+    the number of subjects received.
+
+    collections: list[str]   -- The DICOM collections of interest to you
+    species: list[str]       -- Filter collections by species. Possible values are 'human', 'mouse', and 'dog'
+    modalities: list[str]    -- Filter collections by modality
+    modalityAnded: bool      -- If true, only return subjects with all requested modalities, as opposed to any
+    minStudies: int          -- The minimum number of studies a collection must have to be included in the results
+    manufacturers: list[str] -- Imaging device manufacturers, e.g. SIEMENS
+    bodyParts: list[str]     -- Body parts of interest, e.g. CHEST, ABDOMEN
+    fromDate: str            -- First cutoff date, in YYYY/MM/DD format. Defaults to 1900/01/01
+    toDate: str              -- Second cutoff date, in YYYY/MM/DD format. Defaults to today's date
+    patients: list[str]      -- Patients to include in the output
+    start: int               -- Start of returned series page. Defaults to 0.
+    size: int                -- Size of returned series page. Defaults to 10.
+    sortDirection            -- 'ascending' or 'descending'. Defaults to 'ascending'.
+    sortField                -- 'subject', 'studies', 'series', or 'collection'. Defaults to 'subject'.
+
+    Example call: getSimpleSearchWithModalityAndBodyPartPaged(collections=["TCGA-UCEC", "4D-Lung"], modalities=["CT"])
+    """
+
+    endpoint = "getSimpleSearchWithModalityAndBodyPartPaged"
+    criteriaTypeIndex = 0
+    options = {}
+
+    getCriteria = lambda: "".join(['criteriaType', str(criteriaTypeIndex)])
+    getValue = lambda: "".join(['value', str(criteriaTypeIndex)])
+    getCriteriaAndValue = lambda: (getCriteria(), getValue())
+    def setOptionValue(criteriaType, param):
+        criteria, value = getCriteriaAndValue()
+        options[criteria] = str(criteriaType.value)
+        options[value] = param
+
+    if fromDate or toDate:
+        from_date, to_date, bad_dates = None, None, []
+        if toDate and not fromDate:
+            _log.info("No fromDate specified, using 1900/01/01")
+            fromDate = "1900/01/01"
+        if fromDate and not toDate:
+            _log.info("No toDate specified, using today's date")
+            toDate = datetime.now().strftime("%Y/%m/%d")
+        try:
+            from_date = datetime.strptime(fromDate, "%Y/%m/%d")
+        except ValueError:
+            bad_dates.append("fromDate")
+        try:
+            to_date = datetime.strptime(toDate, "%Y/%m/%d")
+        except ValueError:
+            bad_dates.append("toDate")
+        if bad_dates:
+            _log.error(f'Malformed date parameter(s) {bad_dates}; use Y/m/d format e.g. 1999/12/31')
+            raise StopExecution
+
+    if collections:
+        for collection in collections:
+            setOptionValue(Criteria.Collection, collection)
+            criteriaTypeIndex += 1
+    if species:
+        for val in species:
+            setOptionValue(Criteria.Species, NPEXSpecies[val])
+            criteriaTypeIndex += 1
+    if modalities:
+        for modality in modalities:
+            setOptionValue(Criteria.ImageModality, modality)
+            criteriaTypeIndex += 1
+    if bodyParts:
+        for bodyPart in bodyParts:
+            setOptionValue(Criteria.BodyPart, bodyPart)
+            criteriaTypeIndex += 1
+    if manufacturers:
+        for manufacturer in manufacturers:
+            setOptionValue(Criteria.Manufacturer, manufacturer)
+            criteriaTypeIndex += 1
+    if patients:
+        for patient in patients:
+            setOptionValue(Criteria.Patient, patient)
+            criteriaTypeIndex += 1
+    if minStudies:
+        setOptionValue(Criteria.NumStudies, minStudies)
+        criteriaTypeIndex += 1
+    if modalityAnded:
+        setOptionValue(Criteria.ModalityAnded, "all")
+        criteriaTypeIndex += 1
+    if fromDate and toDate:
+        criteria = getCriteria()
+        options[criteria] = Criteria.DateRange
+        options["fromDate" + str(criteriaTypeIndex)] = fromDate
+        options["toDate" + str(criteriaTypeIndex)] = toDate
+        criteriaTypeIndex += 1
+
+    options['sortField'] = sortField
+    options['sortDirection'] = sortDirection
+    options['tool'] = "tcia_utils"
+    options['start'] = start
+    options['size'] = size
+
+    # set base_url
+    base_url = setApiUrl(endpoint, api_url)
+
+    # full url
+    url = base_url + endpoint
+    _log.info(f'Calling... {url}')
+
+    # get data & handle any request.post() errors
+    try:
+        if api_url == "nlst":
+            metadata = requests.post(url, headers = nlst_api_call_headers, data = options)
+        else:
+            metadata = requests.post(url, headers = api_call_headers, data = options)
+        metadata.raise_for_status()
+
+        # check for empty results and format output
+        if metadata.text and metadata.text != "[]":
+            metadata = metadata.json()
+            # format the output (optional)
+            if format == "df":
+                df = pd.DataFrame(metadata)
+                return df
+            elif format == "csv":
+                df = pd.DataFrame(metadata)
+                df.to_csv(endpoint + ".csv")
+                _log.info("CSV saved to: " + endpoint + ".csv")
                 return df
             else:
                 return metadata
