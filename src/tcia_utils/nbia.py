@@ -12,8 +12,7 @@ from datetime import timedelta
 import matplotlib.pyplot as plt
 import pydicom
 import numpy as np 
-from ipywidgets.widgets import * 
-import ipywidgets as widgets
+from ipywidgets import interact
 
 class StopExecution(Exception):
     def _render_traceback_(self):
