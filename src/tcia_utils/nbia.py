@@ -11,7 +11,7 @@ from datetime import datetime
 from datetime import timedelta
 import matplotlib.pyplot as plt
 import pydicom
-import numpy as np 
+import numpy as np
 from ipywidgets import interact
 
 class StopExecution(Exception):
@@ -35,16 +35,16 @@ def setApiUrl(endpoint, api_url):
 
     global searchEndpoints, advancedEndpoints
 
-    # create valid endpoint lists 
+    # create valid endpoint lists
     searchEndpoints = ["getCollectionValues", "getBodyPartValues", "getModalityValues",
                         "getPatient", "getPatientStudy", "getSeries", "getManufacturerValues",
                         "getSOPInstanceUIDs", "getSeriesMetaData", "getContentsByName",
                        "getImage", "getSingleImage", "getPatientByCollectionAndModality",
                        "NewPatientsInCollection", "NewStudiesInPatientCollection",
                        "getSeriesSize", "getUpdatedSeries"]
-    advancedEndpoints = ["getModalityValuesAndCounts", "getBodyPartValuesAndCounts", 
-                         "getDicomTags", "getSeriesMetadata2", "getCollectionOrSeriesForDOI", 
-                         "getCollectionValuesAndCounts"]
+    advancedEndpoints = ["getModalityValuesAndCounts", "getBodyPartValuesAndCounts",
+                         "getDicomTags", "getSeriesMetadata2", "getCollectionOrSeriesForDOI",
+                         "getCollectionValuesAndCounts", "getCollectionDescriptions"]
 
     if not endpoint in searchEndpoints and not endpoint in advancedEndpoints:
         _log.error(
@@ -52,7 +52,7 @@ def setApiUrl(endpoint, api_url):
             f'Valid "Search" endpoints include {searchEndpoints}\n'
             f'Valid "Advanced" endpoints include {advancedEndpoints}'
         )
-        raise StopExecution 
+        raise StopExecution
     else:
         # set base URL for simple search and nlst simple search (no login required)
         if api_url == "":
@@ -64,7 +64,7 @@ def setApiUrl(endpoint, api_url):
                 # check if valid token exists, use anonymous login if not
                 if datetime.now() > token_exp_time:
                     _log.info("Accessing Advanced API anonymously. To access restricted data use nbia.getToken() with your credentials.")
-                    getToken(user = "nbia_guest")  
+                    getToken(user = "nbia_guest")
                 base_url = "https://services.cancerimagingarchive.net/nbia-api/services/"
         elif api_url == "nlst":
             if endpoint in searchEndpoints:
@@ -112,13 +112,13 @@ def setApiUrl(endpoint, api_url):
         return base_url
 
 ####### getToken()
-# Retrieves security token to access APIs that require authorization 
+# Retrieves security token to access APIs that require authorization
 # Provides interactive prompts for user/pw if they're not specified as parameters
 # Use getToken() for querying restricted collections with "Search API"
 # Use getToken(api_url = "nlst") for "Advanced API" queries of National Lung Screening Trial
 # Sets expiration time for tokens (2 hours from creation)
 
-def getToken(user = "", pw = "", api_url = ""): 
+def getToken(user = "", pw = "", api_url = ""):
 
     global token_exp_time, nlst_token_exp_time, api_call_headers, nlst_api_call_headers
 
@@ -168,13 +168,13 @@ def getToken(user = "", pw = "", api_url = ""):
         _log.error(f"Timeout Error: {data.status_code}")
     except requests.exceptions.RequestException as err:
         _log.error(f"Request Error: {data.status_code}")
-        
+
 ####### makeCredentialFile()
 # Create a credential file to use with NBIA Data Retriever
 # Provides interactive prompts for user/pw if they're not specified as parameters
 # Documentation at https://wiki.cancerimagingarchive.net/x/2QKPBQ
 
-def makeCredentialFile(user = "", pw = ""): 
+def makeCredentialFile(user = "", pw = ""):
 
     # set user name and password
     if user == "":
@@ -187,12 +187,12 @@ def makeCredentialFile(user = "", pw = ""):
     else:
         passWord = pw
 
-    # create credential file to use with NBIA Data Retriever  
+    # create credential file to use with NBIA Data Retriever
     lines = ['userName=' + userName, 'passWord=' + passWord]
     with open('credentials.txt', 'w') as f:
         f.write('\n'.join(lines))
     _log.info("Credential file for NBIA Data Retriever saved: credentials.txt")
-    
+
 ####### queryData()
 # Called by query functions that use requests.get()
 # Provides error handling for requests.get()
@@ -233,7 +233,7 @@ def queryData(endpoint, options, api_url, format):
                 return data
         else:
             _log.info("No results found.")
-            
+
     # handle errors
     except requests.exceptions.HTTPError as errh:
         _log.error(errh)
@@ -243,7 +243,7 @@ def queryData(endpoint, options, api_url, format):
         _log.error(errt)
     except requests.exceptions.RequestException as err:
         _log.error(err)
-    
+
 ####### getCollections function
 # Gets a list of collections from a specified api_url
 
@@ -255,16 +255,16 @@ def getCollections(api_url = "",
 
     data = queryData(endpoint, options, api_url, format)
     return data
-        
+
 ####### getBodyPart function
 # Gets Body Part Examined metadata from a specified api_url
 # Allows filtering by collection and modality
 
-def getBodyPart(collection = "", 
-                modality = "", 
+def getBodyPart(collection = "",
+                modality = "",
                 api_url = "",
                 format = ""):
-    
+
     endpoint = "getBodyPartValues"
 
     # create options dict to construct URL
@@ -282,11 +282,11 @@ def getBodyPart(collection = "",
 # Gets Modalities metadata from a specified api_url
 # Allows filtering by collection and bodyPart
 
-def getModality(collection = "", 
-                bodyPart = "", 
+def getModality(collection = "",
+                bodyPart = "",
                 api_url = "",
                 format = ""):
-    
+
     endpoint = "getModalityValues"
 
     # create options dict to construct URL
@@ -304,12 +304,12 @@ def getModality(collection = "",
 # Gets Patient metadata from a specified api_url
 # Allows filtering by collection
 
-def getPatient(collection = "", 
+def getPatient(collection = "",
                api_url = "",
                format = ""):
-    
+
     endpoint = "getPatient"
-    
+
     # create options dict to construct URL
     options = {}
 
@@ -318,7 +318,7 @@ def getPatient(collection = "",
 
     data = queryData(endpoint, options, api_url, format)
     return data
-        
+
 ####### getPatientByCollectionAndModality function
 # Gets Patient IDs from a specified api_url
 # Requires specifying collection and modality
@@ -328,9 +328,9 @@ def getPatientByCollectionAndModality(collection,
                                       modality,
                                       api_url = "",
                                       format = ""):
-    
+
     endpoint = "getPatientByCollectionAndModality"
-    
+
     # create options dict to construct URL
     options = {}
     options['Collection'] = collection
@@ -348,9 +348,9 @@ def getNewPatientsInCollection(collection,
                                date,
                                api_url = "",
                                format = ""):
-    
+
     endpoint = "NewPatientsInCollection"
-    
+
     # create options dict to construct URL
     options = {}
     options['Collection'] = collection
@@ -364,12 +364,12 @@ def getNewPatientsInCollection(collection,
 # Requires filtering by collection
 # Optional filters for patientId and studyUid
 
-def getStudy(collection, 
+def getStudy(collection,
              patientId = "",
              studyUid = "",
              api_url = "",
              format = ""):
-    
+
     endpoint = "getPatientStudy"
 
     # create options dict to construct URL
@@ -394,9 +394,9 @@ def getNewStudiesInPatient(collection,
                            date,
                            api_url = "",
                            format = ""):
-    
+
     endpoint = "NewStudiesInPatientCollection"
-    
+
     # create options dict to construct URL
     options = {}
     options['Collection'] = collection
@@ -412,12 +412,12 @@ def getNewStudiesInPatient(collection,
 #   series UID, modality, body part, manufacturer & model
 
 def getSeries(collection = "",
-              patientId = "", 
-              studyUid = "", 
-              seriesUid = "", 
-              modality = "", 
-              bodyPart = "", 
-              manufacturer = "", 
+              patientId = "",
+              studyUid = "",
+              seriesUid = "",
+              modality = "",
+              bodyPart = "",
+              manufacturer = "",
               manufacturerModel = "",
               api_url = "",
               format = ""):
@@ -451,15 +451,15 @@ def getSeries(collection = "",
 # Gets "new" series metadata from a specified api_url
 # Requires specifying date
 # Date format is YYYY/MM/DD
-# NOTE: NBIA API expects MM/DD/YYYY (unlike any other API endpoint!) 
+# NOTE: NBIA API expects MM/DD/YYYY (unlike any other API endpoint!)
 #        so we'll convert from YYYY/MM/DD so tcia-utils is consistent
 
 def getUpdatedSeries(date,
                      api_url = "",
                      format = ""):
-    
+
     endpoint = "getUpdatedSeries"
-    
+
     # convert to NBIA's expected date format
     nbiaDate = datetime.strptime(date, "%Y/%m/%d").strftime("%m/%d/%Y")
 
@@ -480,7 +480,7 @@ def getSeriesMetadata(seriesUid,
                       format = ""):
 
     endpoint = "getSeriesMetaData"
-    
+
     # create options dict to construct URL
     options = {}
     options['SeriesInstanceUID'] = seriesUid
@@ -495,9 +495,9 @@ def getSeriesMetadata(seriesUid,
 def getSeriesSize(seriesUid,
                   api_url = "",
                   format = ""):
-    
+
     endpoint = "getSeriesSize"
-    
+
     # create options dict to construct URL
     options = {}
     options['SeriesInstanceUID'] = seriesUid
@@ -512,9 +512,9 @@ def getSeriesSize(seriesUid,
 def getSopInstanceUids(seriesUid,
                        api_url = "",
                        format = ""):
-    
+
     endpoint = "getSOPInstanceUIDs"
-    
+
     # create options dict to construct URL
     options = {}
     options['SeriesInstanceUID'] = seriesUid
@@ -526,9 +526,9 @@ def getSopInstanceUids(seriesUid,
 # Gets manufacturer metadata from a specified api_url
 # Allows filtering by collection, body part & modality
 
-def getManufacturer(collection = "", 
-                    modality = "", 
-                    bodyPart = "", 
+def getManufacturer(collection = "",
+                    modality = "",
+                    bodyPart = "",
                     api_url = "",
                     format = ""):
 
@@ -546,7 +546,7 @@ def getManufacturer(collection = "",
 
     data = queryData(endpoint, options, api_url, format)
     return data
-        
+
 ####### getSharedCart function
 # Gets "Shared Cart" (scan) metadata from a specified api_url
 # Use https://nbia.cancerimagingarchive.net/nbia-search/ to create a cart
@@ -567,7 +567,7 @@ def getSharedCart(name,
 
     data = queryData(endpoint, options, api_url, format)
     return data
-        
+
 ####### downloadSeries function
 # Ingests a set of seriesUids and downloads them
 # By default, series_data expects JSON containing "SeriesInstanceUID" elements
@@ -577,11 +577,11 @@ def getSharedCart(name,
 # Generates a dataframe of the series metadata
 # Exports a CSV of the series metadata if csv_filename is specified
 
-def downloadSeries(series_data, 
+def downloadSeries(series_data,
                    number = 0,
                    hash = "",
-                   api_url = "", 
-                   input_type = "", 
+                   api_url = "",
+                   input_type = "",
                    csv_filename=""):
 
     endpoint = "getImage"
@@ -599,7 +599,7 @@ def downloadSeries(series_data,
         _log.info(f"Downloading {number} out of {len(series_data)} Series Instance UIDs (scans).")
     else:
         _log.info(f"Downloading {len(series_data)} Series Instance UIDs (scans).")
-    
+
     # set option to include md5 hashes
     if hash == "y":
         downloadOptions = "getImageWithMD5Hash?SeriesInstanceUID="
@@ -637,7 +637,7 @@ def downloadSeries(series_data,
                     # unzip file
                     file = zipfile.ZipFile(io.BytesIO(data.content))
                     file.extractall(path = "tciaDownload/" + "/" + seriesUID)
-                    # write the series metadata to a dataframe            
+                    # write the series metadata to a dataframe
                     manifestDF = pd.concat([manifestDF, pd.DataFrame(metadata)], ignore_index=True)
                     # count successes and break if number parameter is met
                     success += 1;
@@ -687,12 +687,12 @@ def downloadSeries(series_data,
         _log.error(errt)
     except requests.exceptions.RequestException as err:
         _log.error(err)
-        
+
 ####### downloadImage function
 # Ingests a seriesUids and SopInstanceUid and downloads the image
 
-def downloadImage(seriesUID, 
-                  sopUID, 
+def downloadImage(seriesUID,
+                  sopUID,
                   api_url = ""):
 
     endpoint = "getSingleImage"
@@ -711,7 +711,7 @@ def downloadImage(seriesUID,
             _log.info(f"Downloading... {data_url}")
             if api_url == "restricted":
                 data = requests.get(data_url, headers = api_call_headers)
-                if data.status_code == 200:  
+                if data.status_code == 200:
                     if not os.path.exists(path):
                         os.mkdir(path)
                     with open(path + "/" + file, 'wb') as f:
@@ -748,10 +748,20 @@ def downloadImage(seriesUID,
         _log.error(errt)
     except requests.exceptions.RequestException as err:
         _log.error(err)
-        
+
 ##########################
 ##########################
 # Advanced API Endpoints
+
+####### getCollectionDescriptions function (Advanced)
+# Get HTML-formatted descriptions of collections and their DOIs
+
+def getCollectionDescriptions(api_url = "", format = ""):
+    endpoint = "getCollectionDescriptions"
+    options = {}
+
+    data = queryData(endpoint, options, api_url, format)
+    return data
 
 ####### getCollectionPatientCounts function (Advanced)
 # Get patient counts by collection from Advanced API
@@ -760,7 +770,7 @@ def getCollectionPatientCounts(api_url = "", format = ""):
 
     endpoint = "getCollectionValuesAndCounts"
     options = {}
-    
+
     data = queryData(endpoint, options, api_url, format)
     return data
 
@@ -774,7 +784,7 @@ def getModalityCounts(collection = "",
                       format = ""):
 
     endpoint = "getModalityValuesAndCounts"
-    
+
     # create options dict to construct URL
     options = {}
 
@@ -785,7 +795,7 @@ def getModalityCounts(collection = "",
 
     data = queryData(endpoint, options, api_url, format)
     return data
-        
+
 ####### getBodyPartCounts function (Advanced)
 # Get counts of Body Part metadata from Advanced API
 # Allows filtering by collection and modality
@@ -796,7 +806,7 @@ def getBodyPartCounts(collection = "",
                       format = ""):
 
     endpoint = "getBodyPartValuesAndCounts"
-    
+
     # create options dict to construct URL
     options = {}
 
@@ -807,7 +817,7 @@ def getBodyPartCounts(collection = "",
 
     data = queryData(endpoint, options, api_url, format)
     return data
-        
+
 ####### getSeriesList function (Advanced)
 # Get series metadata from Advanced API
 # Allows submission of a list of UIDs
@@ -819,9 +829,9 @@ def getSeriesList(list, api_url = "", csv_filename = ""):
     param = {'list': uids}
     endpoint = "getSeriesMetadata2"
 
-    # set base_url 
+    # set base_url
     base_url = setApiUrl(endpoint, api_url)
-    
+
     # full url
     url = base_url + endpoint
     _log.info(f'Calling... {url}')
@@ -855,7 +865,7 @@ def getSeriesList(list, api_url = "", csv_filename = ""):
         _log.error(errt)
     except requests.exceptions.RequestException as err:
         _log.error(err)
-        
+
 ####### getDicomTags function (Advanced)
 # Gets DICOM tag metadata for a given series UID (scan)
 
@@ -864,14 +874,14 @@ def getDicomTags(seriesUid,
                  format = ""):
 
     endpoint = "getDicomTags"
-    
+
     # create options dict to construct URL
     options = {}
     options['SeriesUID'] = seriesUid
 
     data = queryData(endpoint, options, api_url, format)
     return data
-    
+
 ####### getDoiMetadata function
 # Gets a list of Collections or Series associated with a DOI
 # Requires a DOI URL and specification of Collection or Series UID output
@@ -882,12 +892,12 @@ def getDoiMetadata(doi, output, api_url = "", format = ""):
 
     param = {'DOI': doi,
              'CollectionOrSeries': output}
-    
+
     endpoint = "getCollectionOrSeriesForDOI"
 
-    # set base_url 
+    # set base_url
     base_url = setApiUrl(endpoint, api_url)
-    
+
     # full url
     url = base_url + endpoint
     _log.info(f'Calling... {url}')
@@ -925,7 +935,7 @@ def getDoiMetadata(doi, output, api_url = "", format = ""):
         _log.error(errt)
     except requests.exceptions.RequestException as err:
         _log.error(err)
-    
+
 ##########################
 ##########################
 # Miscellaneous
@@ -937,7 +947,7 @@ def makeSeriesReport(series_data):
 
     df = pd.DataFrame(series_data)
 
-    # Calculate summary statistics for a given collection 
+    # Calculate summary statistics for a given collection
 
     _log.info(
         # Scan Inventory
@@ -966,7 +976,7 @@ def makeSeriesReport(series_data):
 
 ####### manifestToList function
 # Ingests a TCIA manifest file and removes header
-# Returns a list of series UIDs 
+# Returns a list of series UIDs
 
 def manifestToList(manifest):
 
@@ -997,7 +1007,7 @@ def manifestToList(manifest):
             return data
 
 ####### makeVizLinks function
-# Ingests JSON output of getSeries() or getSharedCart()  
+# Ingests JSON output of getSeries() or getSharedCart()
 # Creates URLs to visualize them in a browser
 # The links appear in the last 2 columns of the dataframe
 # TCIA links display the individual series described in each row
@@ -1011,7 +1021,7 @@ def makeVizLinks(series_data, csv_filename=""):
     # set base urls for tcia/idc
     tciaVizUrl = "https://nbia.cancerimagingarchive.net/viewer/?series="
     idcVizUrl = "https://viewer.imaging.datacommons.cancer.gov/viewer/"
-    
+
     # create dataframe and append base URLs to study/series UIDs
     df = pd.DataFrame(series_data)
     df['VisualizeSeriesOnTcia'] = tciaVizUrl + df['SeriesInstanceUID']
@@ -1029,7 +1039,7 @@ def makeVizLinks(series_data, csv_filename=""):
 # Visualize a Series (scan) you've downloaded in the notebook
 # Requires EITHER a seriesUid or path parameter
 # Leave seriesUid empty if you want to provide a custom path
-# The function assumes "tciaDownload/<seriesUid>/" as path if seriesUid is 
+# The function assumes "tciaDownload/<seriesUid>/" as path if seriesUid is
 #   provided since this is where downloadSeries() saves data
 
 def viewSeries(seriesUid = "", path = ""):
@@ -1054,7 +1064,7 @@ def viewSeries(seriesUid = "", path = ""):
     # Verify series exists before visualizing
     if os.path.isdir(path):
         # load scan to pydicom
-        slices = [pydicom.dcmread(path + '/' + s) for s in               
+        slices = [pydicom.dcmread(path + '/' + s) for s in
                   os.listdir(path) if s.endswith(".dcm")]
 
         slices.sort(key = lambda x: int(x.InstanceNumber))
@@ -1067,25 +1077,25 @@ def viewSeries(seriesUid = "", path = ""):
 
         image = np.stack([s.pixel_array for s in slices])
         image = image.astype(np.int16)
-        
+
         if modality == "CT":
             # Set outside-of-scan pixels to 0
             # The intercept is usually -1024, so air is approximately 0
             image[image == -2000] = 0
-            
+
             # Convert to Hounsfield units (HU)
             intercept = slices[0].RescaleIntercept
             slope = slices[0].RescaleSlope
-            
+
             if slope != 1:
                 image = slope * image.astype(np.float64)
                 image = image.astype(np.int16)
-                
+
             image += np.int16(intercept)
-     
+
         pixel_data = np.array(image, dtype=np.int16)
 
-        # slide through dicom images using a slide bar         
+        # slide through dicom images using a slide bar
         def dicom_animation(x):
             plt.figure(figsize=[10,10])
             plt.imshow(pixel_data[x], cmap = plt.cm.gray)
