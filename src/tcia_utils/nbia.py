@@ -573,16 +573,20 @@ def getSharedCart(name,
 # By default, series_data expects JSON containing "SeriesInstanceUID" elements
 # Set number = n to download the first n series if you don't want the full dataset
 # Set hash = "y" if you'd like to retrieve MD5 hash values for each image
+# Saves to tciaDownload folder in current directory if no path is specified
 # Set input_type = "list" to pass a list of Series UIDs instead of JSON
-# Generates a dataframe of the series metadata
-# Exports a CSV of the series metadata if csv_filename is specified
+# Format can be set to "df" or "csv" to return series metadata
+# Setting a csv_filename will create the csv even if format isn't specified
+# The metadata includes info about series that have previously been downloaded
 
 def downloadSeries(series_data,
                    number = 0,
+                   path = "",
                    hash = "",
                    api_url = "",
                    input_type = "",
-                   csv_filename=""):
+                   format = "",
+                   csv_filename = ""):
 
     endpoint = "getImage"
     manifestDF=pd.DataFrame()
@@ -615,12 +619,15 @@ def downloadSeries(series_data,
             else:
                 seriesUID = x['SeriesInstanceUID']
             # set path for downloads and check for previously downloaded data
-            path = "tciaDownload/" + seriesUID
+            if path != "":
+                pathTmp = path + "/" + seriesUID
+            else:
+                pathTmp = "tciaDownload/" + seriesUID
             # set URLs
             data_url = base_url + downloadOptions + seriesUID
             metadata_url = base_url + "getSeriesMetaData?SeriesInstanceUID=" + seriesUID
             # check if data was previously downloaded
-            if not os.path.isdir(path):
+            if not os.path.isdir(pathTmp):
                 _log.info(f"Downloading... {data_url}")
                 # check if headers are necessary
                 if api_url == "restricted":
@@ -629,16 +636,18 @@ def downloadSeries(series_data,
                     data = requests.get(data_url)
                 # if download was successful
                 if data.status_code == 200:
-                    # check if headers are necessary for metadata retrieval
-                    if api_url == "restricted":
-                        metadata = requests.get(metadata_url, headers = api_call_headers).json()
-                    else:
-                        metadata = requests.get(metadata_url).json()
+                    # get metadata if desired
+                    if format == "df" or format == "csv" or csv_filename != "":
+                        # check if headers are necessary for metadata retrieval
+                        if api_url == "restricted":
+                            metadata = requests.get(metadata_url, headers = api_call_headers).json()
+                        else:
+                            metadata = requests.get(metadata_url).json()
+                        # write the series metadata to a dataframe
+                        manifestDF = pd.concat([manifestDF, pd.DataFrame(metadata)], ignore_index=True)
                     # unzip file
                     file = zipfile.ZipFile(io.BytesIO(data.content))
-                    file.extractall(path = "tciaDownload/" + "/" + seriesUID)
-                    # write the series metadata to a dataframe
-                    manifestDF = pd.concat([manifestDF, pd.DataFrame(metadata)], ignore_index=True)
+                    file.extractall(path = pathTmp)
                     # count successes and break if number parameter is met
                     success += 1;
                     if number > 0:
@@ -649,13 +658,14 @@ def downloadSeries(series_data,
                     failed += 1;
             # if data has already been downloaded, only write metadata to df
             else:
-                # get series metadata
-                if api_url == "restricted":
-                    metadata = requests.get(metadata_url, headers = api_call_headers).json()
-                else:
-                    metadata = requests.get(metadata_url).json()
-                # write the series metadata to a dataframe
-                manifestDF = pd.concat([manifestDF, pd.DataFrame(metadata)], ignore_index=True)
+                # get metadata if desired
+                if format == "df" or format == "csv" or csv_filename != "":
+                    if api_url == "restricted":
+                        metadata = requests.get(metadata_url, headers = api_call_headers).json()
+                    else:
+                        metadata = requests.get(metadata_url).json()
+                    # write the series metadata to a dataframe
+                    manifestDF = pd.concat([manifestDF, pd.DataFrame(metadata)], ignore_index=True)
                 _log.warning(f"Series {seriesUID} already downloaded.")
                 previous += 1;
         # summarize download results
@@ -671,12 +681,18 @@ def downloadSeries(series_data,
                 f"{failed} failed to download.\n"
                 f"{previous} previously downloaded."
             )
-        # display manifest dataframe and/or save manifest to CSV file
+        # return metadata dataframe and/or save to CSV file if requested
         if csv_filename != "":
             manifestDF.to_csv(csv_filename + '.csv')
-            _log.info(f"Manifest CSV saved as {csv_filename}.csv")
+            _log.info(f"Series metadata saved as {csv_filename}.csv")
             return manifestDF
-        else:
+        if format == "csv" and csv_filename == "":
+            now = datetime.now()
+            dt_string = now.strftime("%Y-%m-%d_%H%M")
+            manifestDF.to_csv('downloadSeries_metadata_' + dt_string + '.csv')
+            _log.info(f"Series metadata saved as downloadSeries_metadata_{dt_string}.csv")
+            return manifestDF
+        if format == "df":
             return manifestDF
 
     except requests.exceptions.HTTPError as errh:
@@ -693,6 +709,7 @@ def downloadSeries(series_data,
 
 def downloadImage(seriesUID,
                   sopUID,
+                  path = "",
                   api_url = ""):
 
     endpoint = "getSingleImage"
@@ -704,19 +721,22 @@ def downloadImage(seriesUID,
     base_url = setApiUrl(endpoint, api_url)
 
     try:
-        path = "tciaDownload/" + seriesUID
+        if path != "":
+            pathTmp = path + "/" + seriesUID
+        else:
+            pathTmp = "tciaDownload/" + seriesUID
         file = sopUID + ".dcm"
-        if not os.path.isfile(path + "/" + file):
+        if not os.path.isfile(pathTmp + "/" + file):
             data_url = base_url + 'getSingleImage?SeriesInstanceUID=' + seriesUID + '&SOPInstanceUID=' + sopUID
             _log.info(f"Downloading... {data_url}")
             if api_url == "restricted":
                 data = requests.get(data_url, headers = api_call_headers)
                 if data.status_code == 200:
-                    if not os.path.exists(path):
-                        os.mkdir(path)
-                    with open(path + "/" + file, 'wb') as f:
+                    if not os.path.exists(pathTmp):
+                        os.makedirs(pathTmp)
+                    with open(pathTmp + "/" + file, 'wb') as f:
                         f.write(data.content)
-                    _log.info(f"Saved to {path}/{file}")
+                    _log.info(f"Saved to {pathTmp}/{file}")
                 else:
                     _log.error(
                         f"Error: {data.status_code} -- double check your permissions and Series/SOP UIDs.\n"
@@ -726,11 +746,11 @@ def downloadImage(seriesUID,
             else:
                 data = requests.get(data_url)
                 if data.status_code == 200:
-                    if not os.path.exists(path):
-                        os.mkdir(path)
-                    with open(path + "/" + file, 'wb') as f:
+                    if not os.path.exists(pathTmp):
+                        os.makedirs(pathTmp)
+                    with open(pathTmp + "/" + file, 'wb') as f:
                         f.write(data.content)
-                    _log.info(f"Saved to {path}/{file}")
+                    _log.info(f"Saved to {pathTmp}/{file}")
                 else:
                     _log.error(
                         f"Error: {data.status_code} -- double check your permissions and Series/SOP UIDs.\n"
@@ -738,7 +758,7 @@ def downloadImage(seriesUID,
                         f"SOP UID: {sopUID}"
                     )
         else:
-            _log.warning(f"Image {sopUID} already downloaded to:\n{path}")
+            _log.warning(f"Image {sopUID} already downloaded to:\n{pathTmp}")
 
     except requests.exceptions.HTTPError as errh:
         _log.error(errh)
