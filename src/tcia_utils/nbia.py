@@ -589,11 +589,14 @@ def downloadSeries(series_data,
                    csv_filename = ""):
 
     endpoint = "getImage"
-    manifestDF=pd.DataFrame()
     seriesUID = ''
     success = 0
     failed = 0
     previous = 0
+
+    # Prep a dataframe for later
+    if format == "df" or format == "csv" or csv_filename != "":
+        manifestDF=pd.DataFrame()
 
     # get base URL
     base_url = setApiUrl(endpoint, api_url)
