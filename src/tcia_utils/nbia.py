@@ -63,7 +63,7 @@ def setApiUrl(endpoint, api_url):
     advancedEndpoints = ["getModalityValuesAndCounts", "getBodyPartValuesAndCounts",
                          "getDicomTags", "getSeriesMetadata2", "getCollectionOrSeriesForDOI",
                          "getCollectionValuesAndCounts", "getCollectionDescriptions",
-                         "getSimpleSearchWithModalityAndBodyPartPaged"]
+                         "getSimpleSearchWithModalityAndBodyPartPaged", "getManufacturerValuesAndCounts"]
 
     if not endpoint in searchEndpoints and not endpoint in advancedEndpoints:
         _log.error(
@@ -860,6 +860,31 @@ def getBodyPartCounts(collection = "",
     data = queryData(endpoint, options, api_url, format)
     return data
 
+####### getManufacturerCounts function (Advanced)
+# Get counts of Body Part metadata from Advanced API
+# Allows filtering by collection and modality
+
+def getManufacturerCounts(collection = "",
+                      modality = "",
+                      bodyPart = "",
+                      api_url = "",
+                      format = ""):
+
+    endpoint = "getManufacturerValuesAndCounts"
+
+    # create options dict to construct URL
+    options = {}
+
+    if collection:
+        options['Collection'] = collection
+    if modality:
+        options['Modality'] = modality
+    if bodyPart:
+        options['BodyPartExamined'] = bodyPart
+
+    data = queryData(endpoint, options, api_url, format)
+    return data
+
 ####### getSeriesList function (Advanced)
 # Get series metadata from Advanced API
 # Allows submission of a list of UIDs
@@ -978,7 +1003,7 @@ def getDoiMetadata(doi, output, api_url = "", format = ""):
     except requests.exceptions.RequestException as err:
         _log.error(err)
 
-####### getSimpleSearchCriteriaValues function
+####### getSimpleSearchWithModalityAndBodyPartPaged function
 # Takes the same parameters as the SimpleSearch GUI
 # Using more parameters narrows the number of subjects received.
 def getSimpleSearchWithModalityAndBodyPartPaged(
