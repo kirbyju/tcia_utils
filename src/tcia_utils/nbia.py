@@ -594,6 +594,7 @@ def getSharedCart(name,
 # Set hash = "y" if you'd like to retrieve MD5 hash values for each image
 # Saves to tciaDownload folder in current directory if no path is specified
 # Set input_type = "list" to pass a list of Series UIDs instead of JSON
+# Set input_type = "manifest" to pass the path of a *.TCIA manifest file as series_data
 # Format can be set to "df" or "csv" to return series metadata
 # Setting a csv_filename will create the csv even if format isn't specified
 # The metadata includes info about series that have previously been downloaded
@@ -619,6 +620,10 @@ def downloadSeries(series_data,
 
     # get base URL
     base_url = setApiUrl(endpoint, api_url)
+    
+    # if input = manifest convert manifest to python list of uids
+    if input_type == "manifest":
+        series_data = manifestToList(series_data)
 
     # set sample size if you don't want to download the full set of results
     if number > 0:
@@ -636,7 +641,7 @@ def downloadSeries(series_data,
     try:
         for x in series_data:
             # specify whether input data is json or list
-            if input_type == "list":
+            if input_type == "list" or input_type == "manifest":
                 seriesUID = x
             else:
                 seriesUID = x['SeriesInstanceUID']
@@ -861,8 +866,8 @@ def getBodyPartCounts(collection = "",
     return data
 
 ####### getManufacturerCounts function (Advanced)
-# Get counts of Body Part metadata from Advanced API
-# Allows filtering by collection and modality
+# Get counts of Manufacturer metadata from Advanced API
+# Allows filtering by collection, body part and modality
 
 def getManufacturerCounts(collection = "",
                       modality = "",
@@ -1165,39 +1170,105 @@ def getSimpleSearchWithModalityAndBodyPartPaged(
 ##########################
 # Miscellaneous
 
-####### makeSeriesReport function
-# Ingests JSON output from getSeries() or getSharedCart() and creates summary report
+def makeSeriesReport(series_data, input_type = "", format = "", filename = None, api_url = ""):
+# Ingests JSON output from any function that returns series-level data and creates summary report
+# Specify input_type = "manifest" to ingest a *.TCIA manifest file or "list" for a python list of UIDs
+# If input_type = "manifest" or "list" and there are series UIDs that are restricted
+#    you must call getToken() with a user ID that has access to all UIDs before calling this function.
+# Specifying api_url is only necessary if you are using input_type = "manifest" or "list" with NLST data (e.g. api_url = "nlst") 
+# Specify format = "var" to return the report values as a dictionary
+# Access variables example after saving function output to report_data: subjects = report_data["subjects"]
+# Specify format = "file" to save the report to a file
+# Specify a filename parameter to set a filename if you don't want the default
 
-def makeSeriesReport(series_data):
 
-    df = pd.DataFrame(series_data)
+    # if input_type is manifest convert it to a list
+    if input_type == "manifest":
+        series_data = manifestToList(series_data)
+        
+    # if input_type is a list or manifest download relevant metadata
+    if input_type == "list" or input_type == "manifest":
+        df = getSeriesList(series_data, api_url = "", csv_filename = "")
+        # Rename the headers
+        if df is None or df.empty:
+            raise StopExecution
+        else:
+            df = df.rename(columns={'Subject ID': 'PatientID', 'Study UID': 'StudyInstanceUID', 'Series ID': 'SeriesInstanceUID', 'Number of images': 'ImageCount', 'Collection Name': 'Collection'})
+            # Add an empty column called "BodyPartExamined" since getSeriesList() doesn't return this info -- FEATURE REQUEST SUBMITTED TO ADD THIS
+            df['BodyPartExamined'] = ''
+    else:
+        # Create a DataFrame from the series_data
+        df = pd.DataFrame(series_data)
 
     # Calculate summary statistics for a given collection
 
-    _log.info(
+    # Scan Inventory
+    subjects = len(df['PatientID'].value_counts())
+    studies = len(df['StudyInstanceUID'].value_counts())
+    series = len(df['SeriesInstanceUID'].value_counts())
+    images = df['ImageCount'].sum()
+
+    # Summarize Collections
+    collections = df['Collection'].value_counts(dropna=False)
+
+    # Summarize modalities
+    modalities = df['Modality'].value_counts(dropna=False)
+
+    # Summarize body parts
+    body_parts = df['BodyPartExamined'].value_counts(dropna=False)
+
+    # Summarize manufacturers
+    manufacturers = df['Manufacturer'].value_counts(dropna=False)
+
+    report = (
         # Scan Inventory
-        'Summary Statistics\n'
-        f"Subjects: {len(df['PatientID'].value_counts())} subjects\n"
-        f"Studies: {len(df['StudyInstanceUID'].value_counts())} studies\n"
-        f"Series: {len(df['SeriesInstanceUID'].value_counts())} series\n"
-        f"Images: {df['ImageCount'].sum()} images\n\n"
+        f"Summary Statistics\n"
+        f"Subjects: {subjects}\n"
+        f"Studies: {studies}\n"
+        f"Series: {series}\n"
+        f"Images: {images}\n\n"
 
         # Summarize Collections
-        "Series Counts - Collections:\n"
-        f"{df['Collection'].value_counts(dropna=False)}\n\n"
+        f"Series Counts - Collections:\n"
+        f"{collections}\n\n"
 
         # Summarize modalities
-        "Series Counts - Modality:\n"
-        f"{df['Modality'].value_counts(dropna=False)}\n\n"
+        f"Series Counts - Modality:\n"
+        f"{modalities}\n\n"
 
         # Summarize body parts
-        "Series Counts - Body Parts Examined:\n"
-        f"{df['BodyPartExamined'].value_counts(dropna=False)}\n\n"
+        f"Series Counts - Body Parts Examined:\n"
+        f"{body_parts}\n\n"
 
         # Summarize manufacturers
-        "Series Counts - Device Manufacturers:\n"
-        f"{df['Manufacturer'].value_counts(dropna=False)}"
+        f"Series Counts - Device Manufacturers:\n"
+        f"{manufacturers}"
     )
+
+    if format == "var":
+        # Return the variables as a dictionary
+        return {
+            "subjects": subjects,
+            "studies": studies,
+            "series": series,
+            "images": images,
+            "collections": collections,
+            "modalities": modalities,
+            "body_parts": body_parts,
+            "manufacturers": manufacturers
+        }
+    elif format == "file":
+        if filename is None:
+            # Generate default filename based on current date and time
+            current_datetime = datetime.now().strftime("%Y%m%d-%H%M%S")
+            filename = f"seriesReport-{current_datetime}.txt"
+
+        # Save the report to a text file
+        with open(filename, "w") as file:
+            file.write(report)
+        print(f"Report saved to {filename}.")
+    else:
+        _log.info(report)
 
 ####### manifestToList function
 # Ingests a TCIA manifest file and removes header
@@ -1322,9 +1393,8 @@ def viewSeries(seriesUid = "", path = ""):
 
         # slide through dicom images using a slide bar
         def dicom_animation(x):
-            plt.figure(figsize=[10,10])
             plt.imshow(pixel_data[x], cmap = plt.cm.gray)
-            return x
+            plt.show()
         interact(dicom_animation, x=(0, len(pixel_data)-1))
     else:
         seriesInvalid(seriesUid)
