@@ -134,14 +134,14 @@ def getDoi(query = "",
             else:
                 return data
         else:
-            print("No results found.")
+            _log.info(f'No results found.')
             
     # handle errors
     except requests.exceptions.HTTPError as errh:
-        print(errh)
+        _log.error(f'Error: {errh}')
     except requests.exceptions.ConnectionError as errc:
-        print(errc)
+        _log.error(f'Error: {errc}')
     except requests.exceptions.Timeout as errt:
-        print(errt)
+        _log.error(f'Error: {errt}')
     except requests.exceptions.RequestException as err:
-        print(err)
+        _log.error(f'Error: {err}')
