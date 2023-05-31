@@ -54,6 +54,7 @@ def getCollections(query = "", format = ""):
         today = datetime.now().strftime("%Y-%m-%d")
         filename = f"pathologyCollections-{today}.csv"
         df.to_csv(filename, index=False)
+        _log.info(f"File saved to {filename}.")
     else:
         return extracted_data
         

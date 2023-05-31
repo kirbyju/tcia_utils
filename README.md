@@ -8,9 +8,14 @@ pip install tcia_utils
 
 # Usage
 
-To import functions related to the NBIA software, which holds TCIA's DICOM data:
+To import functions related to the NBIA software, which holds TCIA's DICOM radiology data:
 ```
 from tcia_utils import nbia
+```
+
+To import functions related to the PathDB software, which holds TCIA's histopathology data:
+```
+from tcia_utils import pathdb
 ```
 
 To import functions related to Datacite, which holds metadata and Digital Object Identifiers (DOIs) for TCIA datasets:

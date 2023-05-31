@@ -137,13 +137,15 @@ def setApiUrl(endpoint, api_url):
 # Use getToken(api_url = "nlst") for "Advanced API" queries of National Lung Screening Trial
 # Sets expiration time for tokens (2 hours from creation)
 
-def getToken(user = "", pw = "", api_url = ""):
+def getToken(user = "", pw = "", api_url = ""): 
 
     global token_exp_time, nlst_token_exp_time, api_call_headers, nlst_api_call_headers
 
     # token URLs
-    token_url = "https://services.cancerimagingarchive.net/nbia-api/oauth/token?username="
-    nlst_token_url = "https://nlst.cancerimagingarchive.net/nbia-api/oauth/token?username="
+    if api_url == "nlst":
+        token_url = "https://nlst.cancerimagingarchive.net/nbia-api/oauth/token"
+    else:
+        token_url = "https://nbia.cancerimagingarchive.net/nbia-api/oauth/token"
 
     # set user name and password
     if user == "":
@@ -157,15 +159,16 @@ def getToken(user = "", pw = "", api_url = ""):
         passWord = pw
 
     # create API token
-    if api_url == "nlst":
-        # create nlst token
-        url = nlst_token_url + userName + "&password=" + passWord + "&grant_type=password&client_id=nbiaRestAPIClient&client_secret=ItsBetweenUAndMe"
-    else:
-        # create regular token
-        url = token_url + userName + "&password=" + passWord + "&grant_type=password&client_id=nbiaRestAPIClient&client_secret=ItsBetweenUAndMe"
-
     try:
-        data = requests.get(url)
+        params = {
+        'client_id': 'nbiaRestAPIClient',
+        'client_secret' : 'ItsBetweenUAndMe',
+        'grant_type': 'password',
+        'username' : userName,
+        'password': passWord
+        }
+        
+        data = requests.post(token_url, data = params)
         data.raise_for_status()
         access_token = data.json()["access_token"]
         # track expiration status/time (2 hours from creation)
