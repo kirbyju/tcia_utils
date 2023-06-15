@@ -19,9 +19,6 @@ class StopExecution(Exception):
     def _render_traceback_(self):
         pass
 
-token_exp_time = datetime.now()
-nlst_token_exp_time = datetime.now()
-
 _log = logging.getLogger(__name__)
 logging.basicConfig(
     format='%(asctime)s:%(levelname)s:%(message)s'
@@ -81,9 +78,12 @@ def setApiUrl(endpoint, api_url):
             if endpoint in advancedEndpoints:
                 # Using "Advanced" API (login required): https://wiki.cancerimagingarchive.net/x/YoATBg
                 # check if valid token exists, use anonymous login if not
-                if datetime.now() > token_exp_time:
-                    _log.info("Accessing Advanced API anonymously. To access restricted data use nbia.getToken() with your credentials.")
+                if 'token_exp_time' not in globals():
                     getToken(user = "nbia_guest")
+                    _log.info("Accessing Advanced API anonymously. To access restricted data use nbia.getToken() with your credentials.")
+                if 'token_exp_time' in globals() and datetime.now() > token_exp_time:
+                    refreshToken()
+                    _log.info(f'Success - Token refreshed to api_call_headers variable and expires at {token_exp_time}')
                 base_url = "https://services.cancerimagingarchive.net/nbia-api/services/"
         elif api_url == "nlst":
             if endpoint in searchEndpoints:
@@ -92,18 +92,22 @@ def setApiUrl(endpoint, api_url):
             if endpoint in advancedEndpoints:
                 # Using "Advanced" API docs (login required): https://wiki.cancerimagingarchive.net/x/YoATBg
                 # Checking to see if a valid NLST authentication token exists
-                if datetime.now() > nlst_token_exp_time:
+                if 'nlst_token_exp_time' not in globals():
                     getToken(user = "nbia_guest", api_url = "nlst")
-                base_url = "https://nlst.cancerimagingarchive.net/nbia-api/services/"
+                if 'nlst_token_exp_time' in globals() and datetime.now() > nlst_token_exp_time:
+                    refreshToken(api_url = "nlst")
+                base_url = "https://nlst.cancerimagingarchive.net/nbia-api/services/"                
         elif api_url == "restricted":
             if endpoint in searchEndpoints:
                 # Using "Search with Authentication" API (login required): https://wiki.cancerimagingarchive.net/x/X4ATBg
                 # Checking to see if a valid authentication token exists
-                if datetime.now() < token_exp_time:
-                    base_url = "https://services.cancerimagingarchive.net/nbia-api/services/v2/"
-                else:
-                    _log.error("Your security token for accessing the Restricted API is expired or does not exist. Create one using getToken().")
+                if 'token_exp_time' not in globals():
+                    _log.error("Error using token for accessing the Restricted API. Create one using getToken().")
                     raise StopExecution
+                if 'token_exp_time' in globals() and datetime.now() > token_exp_time:
+                    refreshToken()
+                    _log.info(f'Success - Token refreshed to api_call_headers variable and expires at {token_exp_time}')
+                base_url = "https://services.cancerimagingarchive.net/nbia-api/services/v2/"
             if endpoint in advancedEndpoints:
                 _log.error(
                     f'"{api_url}" is an invalid api_url for the Advanced API endpoint: {endpoint}\n'
@@ -139,7 +143,7 @@ def setApiUrl(endpoint, api_url):
 
 def getToken(user = "", pw = "", api_url = ""): 
 
-    global token_exp_time, nlst_token_exp_time, api_call_headers, nlst_api_call_headers
+    global token_exp_time, nlst_token_exp_time, api_call_headers, nlst_api_call_headers, refresh_token
 
     # token URLs
     if api_url == "nlst":
@@ -171,14 +175,16 @@ def getToken(user = "", pw = "", api_url = ""):
         data = requests.post(token_url, data = params)
         data.raise_for_status()
         access_token = data.json()["access_token"]
+        refresh_token = data.json()["refresh_token"]
+        expires_in = data.json()["expires_in"]
         # track expiration status/time (2 hours from creation)
         current_time = datetime.now()
         if api_url == "nlst":
-            nlst_token_exp_time = current_time + timedelta(hours=2)
+            nlst_token_exp_time = current_time + timedelta(seconds=expires_in)
             nlst_api_call_headers = {'Authorization': 'Bearer ' + access_token}
             _log.info(f'Success - Token saved to nlst_api_call_headers variable and expires at {nlst_token_exp_time}')
         else:
-            token_exp_time = current_time + timedelta(hours=2)
+            token_exp_time = current_time + timedelta(seconds=expires_in)
             api_call_headers = {'Authorization': 'Bearer ' + access_token}
             _log.info(f'Success - Token saved to api_call_headers variable and expires at {token_exp_time}')
     # handle errors
@@ -190,6 +196,61 @@ def getToken(user = "", pw = "", api_url = ""):
         _log.error(f"Timeout Error: {data.status_code}")
     except requests.exceptions.RequestException as err:
         _log.error(f"Request Error: {data.status_code}")
+
+####### refreshToken()
+# Refreshes security token to extend access time for APIs that require authorization
+# Must first use getToken() to create a token
+
+def refreshToken(api_url = ""): 
+
+    global token_exp_time, nlst_token_exp_time, api_call_headers, nlst_api_call_headers
+
+    try:
+        refresh_token
+    except NameError:
+        _log.error("Error refreshing token for accessing the Restricted API. Create one using getToken().")
+        raise StopExecution
+    else:
+
+        # token URLs
+        if api_url == "nlst":
+            token_url = "https://nlst.cancerimagingarchive.net/nbia-api/oauth/token"
+        else:
+            token_url = "https://nbia.cancerimagingarchive.net/nbia-api/oauth/token"
+
+        # refresh token request
+        try:
+            params = {
+            'client_id': 'nbiaRestAPIClient',
+            'client_secret' : 'ItsBetweenUAndMe',
+            'grant_type': 'refresh_token',
+            'refresh_token' : refresh_token,
+            }
+            
+            # obtain new access token
+            data = requests.post(token_url, data = params)
+            data.raise_for_status()
+            access_token = data.json()["access_token"]
+            expires_in = data.json()["expires_in"]
+            # track expiration status/time (2 hours from creation)
+            current_time = datetime.now()
+            if api_url == "nlst":
+                nlst_token_exp_time = current_time + timedelta(seconds=expires_in)
+                nlst_api_call_headers = {'Authorization': 'Bearer ' + access_token}
+                _log.info(f'Success - Token refreshed to nlst_api_call_headers variable and expires at {nlst_token_exp_time}')
+            else:
+                token_exp_time = current_time + timedelta(seconds=expires_in)
+                api_call_headers = {'Authorization': 'Bearer ' + access_token}
+                _log.info(f'Success - Token refreshed to api_call_headers variable and expires at {token_exp_time}')
+        # handle errors
+        except requests.exceptions.HTTPError as errh:
+            _log.error(f"HTTP Error: {data.status_code} -- Double check your user name and password.")
+        except requests.exceptions.ConnectionError as errc:
+            _log.error(f"Connection Error: {data.status_code}")
+        except requests.exceptions.Timeout as errt:
+            _log.error(f"Timeout Error: {data.status_code}")
+        except requests.exceptions.RequestException as err:
+            _log.error(f"Request Error: {data.status_code}")
 
 ####### makeCredentialFile()
 # Create a credential file to use with NBIA Data Retriever
@@ -265,6 +326,7 @@ def queryData(endpoint, options, api_url, format):
         _log.error(errt)
     except requests.exceptions.RequestException as err:
         _log.error(err)
+    
 
 ####### getCollections function
 # Gets a list of collections from a specified api_url
@@ -956,6 +1018,67 @@ def getDicomTags(seriesUid,
 
     data = queryData(endpoint, options, api_url, format)
     return data
+    
+####### getSegRefSeries function (Advanced)
+# Gets DICOM tag metadata for a given SEG/RTSTRUCT series UID (scan)
+# and then look up the series UID they were derived from
+
+def getSegRefSeries(uid):
+    # get dicom tags for the series as a dataframe
+    df = getDicomTags(uid, format="df")
+
+    if df is not None:
+        # Find the row where element = "(0008,0060) Modality"
+        findModality = df['element'] == '(0008,0060)'
+        modality = df.loc[findModality, 'data'].item()
+
+        if modality == "RTSTRUCT":
+            # Locate "RT Referenced Series Sequence >>(3006,0014)"
+            # and "Series Instance UID >>>(0020,000E)" in the dataframe
+            refElements = (df['element'] == '>>(3006,0014)') & (df['element'].shift(-1) == '>>>(0020,000E)')
+
+            if refElements.any():
+                # Get the index for end of segmentation sequence
+                index = df.index[refElements].item()
+
+                # Retrieve the value of "Series Instance UID" from the next row
+                refSeriesUid = df.loc[index + 1, 'data']
+                return refSeriesUid
+            
+            else:
+                print("Segmentation doesn't contain a reference series UID.")
+                refSeriesUid = "N/A"
+                return refSeriesUid
+
+        elif modality == "SEG":
+            # Locate ">(0008,114A) End Referenced Instance Sequence"
+            # and ">(0020,000E) Series Instance UID" in the dataframe
+            refElements = (df['element'] == '>(0008,114A)') & (df['element'].shift(-1) == '>(0020,000E)')
+
+            if refElements.any():
+                # Get the index for end of segmentation sequence
+                index = df.index[refElements].item()
+
+                # Retrieve the value of "Series Instance UID" from the next row
+                refSeriesUid = df.loc[index + 1, 'data']
+                return refSeriesUid
+            
+            else:
+                print("Segmentation doesn't contain a reference series UID.")
+                refSeriesUid = "N/A"
+                return refSeriesUid
+
+        else:
+            print("Segmentation series must be RTSTRUCT or SEG modality.")
+            refSeriesUid = "N/A"
+            return refSeriesUid
+
+    else:
+        print("Segmentation series UID not found:", uid)
+        refSeriesUid = "N/A"
+        return refSeriesUid
+
+
 
 ####### getDoiMetadata function
 # Gets a list of Collections or Series associated with a DOI
