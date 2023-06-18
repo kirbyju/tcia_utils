@@ -251,6 +251,41 @@ def refreshToken(api_url = ""):
             _log.error(f"Timeout Error: {data.status_code}")
         except requests.exceptions.RequestException as err:
             _log.error(f"Request Error: {data.status_code}")
+            
+####### logoutToken()
+# Logs out of a security token for APIs that require authorization
+# Must first use getToken() to create a token
+
+def logoutToken(api_url = ""): 
+
+    global token_exp_time, nlst_token_exp_time, api_call_headers, nlst_api_call_headers, refresh_token
+
+    # determine which server the token was created on
+    if api_url == "nlst" and 'nlst_api_call_headers' in globals():
+        url = "https://nlst.cancerimagingarchive.net/nbia-api/logout"
+        api_call_headers = nlst_api_call_headers
+    elif api_url != "nlst" and 'api_call_headers' in globals():
+        url = "https://services.cancerimagingarchive.net/nbia-api/logout"
+    else: 
+        _log.error("Error: You haven't created a token yet, or have already logged out.")
+        raise StopExecution
+
+    try:
+        _log.info(f'Logging out of... {url}')
+        data = requests.get(url, headers = api_call_headers)
+        _log.info(f'{data.text}')
+        # remove variables holding token details
+        del token_exp_time, nlst_token_exp_time, api_call_headers, nlst_api_call_headers, refresh_token
+
+    # handle errors
+    except requests.exceptions.HTTPError as errh:
+        _log.error(f"HTTP Error: {data.status_code} -- Double check your user name and password.")
+    except requests.exceptions.ConnectionError as errc:
+        _log.error(f"Connection Error: {data.status_code}")
+    except requests.exceptions.Timeout as errt:
+        _log.error(f"Timeout Error: {data.status_code}")
+    except requests.exceptions.RequestException as err:
+        _log.error(f"Request Error: {data.status_code}")
 
 ####### makeCredentialFile()
 # Create a credential file to use with NBIA Data Retriever
