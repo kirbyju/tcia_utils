@@ -47,7 +47,11 @@ NPEXSpecies = {
 # Checks for valid security tokens where needed
 
 def setApiUrl(endpoint, api_url):
-
+    """
+    Checks for valid security tokens where needed
+    Because it is called by other functions to select base URL, please do NOT use this function.
+    Note: Nearly all functions allow you to specify api_url as a query parameter. This allows you to specify if you'd like to access restricted collections or the National Lung Screening Trial (NLST) collection, which lives on a separate server due to its size (>26,000 patients!). We'll provide examples to show how this works later in the notebook.
+    """
     global searchEndpoints, advancedEndpoints
 
     # create valid endpoint lists
@@ -142,7 +146,13 @@ def setApiUrl(endpoint, api_url):
 # Sets expiration time for tokens (2 hours from creation)
 
 def getToken(user = "", pw = "", api_url = ""): 
-
+    """
+    Retrieves security token to access APIs that require authorization
+    Provides interactive prompts for user/pw if they're not specified as parameters
+    Uses getToken() for querying restricted collections with "Search API"
+    Uses getToken(api_url = "nlst") for "Advanced API" queries of National Lung Screening Trial
+    Sets expiration time for tokens (2 hours from creation)
+    """
     global token_exp_time, nlst_token_exp_time, api_call_headers, nlst_api_call_headers, refresh_token
 
     # token URLs
@@ -293,7 +303,16 @@ def logoutToken(api_url = ""):
 # Documentation at https://wiki.cancerimagingarchive.net/x/2QKPBQ
 
 def makeCredentialFile(user = "", pw = ""):
-
+    """
+    Creates a credential file to use with NBIA Data Retriever
+    Provides interactive prompts for user/pw if they're not specified as parameters
+    Note: A credential file is a text file that passes the user's credentials in the following format:
+        userName = YourUserName
+        passWord = YourPassword
+        Both parameters are case-sensitive.
+    Users are encouraged to take a look at the file being generated.
+    Documentation at https://wiki.cancerimagingarchive.net/x/2QKPBQ and notebook at https://github.com/kirbyju/TCIA_Notebooks/blob/main/TCIA_Linux_Data_Retriever_App.ipynb.
+    """
     # set user name and password
     if user == "":
         print("Enter User: ")
@@ -317,7 +336,11 @@ def makeCredentialFile(user = "", pw = ""):
 # Formats output as JSON by default with options for "df" (dataframe) and "csv"
 
 def queryData(endpoint, options, api_url, format):
-
+    """
+    Provides error handling for requests.get()
+    Formats output as JSON by default with options for "df" (dataframe) and "csv"
+    Because it is called by query functions that use requests.get(), please do NOT use this function.
+    """
     # get base URL
     base_url = setApiUrl(endpoint, api_url)
     # display full URL with endpoint & parameters
@@ -368,7 +391,10 @@ def queryData(endpoint, options, api_url, format):
 
 def getCollections(api_url = "",
                    format = ""):
-
+    """
+    Optional: api_url, format
+    Gets a list of collections from a specified api_url
+    """
     endpoint = "getCollectionValues"
     options = {}
 
@@ -383,7 +409,11 @@ def getBodyPart(collection = "",
                 modality = "",
                 api_url = "",
                 format = ""):
-
+    """
+    Optional: api_url, format
+    Gets Body Part Examined metadata from a specified api_url
+    Allows filtering by collection and modality
+    """
     endpoint = "getBodyPartValues"
 
     # create options dict to construct URL
@@ -405,7 +435,11 @@ def getModality(collection = "",
                 bodyPart = "",
                 api_url = "",
                 format = ""):
-
+    """
+    Optional: api_url, format
+    Gets Modalities metadata from a specified api_url
+    Allows filtering by collection and bodyPart
+    """
     endpoint = "getModalityValues"
 
     # create options dict to construct URL
@@ -426,7 +460,11 @@ def getModality(collection = "",
 def getPatient(collection = "",
                api_url = "",
                format = ""):
-
+    """
+    Optional: api_url, format
+    Gets Patient metadata from a specified api_url
+    Allows filtering by collection
+    """
     endpoint = "getPatient"
 
     # create options dict to construct URL
@@ -447,7 +485,11 @@ def getPatientByCollectionAndModality(collection,
                                       modality,
                                       api_url = "",
                                       format = ""):
-
+    """
+    Optional: api_url, format
+    Gets Patient IDs from a specified api_url
+    Returns a list of patient IDs
+    """
     endpoint = "getPatientByCollectionAndModality"
 
     # create options dict to construct URL
@@ -467,7 +509,11 @@ def getNewPatientsInCollection(collection,
                                date,
                                api_url = "",
                                format = ""):
-
+    """
+    Optional: api_url, format
+    Gets "new" patient metadata from a specified api_url
+    The date format is YYYY/MM/DD
+    """
     endpoint = "NewPatientsInCollection"
 
     # create options dict to construct URL
@@ -488,7 +534,10 @@ def getStudy(collection,
              studyUid = "",
              api_url = "",
              format = ""):
-
+    """
+    Optional: patientId, studyUid, api_url, format
+    Gets Study (visit/timepoint) metadata from a specified api_url
+    """
     endpoint = "getPatientStudy"
 
     # create options dict to construct URL
@@ -513,7 +562,11 @@ def getNewStudiesInPatient(collection,
                            date,
                            api_url = "",
                            format = ""):
-
+    """
+    Optional: api_url, format
+    Gets "new" patient metadata from a specified api_url
+    The date format is YYYY/MM/DD
+    """
     endpoint = "NewStudiesInPatientCollection"
 
     # create options dict to construct URL
@@ -540,7 +593,12 @@ def getSeries(collection = "",
               manufacturerModel = "",
               api_url = "",
               format = ""):
-
+    """
+    All parameters are optional.
+    Gets Series (scan) metadata from a specified api_url
+    Allows filtering by collection, patient ID, study UID, series UID, modality, body part, manufacturer & model
+    Note: Since the output of this function can be very long, it is advisable to save the output to a variable and only display a portion of it at a time when the output format is JSON.
+    """
     endpoint = "getSeries"
 
     # create options dict to construct URL
@@ -576,7 +634,12 @@ def getSeries(collection = "",
 def getUpdatedSeries(date,
                      api_url = "",
                      format = ""):
-
+    """
+    Optional: api_url, format
+    Gets "new" series metadata from a specified api_url
+    The date format is YYYY/MM/DD
+    NOTE: Unlike other API endpoints, this function expects MM/DD/YYYY, we'll convert from YYYY/MM/DD so tcia-utils is consistent
+    """
     endpoint = "getUpdatedSeries"
 
     # convert to NBIA's expected date format
@@ -597,7 +660,11 @@ def getUpdatedSeries(date,
 def getSeriesMetadata(seriesUid,
                       api_url = "",
                       format = ""):
-
+    """
+    Optional: api_url, format
+    Gets Series (scan) metadata from a specified api_url
+    Output includes DOI and license details that are not in the getSeries() function
+    """
     endpoint = "getSeriesMetaData"
 
     # create options dict to construct URL
@@ -614,7 +681,10 @@ def getSeriesMetadata(seriesUid,
 def getSeriesSize(seriesUid,
                   api_url = "",
                   format = ""):
-
+    """
+    Optional: api_url, format
+    Gets the file count and disk size of a series/scan
+    """
     endpoint = "getSeriesSize"
 
     # create options dict to construct URL
@@ -631,7 +701,10 @@ def getSeriesSize(seriesUid,
 def getSopInstanceUids(seriesUid,
                        api_url = "",
                        format = ""):
-
+    """
+    Optional: api_url, format
+    Gets SOP Instance UIDs from a specific series/scan
+    """
     endpoint = "getSOPInstanceUIDs"
 
     # create options dict to construct URL
@@ -650,7 +723,11 @@ def getManufacturer(collection = "",
                     bodyPart = "",
                     api_url = "",
                     format = ""):
-
+    """
+    All parameters are optional.
+    Gets manufacturer metadata from a specified api_url
+    Allows filtering by collection, body part & modality
+    """
     endpoint = "getManufacturerValues"
 
     # create options dict to construct URL
@@ -677,7 +754,12 @@ def getManufacturer(collection = "",
 def getSharedCart(name,
                   api_url = "",
                   format = ""):
-
+    """
+    Optional: api_url, format
+    Gets "Shared Cart" (scan) metadata from a specified api_url
+    First use https://nbia.cancerimagingarchive.net/nbia-search/ to create a cart, then add data to your basket, then click "Share" > "Share my cart".
+    The "name" parameter is part of the URL that generates. E.g https://nbia.cancerimagingarchive.net/nbia-search/?saved-cart=nbia-49121659384603347 has a cart "name" of "nbia-49121659384603347".
+    """
     endpoint = "getContentsByName"
 
     # create options dict to construct URL
@@ -707,7 +789,18 @@ def downloadSeries(series_data,
                    input_type = "",
                    format = "",
                    csv_filename = ""):
-
+    """
+    Ingests a set of seriesUids and downloads them
+    By default, series_data expects JSON containing "SeriesInstanceUID" elements.
+    Set number = n to download the first n series if you don't want the full dataset.
+    Set hash = "y" if you'd like to retrieve MD5 hash values for each image.
+    Saves to tciaDownload folder in current directory if no path is specified
+    Set input_type = "list" to pass a list of Series UIDs instead of JSON.
+    Set input_type = "manifest" to pass the path of a *.TCIA manifest file as series_data.
+    Format can be set to "df" or "csv" to return series metadata.
+    Setting a csv_filename will create the csv even if format isn't specified.
+    The metadata includes info about series that have previously been downloaded.
+    """
     endpoint = "getImage"
     seriesUID = ''
     success = 0
@@ -838,7 +931,7 @@ def downloadImage(seriesUID,
                   sopUID,
                   path = "",
                   api_url = ""):
-
+    """Ingests a seriesUids and SopInstanceUid and downloads the image"""
     endpoint = "getSingleImage"
     success = 0
     failed = 0
@@ -904,6 +997,10 @@ def downloadImage(seriesUID,
 # Get HTML-formatted descriptions of collections and their DOIs
 
 def getCollectionDescriptions(api_url = "", format = ""):
+    """
+    All parameters are optional.
+    Gets HTML-formatted descriptions of collections and their DOIs
+    """
     endpoint = "getCollectionDescriptions"
     options = {}
 
@@ -914,7 +1011,10 @@ def getCollectionDescriptions(api_url = "", format = ""):
 # Get patient counts by collection from Advanced API
 
 def getCollectionPatientCounts(api_url = "", format = ""):
-
+    """
+    All parameters are optional.
+    Gets counts of Patient by collection from Advanced API
+    """
     endpoint = "getCollectionValuesAndCounts"
     options = {}
 
@@ -929,7 +1029,11 @@ def getModalityCounts(collection = "",
                       bodyPart = "",
                       api_url = "",
                       format = ""):
-
+    """
+    All parameters are optional.
+    Gets counts of Modality metadata from Advanced API
+    Allows filtering by collection and bodyPart
+    """
     endpoint = "getModalityValuesAndCounts"
 
     # create options dict to construct URL
@@ -951,7 +1055,11 @@ def getBodyPartCounts(collection = "",
                       modality = "",
                       api_url = "",
                       format = ""):
-
+    """
+    All parameters are optional.
+    Gets counts of Body Part metadata from Advanced API
+    Allows filtering by collection and modality
+    """
     endpoint = "getBodyPartValuesAndCounts"
 
     # create options dict to construct URL
@@ -974,7 +1082,11 @@ def getManufacturerCounts(collection = "",
                       bodyPart = "",
                       api_url = "",
                       format = ""):
-
+    """
+    All parameters are optional.
+    Gets counts of Manufacturer metadata from Advanced API
+    Allows filtering by collection, body part and modality
+    """
     endpoint = "getManufacturerValuesAndCounts"
 
     # create options dict to construct URL
@@ -996,7 +1108,12 @@ def getManufacturerCounts(collection = "",
 # Returns result as dataframe and CSV
 
 def getSeriesList(list, api_url = "", csv_filename = ""):
-
+    """
+    Optional: api_url, csv_filename
+    Get series metadata from Advanced API
+    Allows submission of a list of UIDs
+    Returns result as dataframe and CSV
+    """
     uids = ",".join(list)
     param = {'list': uids}
     endpoint = "getSeriesMetadata2"
@@ -1044,7 +1161,10 @@ def getSeriesList(list, api_url = "", csv_filename = ""):
 def getDicomTags(seriesUid,
                  api_url = "",
                  format = ""):
-
+    """
+    Optional: api_url, format
+    Gets DICOM tag metadata for a given series UID (scan)
+    """
     endpoint = "getDicomTags"
 
     # create options dict to construct URL
@@ -1122,7 +1242,11 @@ def getSegRefSeries(uid):
 # Formats output as JSON by default with options for "df" (dataframe) and "csv"
 
 def getDoiMetadata(doi, output, api_url = "", format = ""):
-
+    """
+    Optional: output, api_url, format
+    Gets a list of Collections if output = "", or Series if output = "series", associated with a DOI.
+    The result includes whether the data are 3rd party analyses or not.
+    """
     param = {'DOI': doi,
              'CollectionOrSeries': output}
 
@@ -1190,8 +1314,10 @@ def getSimpleSearchWithModalityAndBodyPartPaged(
     api_url = "",
     format = ""):
     """
-    Takes the same parameters as the SimpleSearch GUI; using more parameters narrows
-    the number of subjects received.
+    All parameters are optional.
+    Takes the same parameters as the SimpleSearch GUI
+    Use more parameters to narrow the number of subjects received.
+    Note: This function only supports output of JSON format, please leavel the format parameter as it.
 
     collections: list[str]   -- The DICOM collections of interest to you
     species: list[str]       -- Filter collections by species. Possible values are 'human', 'mouse', and 'dog'
@@ -1342,7 +1468,16 @@ def makeSeriesReport(series_data, input_type = "", format = "", filename = None,
 # Specify format = "file" to save the report to a file
 # Specify a filename parameter to set a filename if you don't want the default
 
-
+    """
+    Ingests JSON output from any function that returns series-level data and creates summary report
+    Specify input_type = "manifest" to ingest a *.TCIA manifest file or "list" for a python list of UIDs.
+    If input_type = "manifest" or "list" and there are series UIDs that are restricted, you must call getToken() with a user ID that has access to all UIDs before calling this function.
+    Specifying api_url is only necessary if you are using input_type = "manifest" or "list" with NLST data (e.g. api_url = "nlst").
+    Specify format = "var" to return the report values as a dictionary.
+    Access variables example after saving function output to report_data: subjects = report_data["subjects"].
+    Specify format = "file" to save the report to a file.
+    Specify a filename parameter to set a filename if you don't want the default filename.
+    """
     # if input_type is manifest convert it to a list
     if input_type == "manifest":
         series_data = manifestToList(series_data)
@@ -1436,7 +1571,11 @@ def makeSeriesReport(series_data, input_type = "", format = "", filename = None,
 # Returns a list of series UIDs
 
 def manifestToList(manifest):
-
+    """
+    Ingests a TCIA manifest file and removes header
+    Returns a list of series UIDs
+    Because it is primarily a helper function used by downloadSeries() and makeSeriesReport(), please do NOT use this function.
+    """
     # initialize variable
     data = []
 
@@ -1474,7 +1613,16 @@ def manifestToList(manifest):
 # Optionally accepts a csv_filename parameter if you'd like to export a CSV file
 
 def makeVizLinks(series_data, csv_filename=""):
-
+    """
+    Ingests JSON output of getSeries() or getSharedCart()
+    Creates URLs to visualize them in a browser
+    The links appear in the last 2 columns of the dataframe.
+    TCIA links display the individual series described in each row.
+    IDC links display the entire study (all scans from that time point).
+    IDC links may not work if they haven't mirrored the series from TCIA, yet.
+    This function only works with fully public datasets (no limited-access data).
+    Optionally accepts a csv_filename parameter if you'd like to export a CSV file.
+    """
     # set base urls for tcia/idc
     tciaVizUrl = "https://nbia.cancerimagingarchive.net/viewer/?series="
     idcVizUrl = "https://viewer.imaging.datacommons.cancer.gov/viewer/"
@@ -1500,7 +1648,12 @@ def makeVizLinks(series_data, csv_filename=""):
 #   provided since this is where downloadSeries() saves data
 
 def viewSeries(seriesUid = "", path = ""):
-
+    """
+    Visualizes a Series (scan) you've downloaded in the notebook
+    Requires EITHER a seriesUid or path parameter
+    Leave seriesUid empty if you want to provide a custom path.
+    The function assumes "tciaDownload/<seriesUid>/" as path if seriesUid is provided since this is where downloadSeries() saves data.
+    """
     # set path where downloadSeries() saves the data if seriesUid is provided
     if seriesUid != "":
         path = "tciaDownload/" + seriesUid
