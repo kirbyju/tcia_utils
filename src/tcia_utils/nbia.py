@@ -25,6 +25,8 @@ logging.basicConfig(
     , level=logging.INFO
 )
 
+# Used by functions that accept parameters used in GUI Simple Search
+# e.g. getSimpleSearchWithModalityAndBodyPartPaged()
 class Criteria(Enum):
     Collection = "CollectionCriteria"
     Species = "SpeciesCriteria"
@@ -36,21 +38,27 @@ class Criteria(Enum):
     NumStudies = "MinNumberOfStudiesCriteria"
     ModalityAnded = "ModalityAndedSearchCriteria"
 
+# Used by getSimpleSearchWithModalityAndBodyPartPaged() to transform
+#   species codes into human readable terms
 NPEXSpecies = {
     "human": 337915000
     , "mouse": 447612001
     , "dog": 448771007
 }
 
-####### setApiUrl()
-# Called by other functions to select base URL
-# Checks for valid security tokens where needed
 
 def setApiUrl(endpoint, api_url):
     """
-    Checks for valid security tokens where needed
-    Because it is called by other functions to select base URL, please do NOT use this function.
-    Note: Nearly all functions allow you to specify api_url as a query parameter. This allows you to specify if you'd like to access restricted collections or the National Lung Screening Trial (NLST) collection, which lives on a separate server due to its size (>26,000 patients!). We'll provide examples to show how this works later in the notebook.
+    setApiUrl() is used by most other functions to select the correct base URL
+    and is generally not something that needs to be called directly in your code.  
+    
+    It assists with:
+        1. verifying you are calling a supported endpoint
+        2. selecting the correct base URL for Search vs Advanced APIs
+        3. selecting the correct base URL for regular collections vs NLST
+        4. ensuring you have a valid security token where necessary
+    
+    Learn more about the NBIA APIs at https://wiki.cancerimagingarchive.net/x/ZoATBg
     """
     global searchEndpoints, advancedEndpoints
 
@@ -138,41 +146,37 @@ def setApiUrl(endpoint, api_url):
 
         return base_url
 
-####### getToken()
-# Retrieves security token to access APIs that require authorization
-# Provides interactive prompts for user/pw if they're not specified as parameters
-# Use getToken() for querying restricted collections with "Search API"
-# Use getToken(api_url = "nlst") for "Advanced API" queries of National Lung Screening Trial
-# Sets expiration time for tokens (2 hours from creation)
-
 def getToken(user = "", pw = "", api_url = ""): 
     """
-    Retrieves security token to access APIs that require authorization
-    Provides interactive prompts for user/pw if they're not specified as parameters
-    Uses getToken() for querying restricted collections with "Search API"
-    Uses getToken(api_url = "nlst") for "Advanced API" queries of National Lung Screening Trial
-    Sets expiration time for tokens (2 hours from creation)
+    getToken() accepts user and pw parameters to create a token to access APIs that require authorization.
+    Access tokens expire 2 hours after creation, and can be refreshed with refreshToken().
+    Interactive prompts are provided for user/pw if they're not specified as parameters.
+    "Advanced APIs" can be accessed anonymously using the nbia_guest account with a blank password.
+    The api_url = "nlst" parameter is only necessary for "Advanced API" queries since it's a public collection.
     """
-    global token_exp_time, nlst_token_exp_time, api_call_headers, nlst_api_call_headers, refresh_token
+    global token_exp_time, nlst_token_exp_time, api_call_headers, nlst_api_call_headers, refresh_token, nlst_refresh_token
 
-    # token URLs
+    # assumes nbia_guest account for Advanced API on NLST server (all public data)
     if api_url == "nlst":
         token_url = "https://nlst.cancerimagingarchive.net/nbia-api/oauth/token"
+        userName = "nbia_guest"
+        passWord = ""        
+    # specify user/pw unless nbia_guest is being used for accessing Advanced API anonymously
     else:
         token_url = "https://nbia.cancerimagingarchive.net/nbia-api/oauth/token"
 
-    # set user name and password
-    if user == "":
-        print("Enter User: ")
-        userName = input()
-    else:
-        userName = user
-    if pw == "" and user != "nbia_guest":
-        passWord = getpass.getpass(prompt = 'Enter Password: ')
-    else:
-        passWord = pw
+        if user == "":
+            print("Enter User: ")
+            userName = input()
+        else:
+            userName = user
+        # if user is nbia_guest, we leave password blank for anonymous access
+        if pw == "" and user != "nbia_guest":
+            passWord = getpass.getpass(prompt = 'Enter Password: ')
+        else:
+            passWord = pw
 
-    # create API token
+    # request API token
     try:
         params = {
         'client_id': 'nbiaRestAPIClient',
@@ -185,17 +189,18 @@ def getToken(user = "", pw = "", api_url = ""):
         data = requests.post(token_url, data = params)
         data.raise_for_status()
         access_token = data.json()["access_token"]
-        refresh_token = data.json()["refresh_token"]
         expires_in = data.json()["expires_in"]
-        # track expiration status/time (2 hours from creation)
+        # track expiration status/time
         current_time = datetime.now()
         if api_url == "nlst":
             nlst_token_exp_time = current_time + timedelta(seconds=expires_in)
             nlst_api_call_headers = {'Authorization': 'Bearer ' + access_token}
+            nlst_refresh_token = data.json()["refresh_token"]
             _log.info(f'Success - Token saved to nlst_api_call_headers variable and expires at {nlst_token_exp_time}')
         else:
-            token_exp_time = current_time + timedelta(seconds=expires_in)
+            token_exp_time = current_time + timedelta(seconds=expires_in)            
             api_call_headers = {'Authorization': 'Bearer ' + access_token}
+            refresh_token = data.json()["refresh_token"]
             _log.info(f'Success - Token saved to api_call_headers variable and expires at {token_exp_time}')
     # handle errors
     except requests.exceptions.HTTPError as errh:
@@ -207,68 +212,76 @@ def getToken(user = "", pw = "", api_url = ""):
     except requests.exceptions.RequestException as err:
         _log.error(f"Request Error: {data.status_code}")
 
-####### refreshToken()
-# Refreshes security token to extend access time for APIs that require authorization
-# Must first use getToken() to create a token
-
-def refreshToken(api_url = ""): 
-
+def refreshToken(api_url = ""):
+    """
+    refreshToken() refreshes security tokens to extend access time for APIs that require authorization.
+    It attempts to verify that a refresh token exists and recommends using getToken() to create a new token if needed.
+    This function is called as needed by setApiUrl() and is generally not something that needs to be called directly in your code.    
+    """
     global token_exp_time, nlst_token_exp_time, api_call_headers, nlst_api_call_headers
-
-    try:
-        refresh_token
-    except NameError:
-        _log.error("Error refreshing token for accessing the Restricted API. Create one using getToken().")
-        raise StopExecution
-    else:
-
-        # token URLs
-        if api_url == "nlst":
+   
+    # token URLs
+    if api_url == "nlst":
+        try:
+            token = nlst_refresh_token
+        except NameError:
+            _log.warning(f"No NLST refresh token found. Creating a new token...")
+            getToken(api_url = "nlst")
+            raise StopExecution
+        else:
             token_url = "https://nlst.cancerimagingarchive.net/nbia-api/oauth/token"
+    
+    else:
+        try:
+            token = refresh_token
+        except NameError:
+            _log.error("Error refreshing token for accessing the Restricted API. Create one using getToken().")
+            raise StopExecution
         else:
             token_url = "https://nbia.cancerimagingarchive.net/nbia-api/oauth/token"
 
-        # refresh token request
-        try:
-            params = {
-            'client_id': 'nbiaRestAPIClient',
-            'client_secret' : 'ItsBetweenUAndMe',
-            'grant_type': 'refresh_token',
-            'refresh_token' : refresh_token,
-            }
+    # refresh token request
+    try:
+        params = {
+        'client_id': 'nbiaRestAPIClient',
+        'client_secret' : 'ItsBetweenUAndMe',
+        'grant_type': 'refresh_token',
+        'refresh_token' : token,
+        }
+        
+        # obtain new access token
+        data = requests.post(token_url, data = params)
+        data.raise_for_status()
+        access_token = data.json()["access_token"]
+        expires_in = data.json()["expires_in"]
+        # track expiration status/time (2 hours from creation)
+        current_time = datetime.now()
+        if api_url == "nlst":
+            nlst_token_exp_time = current_time + timedelta(seconds=expires_in)
+            nlst_api_call_headers = {'Authorization': 'Bearer ' + access_token}
+            _log.info(f'Success - Token refreshed to nlst_api_call_headers variable and expires at {nlst_token_exp_time}')
+        else:
+            token_exp_time = current_time + timedelta(seconds=expires_in)
+            api_call_headers = {'Authorization': 'Bearer ' + access_token}
+            _log.info(f'Success - Token refreshed to api_call_headers variable and expires at {token_exp_time}')
+    # handle errors
+    except requests.exceptions.HTTPError as errh:
+        _log.error(f"HTTP Error: {data.status_code} -- Double check your user name and password.")
+    except requests.exceptions.ConnectionError as errc:
+        _log.error(f"Connection Error: {data.status_code}")
+    except requests.exceptions.Timeout as errt:
+        _log.error(f"Timeout Error: {data.status_code}")
+    except requests.exceptions.RequestException as err:
+        _log.error(f"Request Error: {data.status_code}")
             
-            # obtain new access token
-            data = requests.post(token_url, data = params)
-            data.raise_for_status()
-            access_token = data.json()["access_token"]
-            expires_in = data.json()["expires_in"]
-            # track expiration status/time (2 hours from creation)
-            current_time = datetime.now()
-            if api_url == "nlst":
-                nlst_token_exp_time = current_time + timedelta(seconds=expires_in)
-                nlst_api_call_headers = {'Authorization': 'Bearer ' + access_token}
-                _log.info(f'Success - Token refreshed to nlst_api_call_headers variable and expires at {nlst_token_exp_time}')
-            else:
-                token_exp_time = current_time + timedelta(seconds=expires_in)
-                api_call_headers = {'Authorization': 'Bearer ' + access_token}
-                _log.info(f'Success - Token refreshed to api_call_headers variable and expires at {token_exp_time}')
-        # handle errors
-        except requests.exceptions.HTTPError as errh:
-            _log.error(f"HTTP Error: {data.status_code} -- Double check your user name and password.")
-        except requests.exceptions.ConnectionError as errc:
-            _log.error(f"Connection Error: {data.status_code}")
-        except requests.exceptions.Timeout as errt:
-            _log.error(f"Timeout Error: {data.status_code}")
-        except requests.exceptions.RequestException as err:
-            _log.error(f"Request Error: {data.status_code}")
-            
-####### logoutToken()
-# Logs out of a security token for APIs that require authorization
-# Must first use getToken() to create a token
-
 def logoutToken(api_url = ""): 
-
-    global token_exp_time, nlst_token_exp_time, api_call_headers, nlst_api_call_headers, refresh_token
+    """
+    logoutToken() logs out security tokens used for APIs that require authorization.
+    Variables holding access token information are also deleted by this operation.
+    The api_url parameter can be used to specify whether your token was for the main server (leave empty) or NLST.
+    Use getToken() to create a new token if needed.
+    """
+    global token_exp_time, nlst_token_exp_time, api_call_headers, nlst_api_call_headers, refresh_token, nlst_refresh_token
 
     # determine which server the token was created on
     if api_url == "nlst" and 'nlst_api_call_headers' in globals():
@@ -285,7 +298,10 @@ def logoutToken(api_url = ""):
         data = requests.get(url, headers = api_call_headers)
         _log.info(f'{data.text}')
         # remove variables holding token details
-        del token_exp_time, nlst_token_exp_time, api_call_headers, nlst_api_call_headers, refresh_token
+        if api_url == "nlst":
+            del nlst_token_exp_time, nlst_api_call_headers, nlst_refresh_token
+        else:
+            del token_exp_time, api_call_headers, refresh_token
 
     # handle errors
     except requests.exceptions.HTTPError as errh:
@@ -297,21 +313,17 @@ def logoutToken(api_url = ""):
     except requests.exceptions.RequestException as err:
         _log.error(f"Request Error: {data.status_code}")
 
-####### makeCredentialFile()
-# Create a credential file to use with NBIA Data Retriever
-# Provides interactive prompts for user/pw if they're not specified as parameters
-# Documentation at https://wiki.cancerimagingarchive.net/x/2QKPBQ
-
 def makeCredentialFile(user = "", pw = ""):
     """
-    Creates a credential file to use with NBIA Data Retriever
-    Provides interactive prompts for user/pw if they're not specified as parameters
-    Note: A credential file is a text file that passes the user's credentials in the following format:
+    Creates a credential file to use with NBIA Data Retriever. 
+    Interactive prompts are provided for user/pw if they're not specified as parameters.
+    The credential file is a text file that passes the user's credentials in the following format:
         userName = YourUserName
         passWord = YourPassword
         Both parameters are case-sensitive.
-    Users are encouraged to take a look at the file being generated.
-    Documentation at https://wiki.cancerimagingarchive.net/x/2QKPBQ and notebook at https://github.com/kirbyju/TCIA_Notebooks/blob/main/TCIA_Linux_Data_Retriever_App.ipynb.
+    Additional documentation:
+        https://wiki.cancerimagingarchive.net/x/2QKPBQ 
+        https://github.com/kirbyju/TCIA_Notebooks/blob/main/TCIA_Linux_Data_Retriever_App.ipynb
     """
     # set user name and password
     if user == "":
@@ -337,9 +349,9 @@ def makeCredentialFile(user = "", pw = ""):
 
 def queryData(endpoint, options, api_url, format):
     """
-    Provides error handling for requests.get()
+    queryData() is called by many other query functions and is generally not something that needs to be called directly in your code.
+    It provides uses setApiURL() to set a base URL and addresses error handling for HTTP status and empty search results.
     Formats output as JSON by default with options for "df" (dataframe) and "csv"
-    Because it is called by query functions that use requests.get(), please do NOT use this function.
     """
     # get base URL
     base_url = setApiUrl(endpoint, api_url)
@@ -385,9 +397,6 @@ def queryData(endpoint, options, api_url, format):
     except requests.exceptions.RequestException as err:
         _log.error(err)
     
-
-####### getCollections function
-# Gets a list of collections from a specified api_url
 
 def getCollections(api_url = "",
                    format = ""):
@@ -1317,7 +1326,7 @@ def getSimpleSearchWithModalityAndBodyPartPaged(
     All parameters are optional.
     Takes the same parameters as the SimpleSearch GUI
     Use more parameters to narrow the number of subjects received.
-    Note: This function only supports output of JSON format, please leavel the format parameter as it.
+    Note: This function only supports output of JSON format, please leave the format parameter as it.
 
     collections: list[str]   -- The DICOM collections of interest to you
     species: list[str]       -- Filter collections by species. Possible values are 'human', 'mouse', and 'dog'
