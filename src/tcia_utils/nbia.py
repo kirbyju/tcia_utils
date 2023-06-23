@@ -1183,11 +1183,12 @@ def getDicomTags(seriesUid,
     data = queryData(endpoint, options, api_url, format)
     return data
     
-####### getSegRefSeries function (Advanced)
-# Gets DICOM tag metadata for a given SEG/RTSTRUCT series UID (scan)
-# and then look up the series UID they were derived from
 
 def getSegRefSeries(uid):
+    """
+    Gets DICOM tag metadata for a given SEG/RTSTRUCT series UID (scan)
+    and looks up the corresponding original/reference series UID
+    """
     # get dicom tags for the series as a dataframe
     df = getDicomTags(uid, format="df")
 
@@ -1210,7 +1211,7 @@ def getSegRefSeries(uid):
                 return refSeriesUid
             
             else:
-                print("Segmentation doesn't contain a reference series UID.")
+                _log.warning(f"Series {uid} does not contain a Reference Series UID.")
                 refSeriesUid = "N/A"
                 return refSeriesUid
 
@@ -1228,17 +1229,17 @@ def getSegRefSeries(uid):
                 return refSeriesUid
             
             else:
-                print("Segmentation doesn't contain a reference series UID.")
+                _log.warning(f"Series {uid} does not contain a Reference Series UID.")
                 refSeriesUid = "N/A"
                 return refSeriesUid
 
         else:
-            print("Segmentation series must be RTSTRUCT or SEG modality.")
+            _log.warning(f"Series {uid} is not a SEG/RTSTRUCT segmentation.")
             refSeriesUid = "N/A"
             return refSeriesUid
 
     else:
-        print("Segmentation series UID not found:", uid)
+        _log.warning(f"Series {uid} couldn't be found.")
         refSeriesUid = "N/A"
         return refSeriesUid
 
