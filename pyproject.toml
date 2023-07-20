@@ -23,7 +23,9 @@ dependencies = [
   "pandas",
   "matplotlib",
   "numpy",
-  "ipywidgets"
+  "ipywidgets", 
+  "pydicom-seg", 
+  "rt-utils"
 ]
 
 [project.urls]

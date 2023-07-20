@@ -14,7 +14,8 @@ import matplotlib.pyplot as plt
 import pydicom
 import numpy as np
 from ipywidgets import interact
-import pydicom_seg, rt_utils
+import tkinter, pydicom_seg, rt_utils 
+from tkinter import filedialog
 
 class StopExecution(Exception):
     def _render_traceback_(self):
@@ -1662,7 +1663,7 @@ def viewSeries(seriesUid = "", path = ""):
     """
     Visualizes a Series (scan) you've downloaded in the notebook
     Requires EITHER a seriesUid or path parameter
-    Leave seriesUid empty if you want to provide a custom path.
+    Leaves seriesUid empty if you want to provide a custom path.
     The function assumes "tciaDownload/<seriesUid>/" as path if seriesUid is provided since this is where downloadSeries() saves data.
     """
     # set path where downloadSeries() saves the data if seriesUid is provided
@@ -1724,90 +1725,156 @@ def viewSeries(seriesUid = "", path = ""):
     else:
         seriesInvalid(seriesUid)
 
-def viewSeriesSEG(seriesUid = "", seriesPath = "", SEGPath = ""):
-    if seriesUid != "":
-        seriesPath = "tciaDownload/" + seriesUid
 
-    # error message function for when series doesn't exist or is invalid data
-    def seriesInvalid(uid):
-        if seriesUid:
-            link = f"https://nbia.cancerimagingarchive.net/viewer/?series={seriesUID}"
-        else:
-            link = "https://nbia.cancerimagingarchive.net/viewer/?series=YOUR_SERIES_UID"
-        _log.error(
-            f"Cannot find a valid DICOM series at: {seriesPath}\n"
-            'Try running downloadSeries(seriesUid, input_type = "uid") to download it first.\n'
-            "If the data isn't restricted, you can alternatively view it in your browser (without downloading) using this link:\n"
-            f"{link}"
-        )
+####### viewSeriesSEG function
+# Visualizes a Series (scan) you've downloaded in the notebook
+# Adds an overlay from the SEG series
+# Requires a path parameter for the reference series
+# Requires the file path for the annotative series
+# Not recommended to be used as a standalone function
+def viewSeriesSEG(seriesPath = "", SEGPath = ""):
+    """
+    Visualizes a Series (scan) you've downloaded in the notebook
+    Adds an overlay from the SEG series
+    Requires a path parameter for the reference series
+    Requires the file path for the annotative series
+    Not recommended to be used as a standalone function
+    """
+    slices = [pydicom.dcmread(seriesPath + '/' + s) for s in os.listdir(seriesPath) if s.endswith(".dcm")]
+    slices.sort(key = lambda x: int(x.InstanceNumber), reverse = True)
 
-    # Verify series exists before visualizing
-    if os.path.isdir(seriesPath):
-        slices = [pydicom.dcmread(seriesPath + '/' + s) for s in os.listdir(seriesPath) if s.endswith(".dcm")]
-        slices.sort(key = lambda x: int(x.InstanceNumber), reverse = True)
-
-        try:
-            modality = slices[0].Modality
-        except IndexError:
-            seriesInvalid(seriesUid)
-            raise StopExecution
-        
-        image = np.stack([s.pixel_array for s in slices])
-        image = image.astype(np.int16)
-
-        if modality == "CT":
-            # Set outside-of-scan pixels to 0
-            # The intercept is usually -1024, so air is approximately 0
-            image[image == -2000] = 0
-
-            # Convert to Hounsfield units (HU)
-            intercept = slices[0].RescaleIntercept
-            slope = slices[0].RescaleSlope
-
-            if slope != 1:
-                image = slope * image.astype(np.float64)
-                image = image.astype(np.int16)
-
-            image += np.int16(intercept)
-
-        pixel_data = np.array(image, dtype=np.int16)     
-        SEG_data = pydicom.dcmread(SEGPath)
-        try:
-            reader = pydicom_seg.MultiClassReader()
-            result = reader.read(SEG_data)
-        except ValueError:
-            reader = pydicom_seg.SegmentReader()
-            result = reader.read(SEG_data)
-    
-        if slices[0].SeriesInstanceUID != result.referenced_series_uid:
-            raise Exception("The selected reference series and the annotative series don't match!")
-        
-        def seg_animation(x, **kwargs):
-            plt.imshow(pixel_data[x], cmap = plt.cm.gray)
-            if reader == pydicom_seg.MultiClassReader():
-                mask_data = result.data
-                plt.imshow(mask_data[x], cmap = plt.cm.rainbow, alpha = 0.5*(mask_data[x] > 0))
-            else:
-                for i in result.available_segments:
-                    if kwargs[list(kwargs)[i-1]] == True:
-                        mask_data = result.segment_data(i)
-                        plt.imshow(mask_data[x], cmap = plt.cm.rainbow, alpha = 0.5*(mask_data[x] > 0))
-            plt.show()
-    
-        if reader == pydicom_seg.MultiClassReader():
-            interact(seg_animation, x=(0, len(pixel_data)-1))
-        else:
-            kwargs = {v.SegmentDescription:True for i, v in enumerate(SEG_data.SegmentSequence)}
-            interact(seg_animation, x=(0, len(pixel_data)-1), **kwargs)
-    else:
+    try:
+        modality = slices[0].Modality
+    except IndexError:
         seriesInvalid(seriesUid)
+        raise StopExecution
+    
+    image = np.stack([s.pixel_array for s in slices])
+    image = image.astype(np.int16)
+
+    if modality == "CT":
+        # Set outside-of-scan pixels to 0
+        # The intercept is usually -1024, so air is approximately 0
+        image[image == -2000] = 0
+
+        # Convert to Hounsfield units (HU)
+        intercept = slices[0].RescaleIntercept
+        slope = slices[0].RescaleSlope
+
+        if slope != 1:
+            image = slope * image.astype(np.float64)
+            image = image.astype(np.int16)
+
+        image += np.int16(intercept)
+
+    pixel_data = np.array(image, dtype=np.int16)     
+    SEG_data = pydicom.dcmread(SEGPath)
+    try:
+        reader = pydicom_seg.MultiClassReader()
+        result = reader.read(SEG_data)
+    except ValueError:
+        reader = pydicom_seg.SegmentReader()
+        result = reader.read(SEG_data)
+
+    if slices[0].SeriesInstanceUID != result.referenced_series_uid:
+        raise Exception("The selected reference series and the annotative series don't match!")
+    
+    def seg_animation(x, **kwargs):
+        plt.imshow(pixel_data[x], cmap = plt.cm.gray)
+        if reader == pydicom_seg.MultiClassReader():
+            mask_data = result.data
+            plt.imshow(mask_data[x], cmap = plt.cm.rainbow, alpha = 0.5*(mask_data[x] > 0))
+        else:
+            for i in result.available_segments:
+                if kwargs[list(kwargs)[i-1]] == True:
+                    mask_data = result.segment_data(i)
+                    plt.imshow(mask_data[x], cmap = plt.cm.rainbow, alpha = 0.5*(mask_data[x] > 0))
+        plt.show()
+
+    if reader == pydicom_seg.MultiClassReader():
+        interact(seg_animation, x=(0, len(pixel_data)-1))
+    else:
+        kwargs = {v.SegmentDescription:True for i, v in enumerate(SEG_data.SegmentSequence)}
+        interact(seg_animation, x=(0, len(pixel_data)-1), **kwargs)
 
 
-def viewSeriesRT(seriesUid = "", seriesPath = "", RTPath = ""):
-    if seriesUid != "":
-        seriesPath = "tciaDownload/" + seriesUid
+####### viewSeriesRT function
+# Visualizes a Series (scan) you've downloaded in the notebook
+# Adds an overlay from the RTSTRUCT series
+# Requires a path parameter for the reference series
+# Requires the file path for the annotative series
+# Not recommended to be used as a standalone function
+def viewSeriesRT(seriesPath = "", RTPath = ""):
+    """
+    Visualizes a Series (scan) you've downloaded in the notebook
+    Adds an overlay from the RTSTRUCT series
+    Requires a path parameter for the reference series
+    Requires the file path for the annotative series
+    Not recommended to be used as a standalone function
+    """
+    rtstruct = rt_utils.RTStructBuilder.create_from(seriesPath, RTPath)
+    roi_names = rtstruct.get_roi_names()
+    
+    slices = rtstruct.series_data
+    try:
+        modality = slices[0].Modality
+    except IndexError:
+        seriesInvalid(seriesUid)
+        raise StopExecution
+    
+    image = np.stack([s.pixel_array for s in slices])
+    image = image.astype(np.int16)
 
-    # error message function for when series doesn't exist or is invalid data
+    if modality == "CT":
+        # Set outside-of-scan pixels to 0
+        # The intercept is usually -1024, so air is approximately 0
+        image[image == -2000] = 0
+
+        # Convert to Hounsfield units (HU)
+        intercept = slices[0].RescaleIntercept
+        slope = slices[0].RescaleSlope
+
+        if slope != 1:
+            image = slope * image.astype(np.float64)
+            image = image.astype(np.int16)
+
+        image += np.int16(intercept)
+
+    pixel_data = np.array(image, dtype=np.int16)
+    
+    def rt_animation(x, **kwargs):
+        plt.imshow(pixel_data[x], cmap = plt.cm.gray)
+        for i in range(len(roi_names)):
+            if kwargs[roi_names[i]] == True:
+                mask_data = rtstruct.get_roi_mask_by_name(roi_names[i])
+                plt.imshow(mask_data[:, :, x], cmap = plt.cm.rainbow, alpha = 0.5*(mask_data[:, :, x] > 0))
+        plt.show()
+    
+    kwargs = {v: True for i, v in enumerate(roi_names)}
+    interact(rt_animation, x = (0, len(pixel_data)-1), **kwargs)
+
+
+####### viewSeriesAnnotative function
+# Visualizes a Series (scan) you've downloaded in the notebook
+# Adds an overlay from the annotative series (SEG or RTSTRUCT)
+# Directs to the correct visualization function depending on the modality of the annotative series
+# Requires EITHER a seriesUid or path parameter for the reference series
+# Requires the file path for the annotative series
+# Opens a file browser for users to choose folder/file if the required parameters are specified
+# Leave seriesUid empty if you want to provide a custom path
+# The function assumes "tciaDownload/<seriesUid>/" as path if seriesUid is
+#   provided since this is where downloadSeries() saves data
+def viewSeriesAnnotative(seriesUid = "", referenceSeries = "", annotativeSeries = ""):
+    """
+    Visualizes a Series (scan) you've downloaded in the notebook
+    Adds an overlay from the annotative series (SEG or RTSTRUCT)
+    Directs to the correct visualization function depending on the modality of the annotative series
+    Requires EITHER a seriesUid or path parameter for the reference series
+    Requires the file path for the annotative series
+    Opens a file browser for users to choose folder/file if the required parameters are specified
+    Leave seriesUid empty if you want to provide a custom path
+    The function assumes "tciaDownload/<seriesUid>/" as path if seriesUid is provided since this is where downloadSeries() saves data.
+    """
     def seriesInvalid(uid):
         if seriesUid:
             link = f"https://nbia.cancerimagingarchive.net/viewer/?series={seriesUID}"
@@ -1819,48 +1886,26 @@ def viewSeriesRT(seriesUid = "", seriesPath = "", RTPath = ""):
             "If the data isn't restricted, you can alternatively view it in your browser (without downloading) using this link:\n"
             f"{link}"
         )
-
-    # Verify series exists before visualizing
-    if os.path.isdir(seriesPath):
-        rtstruct = rt_utils.RTStructBuilder.create_from(seriesPath, RTPath)
-        roi_names = rtstruct.get_roi_names()
+    
+    if seriesUid == "" and referenceSeries == "":
+        tkinter.Tk().withdraw()
+        folder_path = filedialog.askdirectory()
+        referenceSeries = folder_path
+    elif seriesUid != "":
+        referenceSeries = "tciaDownload/" + seriesUid
         
-        slices = rtstruct.series_data
-        try:
-            modality = slices[0].Modality
-        except IndexError:
-            seriesInvalid(seriesUid)
-            raise StopExecution
-        
-        image = np.stack([s.pixel_array for s in slices])
-        image = image.astype(np.int16)
+    if annotativeSeries == "":
+        tkinter.Tk().withdraw()
+        file_path = filedialog.askopenfilename()
+        annotativeSeries = file_path
 
-        if modality == "CT":
-            # Set outside-of-scan pixels to 0
-            # The intercept is usually -1024, so air is approximately 0
-            image[image == -2000] = 0
-
-            # Convert to Hounsfield units (HU)
-            intercept = slices[0].RescaleIntercept
-            slope = slices[0].RescaleSlope
-
-            if slope != 1:
-                image = slope * image.astype(np.float64)
-                image = image.astype(np.int16)
-
-            image += np.int16(intercept)
-
-        pixel_data = np.array(image, dtype=np.int16)
-        
-        def rt_animation(x, **kwargs):
-            plt.imshow(pixel_data[x], cmap = plt.cm.gray)
-            for i in range(len(roi_names)):
-                if kwargs[roi_names[i]] == True:
-                    mask_data = rtstruct.get_roi_mask_by_name(roi_names[i])
-                    plt.imshow(mask_data[:, :, x], cmap = plt.cm.rainbow, alpha = 0.5*(mask_data[:, :, x] > 0))
-            plt.show()
-        
-        kwargs = {v: True for i, v in enumerate(roi_names)}
-        interact(rt_animation, x = (0, len(pixel_data)-1), **kwargs)
+    if os.path.isdir(referenceSeries):
+        annotativeModality = pydicom.dcmread(annotativeSeries).Modality
+        if annotativeModality == "SEG":
+            viewSeriesSEG(referenceSeries, annotativeSeries)
+        elif annotativeModality == "RTSTRUCT":
+            viewSeriesRT(referenceSeries, annotativeSeries)
+        else:
+            print("Wrong modality for annotative series, please check your selection.")
     else:
         seriesInvalid(seriesUid)
