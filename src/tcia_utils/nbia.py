@@ -1787,13 +1787,14 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
         if reader == pydicom_seg.MultiClassReader():
             mask_data = result.data
             cmap = matplotlib.colors.ListedColormap(colorPaleatte[i])
-            plt.imshow(mask_data[x], cmap = cmap, alpha = 0.5*(mask_data[x] > 0))
+            plt.imshow(mask_data[x], cmap = cmap, alpha = 0.5*(mask_data[x] > 0), interpolation = None)
         else:
             for i in result.available_segments:
                 if kwargs[list(kwargs)[i-1]] == True:
                     mask_data = result.segment_data(i)
                     cmap = matplotlib.colors.ListedColormap(colorPaleatte[i])
-                    plt.imshow(mask_data[x], cmap = cmap, alpha = 0.5*(mask_data[x] > 0))
+                    plt.imshow(mask_data[x], cmap = cmap, alpha = 0.5*(mask_data[x] > 0), interpolation = None)
+        plt.axis('scaled')
         plt.show()
 
     if reader == pydicom_seg.MultiClassReader():
@@ -1848,12 +1849,13 @@ def viewSeriesRT(seriesPath = "", RTPath = ""):
     pixel_data = np.array(image, dtype=np.int16)
     colorPaleatte = ["blue", "orange", "green", "red", "cyan", "brown", "lime", "purple", "yellow", "pink", "olive"] 
     def rt_animation(x, **kwargs):
-        plt.imshow(pixel_data[x], cmap = plt.cm.gray)
+        plt.imshow(pixel_data[x], cmap = plt.cm.gray, interpolation = None)
         for i in range(len(roi_names)):
             if kwargs[roi_names[i]] == True:
                 mask_data = rtstruct.get_roi_mask_by_name(roi_names[i])
                 cmap = matplotlib.colors.ListedColormap(colorPaleatte[i])
-                plt.imshow(mask_data[:, :, x], cmap = cmap, alpha = 0.5*(mask_data[:, :, x] > 0))
+                plt.imshow(mask_data[:, :, x], cmap = cmap, alpha = 0.5*(mask_data[:, :, x] > 0), interpolation = None)
+        plt.axis('scaled')
         plt.show()
     
     kwargs = {v: True for i, v in enumerate(roi_names)}
