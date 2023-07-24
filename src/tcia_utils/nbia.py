@@ -10,7 +10,9 @@ import os
 from datetime import datetime
 from datetime import timedelta
 from enum import Enum
+import matplotlib
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import pydicom
 import numpy as np
 from ipywidgets import interact
@@ -1779,16 +1781,19 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
     if slices[0].SeriesInstanceUID != result.referenced_series_uid:
         raise Exception("The selected reference series and the annotative series don't match!")
     
+    colorPaleatte = ["blue", "orange", "green", "red", "cyan", "brown", "lime", "purple", "yellow", "pink", "olive"] 
     def seg_animation(x, **kwargs):
         plt.imshow(pixel_data[x], cmap = plt.cm.gray)
         if reader == pydicom_seg.MultiClassReader():
             mask_data = result.data
-            plt.imshow(mask_data[x], cmap = plt.cm.rainbow, alpha = 0.5*(mask_data[x] > 0))
+            cmap = matplotlib.colors.ListedColormap(colorPaleatte[i])
+            plt.imshow(mask_data[x], cmap = cmap, alpha = 0.5*(mask_data[x] > 0))
         else:
             for i in result.available_segments:
                 if kwargs[list(kwargs)[i-1]] == True:
                     mask_data = result.segment_data(i)
-                    plt.imshow(mask_data[x], cmap = plt.cm.rainbow, alpha = 0.5*(mask_data[x] > 0))
+                    cmap = matplotlib.colors.ListedColormap(colorPaleatte[i])
+                    plt.imshow(mask_data[x], cmap = cmap, alpha = 0.5*(mask_data[x] > 0))
         plt.show()
 
     if reader == pydicom_seg.MultiClassReader():
@@ -1841,13 +1846,14 @@ def viewSeriesRT(seriesPath = "", RTPath = ""):
         image += np.int16(intercept)
 
     pixel_data = np.array(image, dtype=np.int16)
-    
+    colorPaleatte = ["blue", "orange", "green", "red", "cyan", "brown", "lime", "purple", "yellow", "pink", "olive"] 
     def rt_animation(x, **kwargs):
         plt.imshow(pixel_data[x], cmap = plt.cm.gray)
         for i in range(len(roi_names)):
             if kwargs[roi_names[i]] == True:
                 mask_data = rtstruct.get_roi_mask_by_name(roi_names[i])
-                plt.imshow(mask_data[:, :, x], cmap = plt.cm.rainbow, alpha = 0.5*(mask_data[:, :, x] > 0))
+                cmap = matplotlib.colors.ListedColormap(colorPaleatte[i])
+                plt.imshow(mask_data[:, :, x], cmap = cmap, alpha = 0.5*(mask_data[:, :, x] > 0))
         plt.show()
     
     kwargs = {v: True for i, v in enumerate(roi_names)}
