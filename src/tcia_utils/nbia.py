@@ -1663,7 +1663,7 @@ def viewSeries(seriesUid = "", path = ""):
     """
     Visualizes a Series (scan) you've downloaded in the notebook
     Requires EITHER a seriesUid or path parameter
-    Leaves seriesUid empty if you want to provide a custom path.
+    Leave seriesUid empty if you want to provide a custom path.
     The function assumes "tciaDownload/<seriesUid>/" as path if seriesUid is provided since this is where downloadSeries() saves data.
     """
     # set path where downloadSeries() saves the data if seriesUid is provided
@@ -1859,53 +1859,57 @@ def viewSeriesRT(seriesPath = "", RTPath = ""):
 # Adds an overlay from the annotative series (SEG or RTSTRUCT)
 # Directs to the correct visualization function depending on the modality of the annotative series
 # Requires EITHER a seriesUid or path parameter for the reference series
-# Requires the file path for the annotative series
-# Opens a file browser for users to choose folder/file if the required parameters are specified
-# Leave seriesUid empty if you want to provide a custom path
-# The function assumes "tciaDownload/<seriesUid>/" as path if seriesUid is
+# Requires EITHER a annotationUid or path parameter for the segmentation series
+# Opens a file browser for users to choose folder/file if the required parameters are not specified
+# Leave seriesUid and/or annotationUid empty if you want to provide a custom path
+# The function assumes "tciaDownload/<UID>/" as path if seriesUid and/or annotationUid is
 #   provided since this is where downloadSeries() saves data
-def viewSeriesAnnotative(seriesUid = "", referenceSeries = "", annotativeSeries = ""):
+def viewSeriesAnnotation(seriesUid = "", seriesPath = "", annotationUid = "", annotationPath = ""):
     """
     Visualizes a Series (scan) you've downloaded in the notebook
     Adds an overlay from the annotative series (SEG or RTSTRUCT)
     Directs to the correct visualization function depending on the modality of the annotative series
     Requires EITHER a seriesUid or path parameter for the reference series
-    Requires the file path for the annotative series
-    Opens a file browser for users to choose folder/file if the required parameters are specified
-    Leave seriesUid empty if you want to provide a custom path
-    The function assumes "tciaDownload/<seriesUid>/" as path if seriesUid is provided since this is where downloadSeries() saves data.
+    Requires EITHER a annotationUid or path parameter for the segmentation series
+    Opens a file browser for users to choose folder/file if the required parameters are not specified
+    Leave seriesUid and/or annotationUid empty if you want to provide a custom path
+    The function assumes "tciaDownload/<UID>/" as path if seriesUid and/or annotationUid is provided since this is where downloadSeries() saves data.
     """
-    def seriesInvalid(uid):
-        if seriesUid:
-            link = f"https://nbia.cancerimagingarchive.net/viewer/?series={seriesUID}"
+    def seriesInvalid(uid, path):
+        if uid:
+            link = f"https://nbia.cancerimagingarchive.net/viewer/?series={uid}"
         else:
             link = "https://nbia.cancerimagingarchive.net/viewer/?series=YOUR_SERIES_UID"
         _log.error(
-            f"Cannot find a valid DICOM series at: {seriesPath}\n"
+            f"Cannot find a valid DICOM series at: {path}\n"
             'Try running downloadSeries(seriesUid, input_type = "uid") to download it first.\n'
             "If the data isn't restricted, you can alternatively view it in your browser (without downloading) using this link:\n"
             f"{link}"
         )
     
-    if seriesUid == "" and referenceSeries == "":
+    if seriesUid == "" and seriesPath == "":
         tkinter.Tk().withdraw()
         folder_path = filedialog.askdirectory()
-        referenceSeries = folder_path
+        seriesPath = folder_path
     elif seriesUid != "":
-        referenceSeries = "tciaDownload/" + seriesUid
+        seriesPath = "tciaDownload/" + seriesUid
         
-    if annotativeSeries == "":
+    if annotationUid == "" and annotationPath == "":
         tkinter.Tk().withdraw()
         file_path = filedialog.askopenfilename()
-        annotativeSeries = file_path
+        annotationPath = file_path
+    elif annotationUid != "":
+        annotationPath = "tciaDownload/" + annotationUid + "/1-1.dcm"
 
-    if os.path.isdir(referenceSeries):
-        annotativeModality = pydicom.dcmread(annotativeSeries).Modality
-        if annotativeModality == "SEG":
-            viewSeriesSEG(referenceSeries, annotativeSeries)
-        elif annotativeModality == "RTSTRUCT":
-            viewSeriesRT(referenceSeries, annotativeSeries)
+    if os.path.isdir(seriesPath) and os.path.isfile(annotationPath):
+        annotationModality = pydicom.dcmread(annotationPath).Modality
+        if annotationModality == "SEG":
+            viewSeriesSEG(seriesPath, annotationPath)
+        elif annotationModality == "RTSTRUCT":
+            viewSeriesRT(seriesPath, annotationPath)
         else:
-            print("Wrong modality for annotative series, please check your selection.")
+            print("Wrong modality for the segmentation series, please check your selection.")
+    elif not os.path.isdir(seriesPath):
+        seriesInvalid(seriesUid, seriesPath)
     else:
-        seriesInvalid(seriesUid)
+        seriesInvalid(annotationUid, annotationPath)
