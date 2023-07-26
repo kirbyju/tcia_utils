@@ -1872,6 +1872,7 @@ def viewSeriesRT(seriesPath = "", RTPath = ""):
 # Leave seriesUid and/or annotationUid empty if you want to provide a custom path
 # The function assumes "tciaDownload/<UID>/" as path if seriesUid and/or annotationUid is
 #   provided since this is where downloadSeries() saves data
+# Note that non-axial images might not be correctly displayed.
 def viewSeriesAnnotation(seriesUid = "", seriesPath = "", annotationUid = "", annotationPath = ""):
     """
     Visualizes a Series (scan) you've downloaded in the notebook
@@ -1882,6 +1883,7 @@ def viewSeriesAnnotation(seriesUid = "", seriesPath = "", annotationUid = "", an
     Opens a file browser for users to choose folder/file if the required parameters are not specified
     Leave seriesUid and/or annotationUid empty if you want to provide a custom path
     The function assumes "tciaDownload/<UID>/" as path if seriesUid and/or annotationUid is provided since this is where downloadSeries() saves data.
+    Note that non-axial images might not be correctly displayed.
     """
     def seriesInvalid(uid, path):
         if uid:
