@@ -1898,16 +1898,30 @@ def viewSeriesAnnotation(seriesUid = "", seriesPath = "", annotationUid = "", an
         )
     
     if seriesUid == "" and seriesPath == "":
-        tkinter.Tk().withdraw()
-        folder_path = filedialog.askdirectory()
-        seriesPath = folder_path
+        try:
+            tkinter.Tk().withdraw()
+            folder_path = filedialog.askdirectory()
+            seriesPath = folder_path
+        except Exception:
+            _log.error(
+                f"\nYou are executing the function with unspecified parameters in an unsupported envrioment,"
+                "\nplease specify the reference series UID or the folder path instead."
+            )
+            return
     elif seriesUid != "":
         seriesPath = "tciaDownload/" + seriesUid
         
     if annotationUid == "" and annotationPath == "":
-        tkinter.Tk().withdraw()
-        file_path = filedialog.askopenfilename()
-        annotationPath = file_path
+        try:
+            tkinter.Tk().withdraw()
+            file_path = filedialog.askopenfilename()
+            annotationPath = file_path
+        except Exception:
+            _log.error(
+                f"\nYou are executing the function with unspecified parameters in an unsupported envrioment,"
+                "\nplease specify the annotation series UID or the folder path instead."
+            )
+            return
     elif annotationUid != "":
         annotationPath = "tciaDownload/" + annotationUid + "/1-1.dcm"
 
