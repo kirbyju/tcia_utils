@@ -25,6 +25,9 @@ logging.basicConfig(
     , level=logging.INFO
 )
 
+# set token creation URL for getToken, refreshToken and logoutToken
+token_url = "https://keycloak.dbmi.cloud/auth/realms/TCIA/protocol/openid-connect/token"
+
 # Used by functions that accept parameters used in GUI Simple Search
 # e.g. getSimpleSearchWithModalityAndBodyPartPaged()
 class Criteria(Enum):
@@ -104,10 +107,10 @@ def setApiUrl(endpoint, api_url):
             if endpoint in advancedEndpoints:
                 # Using "Advanced" API docs (login required): https://wiki.cancerimagingarchive.net/x/YoATBg
                 # Checking to see if a valid NLST authentication token exists
-                if 'nlst_token_exp_time' not in globals():
-                    getToken(user = "nbia_guest", api_url = "nlst")
-                if 'nlst_token_exp_time' in globals() and datetime.now() > nlst_token_exp_time:
-                    refreshToken(api_url = "nlst")
+                if 'token_exp_time' not in globals():
+                    getToken(user = "nbia_guest")
+                if 'token_exp_time' in globals() and datetime.now() > token_exp_time:
+                    refreshToken()
                 base_url = "https://nlst.cancerimagingarchive.net/nbia-api/services/"                
         elif api_url == "restricted":
             if endpoint in searchEndpoints:
@@ -146,41 +149,36 @@ def setApiUrl(endpoint, api_url):
 
         return base_url
 
-def getToken(user = "", pw = "", api_url = ""): 
+def getToken(user = "", pw = ""): 
     """
     getToken() accepts user and pw parameters to create a token to access APIs that require authorization.
-    Access tokens expire 2 hours after creation, and can be refreshed with refreshToken().
+    Access tokens can be refreshed with refreshToken().
+    Set user = "nbia_guest" for anonymous access to Advanced API functions
     Interactive prompts are provided for user/pw if they're not specified as parameters.
-    "Advanced APIs" can be accessed anonymously using the nbia_guest account with a blank password.
-    The api_url = "nlst" parameter is only necessary for "Advanced API" queries since it's a public collection.
+    "Advanced APIs" can be accessed anonymously using the nbia_guest account with the default guest password.
     """
-    global token_exp_time, nlst_token_exp_time, api_call_headers, nlst_api_call_headers, refresh_token, nlst_refresh_token
+    global token_exp_time, api_call_headers, refresh_token, id_token
 
-    # assumes nbia_guest account for Advanced API on NLST server (all public data)
-    if api_url == "nlst":
-        token_url = "https://nlst.cancerimagingarchive.net/nbia-api/oauth/token"
-        userName = "nbia_guest"
-        passWord = ""        
     # specify user/pw unless nbia_guest is being used for accessing Advanced API anonymously
-    else:
-        token_url = "https://nbia.cancerimagingarchive.net/nbia-api/oauth/token"
 
-        if user == "":
-            print("Enter User: ")
-            userName = input()
-        else:
-            userName = user
-        # if user is nbia_guest, we leave password blank for anonymous access
-        if pw == "" and user != "nbia_guest":
-            passWord = getpass.getpass(prompt = 'Enter Password: ')
-        else:
-            passWord = pw
+    if user != "":
+        userName = user
+    else:
+        print("Enter User: ")
+        userName = input()
+    # set password for non-guest logins
+    if userName == "nbia_guest":
+        passWord = "ItsBetweenUAndMe" # this guest account password is documented in the public API guide
+    elif pw == "":
+        passWord = getpass.getpass(prompt = 'Enter Password: ')
+    else:
+        passWord = pw
 
     # request API token
     try:
         params = {
-        'client_id': 'nbiaRestAPIClient',
-        'client_secret' : 'ItsBetweenUAndMe',
+        'client_id': 'nbia',
+        'scope': 'openid',
         'grant_type': 'password',
         'username' : userName,
         'password': passWord
@@ -190,18 +188,14 @@ def getToken(user = "", pw = "", api_url = ""):
         data.raise_for_status()
         access_token = data.json()["access_token"]
         expires_in = data.json()["expires_in"]
+        id_token = data.json()["id_token"]
         # track expiration status/time
         current_time = datetime.now()
-        if api_url == "nlst":
-            nlst_token_exp_time = current_time + timedelta(seconds=expires_in)
-            nlst_api_call_headers = {'Authorization': 'Bearer ' + access_token}
-            nlst_refresh_token = data.json()["refresh_token"]
-            _log.info(f'Success - Token saved to nlst_api_call_headers variable and expires at {nlst_token_exp_time}')
-        else:
-            token_exp_time = current_time + timedelta(seconds=expires_in)            
-            api_call_headers = {'Authorization': 'Bearer ' + access_token}
-            refresh_token = data.json()["refresh_token"]
-            _log.info(f'Success - Token saved to api_call_headers variable and expires at {token_exp_time}')
+        token_exp_time = current_time + timedelta(seconds=expires_in)            
+        api_call_headers = {'Authorization': 'Bearer ' + access_token}
+        refresh_token = data.json()["refresh_token"]
+        _log.info(f'Success - Token saved to api_call_headers variable and expires at {token_exp_time}')
+
     # handle errors
     except requests.exceptions.HTTPError as errh:
         _log.error(f"HTTP Error: {data.status_code} -- Double check your user name and password.")
@@ -212,41 +206,26 @@ def getToken(user = "", pw = "", api_url = ""):
     except requests.exceptions.RequestException as err:
         _log.error(f"Request Error: {data.status_code}")
 
-def refreshToken(api_url = ""):
+def refreshToken():
     """
     refreshToken() refreshes security tokens to extend access time for APIs that require authorization.
     It attempts to verify that a refresh token exists and recommends using getToken() to create a new token if needed.
     This function is called as needed by setApiUrl() and is generally not something that needs to be called directly in your code.    
     """
-    global token_exp_time, nlst_token_exp_time, api_call_headers, nlst_api_call_headers
+    global token_exp_time, api_call_headers
    
-    # token URLs
-    if api_url == "nlst":
-        try:
-            token = nlst_refresh_token
-        except NameError:
-            _log.warning(f"No NLST refresh token found. Creating a new token...")
-            getToken(api_url = "nlst")
-            raise StopExecution
-        else:
-            token_url = "https://nlst.cancerimagingarchive.net/nbia-api/oauth/token"
-    
-    else:
-        try:
-            token = refresh_token
-        except NameError:
-            _log.error("Error refreshing token for accessing the Restricted API. Create one using getToken().")
-            raise StopExecution
-        else:
-            token_url = "https://nbia.cancerimagingarchive.net/nbia-api/oauth/token"
+    try:
+        token = refresh_token
+    except NameError:
+        _log.error("No token found. Create one using getToken().")
+        raise StopExecution
 
     # refresh token request
     try:
         params = {
-        'client_id': 'nbiaRestAPIClient',
-        'client_secret' : 'ItsBetweenUAndMe',
+        'client_id': 'nbia',
         'grant_type': 'refresh_token',
-        'refresh_token' : token,
+        'refresh_token' : token
         }
         
         # obtain new access token
@@ -254,16 +233,13 @@ def refreshToken(api_url = ""):
         data.raise_for_status()
         access_token = data.json()["access_token"]
         expires_in = data.json()["expires_in"]
-        # track expiration status/time (2 hours from creation)
+
+        # track expiration status/time 
         current_time = datetime.now()
-        if api_url == "nlst":
-            nlst_token_exp_time = current_time + timedelta(seconds=expires_in)
-            nlst_api_call_headers = {'Authorization': 'Bearer ' + access_token}
-            _log.info(f'Success - Token refreshed to nlst_api_call_headers variable and expires at {nlst_token_exp_time}')
-        else:
-            token_exp_time = current_time + timedelta(seconds=expires_in)
-            api_call_headers = {'Authorization': 'Bearer ' + access_token}
-            _log.info(f'Success - Token refreshed to api_call_headers variable and expires at {token_exp_time}')
+        token_exp_time = current_time + timedelta(seconds=expires_in)
+        api_call_headers = {'Authorization': 'Bearer ' + access_token}
+        _log.info(f'Success - Token refreshed to api_call_headers variable and expires at {token_exp_time}')
+
     # handle errors
     except requests.exceptions.HTTPError as errh:
         _log.error(f"HTTP Error: {data.status_code} -- Double check your user name and password.")
@@ -274,45 +250,6 @@ def refreshToken(api_url = ""):
     except requests.exceptions.RequestException as err:
         _log.error(f"Request Error: {data.status_code}")
             
-def logoutToken(api_url = ""): 
-    """
-    logoutToken() logs out security tokens used for APIs that require authorization.
-    Variables holding access token information are also deleted by this operation.
-    The api_url parameter can be used to specify whether your token was for the main server (leave empty) or NLST.
-    Use getToken() to create a new token if needed.
-    """
-    global token_exp_time, nlst_token_exp_time, api_call_headers, nlst_api_call_headers, refresh_token, nlst_refresh_token
-
-    # determine which server the token was created on
-    if api_url == "nlst" and 'nlst_api_call_headers' in globals():
-        url = "https://nlst.cancerimagingarchive.net/nbia-api/logout"
-        api_call_headers = nlst_api_call_headers
-    elif api_url != "nlst" and 'api_call_headers' in globals():
-        url = "https://services.cancerimagingarchive.net/nbia-api/logout"
-    else: 
-        _log.error("Error: You haven't created a token yet, or have already logged out.")
-        raise StopExecution
-
-    try:
-        _log.info(f'Logging out of... {url}')
-        data = requests.get(url, headers = api_call_headers)
-        _log.info(f'{data.text}')
-        # remove variables holding token details
-        if api_url == "nlst":
-            del nlst_token_exp_time, nlst_api_call_headers, nlst_refresh_token
-        else:
-            del token_exp_time, api_call_headers, refresh_token
-
-    # handle errors
-    except requests.exceptions.HTTPError as errh:
-        _log.error(f"HTTP Error: {data.status_code} -- Double check your user name and password.")
-    except requests.exceptions.ConnectionError as errc:
-        _log.error(f"Connection Error: {data.status_code}")
-    except requests.exceptions.Timeout as errt:
-        _log.error(f"Timeout Error: {data.status_code}")
-    except requests.exceptions.RequestException as err:
-        _log.error(f"Request Error: {data.status_code}")
-
 def makeCredentialFile(user = "", pw = ""):
     """
     Creates a credential file to use with NBIA Data Retriever. 
@@ -361,11 +298,12 @@ def queryData(endpoint, options, api_url, format):
     # get the data
     try:
         # include api_call_headers for restricted queries
-        if api_url == "restricted" or (endpoint in advancedEndpoints and api_url == ""):
+        #if api_url == "restricted" or (endpoint in advancedEndpoints and api_url == ""):
+        if api_url == "restricted" or endpoint in advancedEndpoints:
             data = requests.get(url, params = options, headers = api_call_headers)
         # include nlst_api_call_headers for nlst-advanced
-        elif api_url == "nlst" and endpoint in advancedEndpoints:
-            data = requests.get(url, params = options, headers = nlst_api_call_headers)
+        #elif api_url == "nlst" and endpoint in advancedEndpoints:
+        #    data = requests.get(url, params = options, headers = nlst_api_call_headers)
         else:
             data = requests.get(url, params = options)
         data.raise_for_status()
@@ -633,21 +571,15 @@ def getSeries(collection = "",
     data = queryData(endpoint, options, api_url, format)
     return data
 
-####### getUpdatedSeries function
-# Gets "new" series metadata from a specified api_url
-# Requires specifying date
-# Date format is YYYY/MM/DD
-# NOTE: NBIA API expects MM/DD/YYYY (unlike any other API endpoint!)
-#        so we'll convert from YYYY/MM/DD so tcia-utils is consistent
-
 def getUpdatedSeries(date,
                      api_url = "",
                      format = ""):
     """
     Optional: api_url, format
-    Gets "new" series metadata from a specified api_url
-    The date format is YYYY/MM/DD
-    NOTE: Unlike other API endpoints, this function expects MM/DD/YYYY, we'll convert from YYYY/MM/DD so tcia-utils is consistent
+    Gets "new" series metadata from a specified api_url.
+    The date format is YYYY/MM/DD.
+    NOTE: Unlike other API endpoints, this one expects MM/DD/YYYY, 
+      but we convert from YYYY/MM/DD so tcia-utils date inputs are consistent.
     """
     endpoint = "getUpdatedSeries"
 
@@ -661,18 +593,14 @@ def getUpdatedSeries(date,
     data = queryData(endpoint, options, api_url, format)
     return data
 
-####### getSeriesMetadata function
-# Gets Series (scan) metadata from a specified api_url
-# Requires a specific Series Instance UID as input
-# Output includes DOI and license details that are not in getSeries()
-
 def getSeriesMetadata(seriesUid,
                       api_url = "",
                       format = ""):
     """
     Optional: api_url, format
-    Gets Series (scan) metadata from a specified api_url
-    Output includes DOI and license details that are not in the getSeries() function
+    Gets Series (scan) metadata from a specified api_url.
+    Output includes DOI and license details that were historically
+      not in the getSeries() function.
     """
     endpoint = "getSeriesMetaData"
 
@@ -682,10 +610,6 @@ def getSeriesMetadata(seriesUid,
 
     data = queryData(endpoint, options, api_url, format)
     return data
-
-####### getSeriesSize function
-# Gets the file count and disk size of a series/scan
-# Requires Series Instance UID as input
 
 def getSeriesSize(seriesUid,
                   api_url = "",
@@ -703,10 +627,6 @@ def getSeriesSize(seriesUid,
     data = queryData(endpoint, options, api_url, format)
     return data
 
-####### getSopInstanceUids function
-# Gets SOP Instance UIDs from a specific series/scan
-# Requires a specific Series Instance UID as input
-
 def getSopInstanceUids(seriesUid,
                        api_url = "",
                        format = ""):
@@ -723,9 +643,6 @@ def getSopInstanceUids(seriesUid,
     data = queryData(endpoint, options, api_url, format)
     return data
 
-####### getManufacturer function
-# Gets manufacturer metadata from a specified api_url
-# Allows filtering by collection, body part & modality
 
 def getManufacturer(collection = "",
                     modality = "",
@@ -734,8 +651,8 @@ def getManufacturer(collection = "",
                     format = ""):
     """
     All parameters are optional.
-    Gets manufacturer metadata from a specified api_url
-    Allows filtering by collection, body part & modality
+    Gets manufacturer metadata from a specified api_url.
+    Allows filtering by collection, body part & modality.
     """
     endpoint = "getManufacturerValues"
 
@@ -752,22 +669,18 @@ def getManufacturer(collection = "",
     data = queryData(endpoint, options, api_url, format)
     return data
 
-####### getSharedCart function
-# Gets "Shared Cart" (scan) metadata from a specified api_url
-# Use https://nbia.cancerimagingarchive.net/nbia-search/ to create a cart
-# Add data to your basket, then click "Share" > "Share my cart"
-# The "name" parameter is part of the URL that generates.
-# E.g https://nbia.cancerimagingarchive.net/nbia-search/?saved-cart=nbia-49121659384603347
-#  has a cart "name" of "nbia-49121659384603347".
 
 def getSharedCart(name,
                   api_url = "",
                   format = ""):
     """
     Optional: api_url, format
-    Gets "Shared Cart" (scan) metadata from a specified api_url
-    First use https://nbia.cancerimagingarchive.net/nbia-search/ to create a cart, then add data to your basket, then click "Share" > "Share my cart".
-    The "name" parameter is part of the URL that generates. E.g https://nbia.cancerimagingarchive.net/nbia-search/?saved-cart=nbia-49121659384603347 has a cart "name" of "nbia-49121659384603347".
+    Gets "Shared Cart" metadata from a specified api_url.
+    First use https://nbia.cancerimagingarchive.net/nbia-search/ in a browser, 
+    then add data to your cart and click "Share" > "Share my cart".
+    This creates a shared cart with a URL like,
+    https://nbia.cancerimagingarchive.net/nbia-search/?saved-cart=nbia-49121659384603347 
+    You can then use this with a getSharedCart "name" of "nbia-49121659384603347".
     """
     endpoint = "getContentsByName"
 
@@ -778,18 +691,6 @@ def getSharedCart(name,
     data = queryData(endpoint, options, api_url, format)
     return data
 
-####### downloadSeries function
-# Ingests a set of seriesUids and downloads them
-# By default, series_data expects JSON containing "SeriesInstanceUID" elements
-# Set number = n to download the first n series if you don't want the full dataset
-# Set hash = "y" if you'd like to retrieve MD5 hash values for each image
-# Saves to tciaDownload folder in current directory if no path is specified
-# Set input_type = "list" to pass a list of Series UIDs instead of JSON
-# Set input_type = "manifest" to pass the path of a *.TCIA manifest file as series_data
-# Format can be set to "df" or "csv" to return series metadata
-# Setting a csv_filename will create the csv even if format isn't specified
-# The metadata includes info about series that have previously been downloaded
-
 def downloadSeries(series_data,
                    number = 0,
                    path = "",
@@ -799,16 +700,16 @@ def downloadSeries(series_data,
                    format = "",
                    csv_filename = ""):
     """
-    Ingests a set of seriesUids and downloads them
+    Ingests a set of seriesUids and downloads them.
     By default, series_data expects JSON containing "SeriesInstanceUID" elements.
     Set number = n to download the first n series if you don't want the full dataset.
     Set hash = "y" if you'd like to retrieve MD5 hash values for each image.
-    Saves to tciaDownload folder in current directory if no path is specified
+    Saves to tciaDownload folder in current directory if no path is specified.
     Set input_type = "list" to pass a list of Series UIDs instead of JSON.
     Set input_type = "manifest" to pass the path of a *.TCIA manifest file as series_data.
     Format can be set to "df" or "csv" to return series metadata.
     Setting a csv_filename will create the csv even if format isn't specified.
-    The metadata includes info about series that have previously been downloaded.
+    The metadata includes info about series that have previously been downloaded if they're part of series_data.
     """
     endpoint = "getImage"
     seriesUID = ''
