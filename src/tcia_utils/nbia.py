@@ -16,8 +16,6 @@ import matplotlib.colors as mcolors
 import pydicom
 import numpy as np
 from ipywidgets import interact
-import tkinter, pydicom_seg, rt_utils 
-from tkinter import filedialog
 
 class StopExecution(Exception):
     def _render_traceback_(self):
@@ -1636,6 +1634,7 @@ def viewSeries(seriesUid = "", path = ""):
 # Requires the file path for the annotative series
 # Not recommended to be used as a standalone function
 def viewSeriesSEG(seriesPath = "", SEGPath = ""):
+    import pydicom_seg 
     """
     Visualizes a Series (scan) you've downloaded in the notebook
     Adds an overlay from the SEG series
@@ -1712,6 +1711,7 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
 # Requires the file path for the annotative series
 # Not recommended to be used as a standalone function
 def viewSeriesRT(seriesPath = "", RTPath = ""):
+    import rt_utils 
     """
     Visualizes a Series (scan) you've downloaded in the notebook
     Adds an overlay from the RTSTRUCT series
@@ -1786,6 +1786,8 @@ def viewSeriesAnnotation(seriesUid = "", seriesPath = "", annotationUid = "", an
     The function assumes "tciaDownload/<UID>/" as path if seriesUid and/or annotationUid is provided since this is where downloadSeries() saves data.
     Note that non-axial images might not be correctly displayed.
     """
+    import tkinter, pydicom_seg, rt_utils 
+    from tkinter import filedialog
     def seriesInvalid(uid, path):
         if uid:
             link = f"https://nbia.cancerimagingarchive.net/viewer/?series={uid}"
