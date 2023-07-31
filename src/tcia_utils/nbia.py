@@ -1709,6 +1709,7 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
 # Adds an overlay from the RTSTRUCT series
 # Requires a path parameter for the reference series
 # Requires the file path for the annotative series
+# Currenly not able to visualize seed points
 # Not recommended to be used as a standalone function
 def viewSeriesRT(seriesPath = "", RTPath = ""):
     import rt_utils 
@@ -1717,6 +1718,7 @@ def viewSeriesRT(seriesPath = "", RTPath = ""):
     Adds an overlay from the RTSTRUCT series
     Requires a path parameter for the reference series
     Requires the file path for the annotative series
+    Currenly not able to visualize seed points
     Not recommended to be used as a standalone function
     """
     rtstruct = rt_utils.RTStructBuilder.create_from(seriesPath, RTPath)
@@ -1753,9 +1755,20 @@ def viewSeriesRT(seriesPath = "", RTPath = ""):
         plt.imshow(pixel_data[x], cmap = plt.cm.gray, interpolation = None)
         for i in range(len(roi_names)):
             if kwargs[roi_names[i]] == True:
-                mask_data = rtstruct.get_roi_mask_by_name(roi_names[i])
-                cmap = matplotlib.colors.ListedColormap(colorPaleatte[i])
-                plt.imshow(mask_data[:, :, x], cmap = cmap, alpha = 0.5*(mask_data[:, :, x] > 0), interpolation = None)
+                try:
+                    mask_data = rtstruct.get_roi_mask_by_name(roi_names[i])
+                    cmap = matplotlib.colors.ListedColormap(colorPaleatte[i])
+                    plt.imshow(mask_data[:, :, x], cmap = cmap, alpha = 0.5*(mask_data[:, :, x] > 0), interpolation = None)
+                except Exception as e:
+                    try:
+                        if e.code == -215:
+                            _log.error(f"\nThe ROI '{roi_names[i]}' contains seed point(s), which is currently not supported.")
+                        else:
+                            _log.error(f"\n{e}")
+                        pass
+                    except:
+                        _log.error(f"\n{e}")
+                        pass
         plt.axis('scaled')
         plt.show()
     
