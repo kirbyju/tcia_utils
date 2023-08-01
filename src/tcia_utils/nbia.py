@@ -1684,7 +1684,7 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
     colorPaleatte = ["blue", "orange", "green", "red", "cyan", "brown", "lime", "purple", "yellow", "pink", "olive"] 
     def seg_animation(x, **kwargs):
         plt.imshow(pixel_data[x], cmap = plt.cm.gray)
-        if reader == pydicom_seg.MultiClassReader():
+        if isinstance(reader, pydicom_seg.reader.MultiClassReader):
             mask_data = result.data
             cmap = matplotlib.colors.ListedColormap(colorPaleatte[i])
             plt.imshow(mask_data[x], cmap = cmap, alpha = 0.5*(mask_data[x] > 0), interpolation = None)
@@ -1697,7 +1697,7 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
         plt.axis('scaled')
         plt.show()
 
-    if reader == pydicom_seg.MultiClassReader():
+    if isinstance(reader, pydicom_seg.reader.MultiClassReader):
         interact(seg_animation, x=(0, len(pixel_data)-1))
     else:
         kwargs = {v.SegmentDescription:True for i, v in enumerate(SEG_data.SegmentSequence)}
