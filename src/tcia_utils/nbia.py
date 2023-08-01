@@ -1698,7 +1698,7 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
         plt.show()
 
     if isinstance(reader, pydicom_seg.reader.MultiClassReader):
-        kwargs = {"showSEG": True}
+        kwargs = {"Show Segments": True}
         interact(seg_animation, x=(0, len(pixel_data)-1), **kwargs)
     else:
         kwargs = {v.SegmentDescription:True for i, v in enumerate(SEG_data.SegmentSequence)}
