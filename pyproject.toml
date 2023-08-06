@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tcia_utils"
-version = "1.6.5"
+version = "1.6.6"
 authors = [
   { name="Justin Kirby", email="justin.kirby@nih.gov" },
 ]
