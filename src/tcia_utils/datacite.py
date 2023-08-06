@@ -2,6 +2,7 @@ import pandas as pd
 import requests
 from datetime import datetime
 import logging
+from tcia_utils.utils import searchDf
 
 _log = logging.getLogger(__name__)
 logging.basicConfig(
@@ -9,21 +10,12 @@ logging.basicConfig(
     , level=logging.INFO
 )
 
-####### getDoi function
-# Gets metadata for one or more DOIs
-# Returns all TCIA DOIs if no parameters are specified
-# query parameter searches all metadata fields
-# created parameter expects a 4 digit year
-# license parameter requires an exact match. currently supported licenses:
-#    ['cc-by-3.0', 'cc-by-4.0', 'cc-by-nc-4.0', 'nctn data archive license',
-#    'tcia limited access license', 'cc-by-nc-3.0']
-# See https://support.datacite.org/docs/api-get-doi for more details
-
-def getDoi(query = "",
-           created = "",
-           license = "",
-           format = ""):
-
+def getDoi(format = ""):
+    """ 
+        Gets metadata for all TCIA DOIs.
+        Returns a dataframe by default, but format can be set to CSV or JSON.
+        See https://support.datacite.org/docs/api-get-doi for more details.
+    """
     datacite_url = "https://api.datacite.org/dois/"
     datacite_headers = {"accept": "application/vnd.api+json"}
     df = pd.DataFrame()
@@ -32,12 +24,6 @@ def getDoi(query = "",
     options = {}
     options['provider-id'] = "tciar"
     options['page[size]'] = 1000
-    if query:
-        options['query'] = query
-    if created:
-        options['created'] = created
-    if license:
-        options['license'] = license
     _log.info(f'Calling... {datacite_url} with parameters {options}')
 
     try:
@@ -48,7 +34,9 @@ def getDoi(query = "",
         if data.text != "":
             data = data.json()
             # format the output (optional)
-            if format == "df" or format == "csv":
+            if format == "json":
+                return data
+            else:
                 dois = []
                 for item in data["data"]:
                     doi = item["id"]
@@ -87,13 +75,12 @@ def getDoi(query = "",
                         related_identifier = None
                     version = item["attributes"]["version"]
                     try:
-                        rights = item["attributes"]["rightsList"][0]["rights"]
+                        rights = item["attributes"]["rightsList"]
+                        rights_list = [r["rights"] for r in rights]
+                        rights_uri_list = [r["rightsUri"] for r in rights]
                     except (KeyError, IndexError):
-                        rights = None
-                    try:
-                        rights_uri = item["attributes"]["rightsList"][0]["rightsUri"]
-                    except (KeyError, IndexError):
-                        rights_uri = None
+                        rights_list = []
+                        rights_uri_list = []
                     try:
                         description = item["attributes"]["descriptions"][0]["description"]
                     except (KeyError, IndexError):
@@ -108,14 +95,14 @@ def getDoi(query = "",
                     related = f"{relation_type}: {related_identifier}" if relation_type and related_identifier else None
                     dois.append({"DOI": doi, 
                                 "Identifier": identifier, 
-                                "CreatorNames": ", ".join(creator_names),
+                                "CreatorNames": "; ".join(creator_names),
                                 "Title": title, 
                                 "Created": created, 
                                 "Updated": updated, 
                                 "Related": related, 
                                 "Version": version, 
-                                "Rights": rights, 
-                                "RightsURI": rights_uri, 
+                                "Rights": "; ".join(rights_list),
+                                "RightsURI": "; ".join(rights_uri_list),
                                 "Description": description, 
                                 "FundingReferences": funding_references, 
                                 "URL": url, 
@@ -131,8 +118,6 @@ def getDoi(query = "",
                     df.to_csv('datacite_' + dt_string + '.csv')
                     _log.info(f"Report saved as datacite_{dt_string}.csv")
                 return df
-            else:
-                return data
         else:
             _log.info(f'No results found.')
             
