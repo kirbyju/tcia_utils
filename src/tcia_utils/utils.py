@@ -1,11 +1,14 @@
 import pandas as pd
 
-def searchDf(search_term, column_name=None, dataframe_var='df'):
-    # If the custom dataframe variable name is provided, use that to get the dataframe
-    if dataframe_var in globals():
-        df = globals()[dataframe_var]
+def searchDf(search_term, column_name=None, dataframe=None,):
+    if dataframe is None:
+        # If dataframe is not provided, assume the dataframe is named 'df'
+        if 'df' in globals():
+            df = globals()['df']
+        else:
+            raise ValueError("Dataframe variable 'df' not found in the global namespace.")
     else:
-        raise ValueError(f"Dataframe variable '{dataframe_var}' not found in the global namespace.")
+        df = dataframe
 
     if column_name:
         result = df[df[column_name].astype(str).str.contains(search_term, case=False)]
