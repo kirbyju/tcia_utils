@@ -2,6 +2,7 @@ import pandas as pd
 import requests
 from datetime import datetime
 import logging
+from tcia_utils.utils import searchDf
 
 _log = logging.getLogger(__name__)
 logging.basicConfig(
@@ -11,13 +12,13 @@ logging.basicConfig(
 
 base_url = 'https://pathdb.cancerimagingarchive.net/'
 
-###################
-# getCollections()
-# use "query" parameter to search collection names
-# format parameter can be set to "df" for dataframe
-#    or "csv" to save it to a file
 
 def getCollections(query = "", format = ""):
+    """
+    Use "query" parameter to search collection names.
+    Format parameter can be set to "df" for dataframe
+    or "csv" to save it to a file.
+    """
 
     extracted_data = []
     url = base_url + 'collections?_format=json'
@@ -57,20 +58,20 @@ def getCollections(query = "", format = ""):
         _log.info(f"File saved to {filename}.")
     else:
         return extracted_data
-        
-###################
-# getImages()
-# use "query" parameter to search collection names or enter a specific collection ID
-# returns JSON, but format parameter can be set to "df" for dataframe
-#    or "csv" to save it to a file
+
 
 def getImages(query, format=""):
-    
-    collectionList = []  # for queries that match multiple collection names
+    """
+    Use "query" parameter to search collection names or
+    enter a specific collection ID.
+    Function returns JSON, but format parameter can be set
+    to "df" for dataframe or "csv" to save it to a file.
+    """
+    #collectionList = []  # for queries that match multiple collection names
     extracted_data = []
 
     def getPaginatedResults(id):
-        page = 0  
+        page = 0
 
         while True:
             url = base_url + 'listofimages/' + str(id) + '?page=' + str(page) + '&_format=json'
@@ -80,7 +81,7 @@ def getImages(query, format=""):
                 data = response.json()
                 if len(data) == 0:
                     break  # No more pages, exit the loop
-                
+
                 # Extract desired fields from the JSON data
                 for item in data:
                     extracted_item = {}
@@ -99,12 +100,12 @@ def getImages(query, format=""):
                 return None
             page += 1
         return extracted_data
-    
+
     # if query was a collection ID (integer)
     if isinstance(query,int):
         extracted_data = getPaginatedResults(query)
     # if query is a string, look for matching collection names
-    else:  
+    else:
         collections = getCollections(query=query)
         # iterate through all collections that matched query
         for x in collections:

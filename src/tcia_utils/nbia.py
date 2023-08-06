@@ -3,7 +3,6 @@ import logging
 import requests
 import pandas as pd
 import getpass
-import json
 import zipfile
 import io
 import os
@@ -16,10 +15,13 @@ import matplotlib.colors as mcolors
 import pydicom
 import numpy as np
 from ipywidgets import interact
+from tcia_utils.utils import searchDf
+
 
 class StopExecution(Exception):
     def _render_traceback_(self):
         pass
+
 
 _log = logging.getLogger(__name__)
 logging.basicConfig(
@@ -27,7 +29,7 @@ logging.basicConfig(
     , level=logging.INFO
 )
 
-# set token creation URL for getToken, refreshToken and logoutToken
+# set token creation URL for getToken and refreshToken
 token_url = "https://keycloak.dbmi.cloud/auth/realms/TCIA/protocol/openid-connect/token"
 
 # Used by functions that accept parameters used in GUI Simple Search
@@ -56,13 +58,13 @@ def setApiUrl(endpoint, api_url):
     """
     setApiUrl() is used by most other functions to select the correct base URL
     and is generally not something that needs to be called directly in your code.  
-    
+
     It assists with:
         1. verifying you are calling a supported endpoint
         2. selecting the correct base URL for Search vs Advanced APIs
         3. selecting the correct base URL for regular collections vs NLST
         4. ensuring you have a valid security token where necessary
-    
+
     Learn more about the NBIA APIs at https://wiki.cancerimagingarchive.net/x/ZoATBg
     """
     global searchEndpoints, advancedEndpoints
@@ -113,7 +115,7 @@ def setApiUrl(endpoint, api_url):
                     getToken(user = "nbia_guest")
                 if 'token_exp_time' in globals() and datetime.now() > token_exp_time:
                     refreshToken()
-                base_url = "https://nlst.cancerimagingarchive.net/nbia-api/services/"                
+                base_url = "https://nlst.cancerimagingarchive.net/nbia-api/services/"
         elif api_url == "restricted":
             if endpoint in searchEndpoints:
                 # Using "Search with Authentication" API (login required): https://wiki.cancerimagingarchive.net/x/X4ATBg
@@ -151,7 +153,8 @@ def setApiUrl(endpoint, api_url):
 
         return base_url
 
-def getToken(user = "", pw = ""): 
+
+def getToken(user="", pw=""):
     """
     getToken() accepts user and pw parameters to create a token to access APIs that require authorization.
     Access tokens can be refreshed with refreshToken().
@@ -178,14 +181,13 @@ def getToken(user = "", pw = ""):
 
     # request API token
     try:
-        params = {
-        'client_id': 'nbia',
-        'scope': 'openid',
-        'grant_type': 'password',
-        'username' : userName,
-        'password': passWord
-        }
-        
+        params = {'client_id': 'nbia',
+                  'scope': 'openid',
+                  'grant_type': 'password',
+                  'username': userName,
+                  'password': passWord
+                 }
+
         data = requests.post(token_url, data = params)
         data.raise_for_status()
         access_token = data.json()["access_token"]
@@ -193,7 +195,7 @@ def getToken(user = "", pw = ""):
         id_token = data.json()["id_token"]
         # track expiration status/time
         current_time = datetime.now()
-        token_exp_time = current_time + timedelta(seconds=expires_in)            
+        token_exp_time = current_time + timedelta(seconds=expires_in)
         api_call_headers = {'Authorization': 'Bearer ' + access_token}
         refresh_token = data.json()["refresh_token"]
         _log.info(f'Success - Token saved to api_call_headers variable and expires at {token_exp_time}')
@@ -210,12 +212,14 @@ def getToken(user = "", pw = ""):
 
 def refreshToken():
     """
-    refreshToken() refreshes security tokens to extend access time for APIs that require authorization.
-    It attempts to verify that a refresh token exists and recommends using getToken() to create a new token if needed.
-    This function is called as needed by setApiUrl() and is generally not something that needs to be called directly in your code.    
+    refreshToken() refreshes security tokens to extend access time for APIs
+    that require authorization. It attempts to verify that a refresh token
+    exists and recommends using getToken() to create a new token if needed.
+    This function is called as needed by setApiUrl() and is generally not 
+    something that needs to be called directly in your code.
     """
     global token_exp_time, api_call_headers
-   
+
     try:
         token = refresh_token
     except NameError:
@@ -224,11 +228,10 @@ def refreshToken():
 
     # refresh token request
     try:
-        params = {
-        'client_id': 'nbia',
-        'grant_type': 'refresh_token',
-        'refresh_token' : token
-        }
+        params = {'client_id': 'nbia',
+                  'grant_type': 'refresh_token',
+                  'refresh_token': token
+                  }
         
         # obtain new access token
         data = requests.post(token_url, data = params)
@@ -250,8 +253,8 @@ def refreshToken():
     except requests.exceptions.Timeout as errt:
         _log.error(f"Timeout Error: {data.status_code}")
     except requests.exceptions.RequestException as err:
-        _log.error(f"Request Error: {data.status_code}")
-            
+        log.error(f"Request Error: {data.status_code}")
+
 def makeCredentialFile(user = "", pw = ""):
     """
     Creates a credential file to use with NBIA Data Retriever. 
@@ -281,15 +284,13 @@ def makeCredentialFile(user = "", pw = ""):
         f.write('\n'.join(lines))
     _log.info("Credential file for NBIA Data Retriever saved: credentials.txt")
 
-####### queryData()
-# Called by query functions that use requests.get()
-# Provides error handling for requests.get()
-# Formats output as JSON by default with options for "df" (dataframe) and "csv"
 
 def queryData(endpoint, options, api_url, format):
     """
-    queryData() is called by many other query functions and is generally not something that needs to be called directly in your code.
-    It provides uses setApiURL() to set a base URL and addresses error handling for HTTP status and empty search results.
+    queryData() is called by many other query functions and is generally
+    not something that needs to be called directly in your code.
+    It provides uses setApiURL() to set a base URL and addresses error
+    handling for HTTP status and empty search results.
     Formats output as JSON by default with options for "df" (dataframe) and "csv"
     """
     # get base URL
@@ -300,12 +301,8 @@ def queryData(endpoint, options, api_url, format):
     # get the data
     try:
         # include api_call_headers for restricted queries
-        #if api_url == "restricted" or (endpoint in advancedEndpoints and api_url == ""):
         if api_url == "restricted" or endpoint in advancedEndpoints:
             data = requests.get(url, params = options, headers = api_call_headers)
-        # include nlst_api_call_headers for nlst-advanced
-        #elif api_url == "nlst" and endpoint in advancedEndpoints:
-        #    data = requests.get(url, params = options, headers = nlst_api_call_headers)
         else:
             data = requests.get(url, params = options)
         data.raise_for_status()
@@ -336,12 +333,11 @@ def queryData(endpoint, options, api_url, format):
         _log.error(errt)
     except requests.exceptions.RequestException as err:
         _log.error(err)
-    
+
 
 def getCollections(api_url = "",
                    format = ""):
     """
-    Optional: api_url, format
     Gets a list of collections from a specified api_url
     """
     endpoint = "getCollectionValues"
@@ -350,18 +346,14 @@ def getCollections(api_url = "",
     data = queryData(endpoint, options, api_url, format)
     return data
 
-####### getBodyPart function
-# Gets Body Part Examined metadata from a specified api_url
-# Allows filtering by collection and modality
 
 def getBodyPart(collection = "",
                 modality = "",
                 api_url = "",
                 format = ""):
     """
-    Optional: api_url, format
-    Gets Body Part Examined metadata from a specified api_url
-    Allows filtering by collection and modality
+    Gets Body Part Examined metadata from a specified api_url.
+    Allows filtering by collection and modality.
     """
     endpoint = "getBodyPartValues"
 
@@ -376,18 +368,14 @@ def getBodyPart(collection = "",
     data = queryData(endpoint, options, api_url, format)
     return data
 
-####### getModality function
-# Gets Modalities metadata from a specified api_url
-# Allows filtering by collection and bodyPart
 
 def getModality(collection = "",
                 bodyPart = "",
                 api_url = "",
                 format = ""):
     """
-    Optional: api_url, format
-    Gets Modalities metadata from a specified api_url
-    Allows filtering by collection and bodyPart
+    Gets Modalities metadata from a specified api_url.
+    Allows filtering by collection and bodyPart.
     """
     endpoint = "getModalityValues"
 
@@ -402,17 +390,13 @@ def getModality(collection = "",
     data = queryData(endpoint, options, api_url, format)
     return data
 
-####### getPatient function
-# Gets Patient metadata from a specified api_url
-# Allows filtering by collection
 
 def getPatient(collection = "",
                api_url = "",
                format = ""):
     """
-    Optional: api_url, format
-    Gets Patient metadata from a specified api_url
-    Allows filtering by collection
+    Gets Patient metadata from a specified api_url.
+    Allows filtering by collection.
     """
     endpoint = "getPatient"
 
@@ -425,19 +409,15 @@ def getPatient(collection = "",
     data = queryData(endpoint, options, api_url, format)
     return data
 
-####### getPatientByCollectionAndModality function
-# Gets Patient IDs from a specified api_url
-# Requires specifying collection and modality
-# Returns a list of patient IDs
 
 def getPatientByCollectionAndModality(collection,
                                       modality,
                                       api_url = "",
                                       format = ""):
     """
-    Optional: api_url, format
-    Gets Patient IDs from a specified api_url
-    Returns a list of patient IDs
+    Requires specifying collection and modality.
+    Gets Patient IDs from a specified api_url.
+    Returns a list of patient IDs.
     """
     endpoint = "getPatientByCollectionAndModality"
 
@@ -449,19 +429,15 @@ def getPatientByCollectionAndModality(collection,
     data = queryData(endpoint, options, api_url, format)
     return data
 
-####### getNewPatientsInCollection function
-# Gets "new" patient metadata from a specified api_url
-# Requires specifying collection and date
-# Date format is YYYY/MM/DD
 
 def getNewPatientsInCollection(collection,
                                date,
                                api_url = "",
                                format = ""):
     """
-    Optional: api_url, format
-    Gets "new" patient metadata from a specified api_url
-    The date format is YYYY/MM/DD
+    Gets "new" patient metadata from a specified api_url.
+    Requires specifying a collection and release date.
+    The date format is YYYY/MM/DD.
     """
     endpoint = "NewPatientsInCollection"
 
@@ -473,10 +449,6 @@ def getNewPatientsInCollection(collection,
     data = queryData(endpoint, options, api_url, format)
     return data
 
-####### getStudy function
-# Gets Study (visit/timepoint) metadata from a specified api_url
-# Requires filtering by collection
-# Optional filters for patientId and studyUid
 
 def getStudy(collection,
              patientId = "",
@@ -484,8 +456,9 @@ def getStudy(collection,
              api_url = "",
              format = ""):
     """
-    Optional: patientId, studyUid, api_url, format
     Gets Study (visit/timepoint) metadata from a specified api_url
+    Requires a collection parameter.
+    Optional: patientId, studyUid, api_url, format
     """
     endpoint = "getPatientStudy"
 
@@ -501,10 +474,6 @@ def getStudy(collection,
     data = queryData(endpoint, options, api_url, format)
     return data
 
-####### getNewStudiesInPatient function
-# Gets "new" patient metadata from a specified api_url
-# Requires specifying collection, patient ID and date
-# Date format is YYYY/MM/DD
 
 def getNewStudiesInPatient(collection,
                            patientId,
@@ -512,9 +481,9 @@ def getNewStudiesInPatient(collection,
                            api_url = "",
                            format = ""):
     """
-    Optional: api_url, format
-    Gets "new" patient metadata from a specified api_url
-    The date format is YYYY/MM/DD
+    Gets "new" patient metadata from a specified api_url.
+    Requires specifying collection, patient ID and date.
+    The date format is YYYY/MM/DD.
     """
     endpoint = "NewStudiesInPatientCollection"
 
@@ -527,10 +496,6 @@ def getNewStudiesInPatient(collection,
     data = queryData(endpoint, options, api_url, format)
     return data
 
-####### getSeries function
-# Gets Series (scan) metadata from a specified api_url
-# Allows filtering by collection, patient ID, study UID,
-#   series UID, modality, body part, manufacturer & model
 
 def getSeries(collection = "",
               patientId = "",
@@ -543,10 +508,9 @@ def getSeries(collection = "",
               api_url = "",
               format = ""):
     """
-    All parameters are optional.
-    Gets Series (scan) metadata from a specified api_url
-    Allows filtering by collection, patient ID, study UID, series UID, modality, body part, manufacturer & model
-    Note: Since the output of this function can be very long, it is advisable to save the output to a variable and only display a portion of it at a time when the output format is JSON.
+    Gets Series (scan) metadata from a specified api_url.
+    Allows filtering by collection, patient ID, study UID,
+    series UID, modality, body part, manufacturer & model.
     """
     endpoint = "getSeries"
 
@@ -577,7 +541,6 @@ def getUpdatedSeries(date,
                      api_url = "",
                      format = ""):
     """
-    Optional: api_url, format
     Gets "new" series metadata from a specified api_url.
     The date format is YYYY/MM/DD.
     NOTE: Unlike other API endpoints, this one expects MM/DD/YYYY, 
@@ -711,7 +674,8 @@ def downloadSeries(series_data,
     Set input_type = "manifest" to pass the path of a *.TCIA manifest file as series_data.
     Format can be set to "df" or "csv" to return series metadata.
     Setting a csv_filename will create the csv even if format isn't specified.
-    The metadata includes info about series that have previously been downloaded if they're part of series_data.
+    The metadata includes info about series that have previously been
+    downloaded if they're part of series_data.
     """
     endpoint = "getImage"
     seriesUID = ''
@@ -725,7 +689,7 @@ def downloadSeries(series_data,
 
     # get base URL
     base_url = setApiUrl(endpoint, api_url)
-    
+
     # if input = manifest convert manifest to python list of uids
     if input_type == "manifest":
         series_data = manifestToList(series_data)
@@ -836,8 +800,6 @@ def downloadSeries(series_data,
     except requests.exceptions.RequestException as err:
         _log.error(err)
 
-####### downloadImage function
-# Ingests a seriesUids and SopInstanceUid and downloads the image
 
 def downloadImage(seriesUID,
                   sopUID,
@@ -905,12 +867,9 @@ def downloadImage(seriesUID,
 ##########################
 # Advanced API Endpoints
 
-####### getCollectionDescriptions function (Advanced)
-# Get HTML-formatted descriptions of collections and their DOIs
 
 def getCollectionDescriptions(api_url = "", format = ""):
     """
-    All parameters are optional.
     Gets HTML-formatted descriptions of collections and their DOIs
     """
     endpoint = "getCollectionDescriptions"
@@ -919,12 +878,9 @@ def getCollectionDescriptions(api_url = "", format = ""):
     data = queryData(endpoint, options, api_url, format)
     return data
 
-####### getCollectionPatientCounts function (Advanced)
-# Get patient counts by collection from Advanced API
 
 def getCollectionPatientCounts(api_url = "", format = ""):
     """
-    All parameters are optional.
     Gets counts of Patient by collection from Advanced API
     """
     endpoint = "getCollectionValuesAndCounts"
@@ -933,16 +889,12 @@ def getCollectionPatientCounts(api_url = "", format = ""):
     data = queryData(endpoint, options, api_url, format)
     return data
 
-####### getModalityCounts function (Advanced)
-# Get counts of Modality metadata from Advanced API
-# Allows filtering by collection and bodyPart
 
 def getModalityCounts(collection = "",
                       bodyPart = "",
                       api_url = "",
                       format = ""):
     """
-    All parameters are optional.
     Gets counts of Modality metadata from Advanced API
     Allows filtering by collection and bodyPart
     """
@@ -959,18 +911,14 @@ def getModalityCounts(collection = "",
     data = queryData(endpoint, options, api_url, format)
     return data
 
-####### getBodyPartCounts function (Advanced)
-# Get counts of Body Part metadata from Advanced API
-# Allows filtering by collection and modality
 
 def getBodyPartCounts(collection = "",
                       modality = "",
                       api_url = "",
                       format = ""):
     """
-    All parameters are optional.
-    Gets counts of Body Part metadata from Advanced API
-    Allows filtering by collection and modality
+    Gets counts of Body Part metadata from Advanced API.
+    Allows filtering by collection and modality.
     """
     endpoint = "getBodyPartValuesAndCounts"
 
@@ -985,9 +933,6 @@ def getBodyPartCounts(collection = "",
     data = queryData(endpoint, options, api_url, format)
     return data
 
-####### getManufacturerCounts function (Advanced)
-# Get counts of Manufacturer metadata from Advanced API
-# Allows filtering by collection, body part and modality
 
 def getManufacturerCounts(collection = "",
                       modality = "",
@@ -995,9 +940,8 @@ def getManufacturerCounts(collection = "",
                       api_url = "",
                       format = ""):
     """
-    All parameters are optional.
-    Gets counts of Manufacturer metadata from Advanced API
-    Allows filtering by collection, body part and modality
+    Gets counts of Manufacturer metadata from Advanced API.
+    Allows filtering by collection, body part and modality.
     """
     endpoint = "getManufacturerValuesAndCounts"
 
@@ -1014,17 +958,11 @@ def getManufacturerCounts(collection = "",
     data = queryData(endpoint, options, api_url, format)
     return data
 
-####### getSeriesList function (Advanced)
-# Get series metadata from Advanced API
-# Allows submission of a list of UIDs
-# Returns result as dataframe and CSV
 
 def getSeriesList(list, api_url = "", csv_filename = ""):
     """
-    Optional: api_url, csv_filename
-    Get series metadata from Advanced API
-    Allows submission of a list of UIDs
-    Returns result as dataframe and CSV
+    Get metadata for a list of series from Advanced API.
+    Returns result as dataframe and CSV.
     """
     uids = ",".join(list)
     param = {'list': uids}
@@ -1039,10 +977,7 @@ def getSeriesList(list, api_url = "", csv_filename = ""):
 
     # get data & handle any request.post() errors
     try:
-        if api_url == "nlst":
-            metadata = requests.post(url, headers = nlst_api_call_headers, data = param)
-        else:
-            metadata = requests.post(url, headers = api_call_headers, data = param)
+        metadata = requests.post(url, headers = api_call_headers, data = param)
         metadata.raise_for_status()
 
         # check for empty results and format output
@@ -1067,14 +1002,11 @@ def getSeriesList(list, api_url = "", csv_filename = ""):
     except requests.exceptions.RequestException as err:
         _log.error(err)
 
-####### getDicomTags function (Advanced)
-# Gets DICOM tag metadata for a given series UID (scan)
 
 def getDicomTags(seriesUid,
                  api_url = "",
                  format = ""):
     """
-    Optional: api_url, format
     Gets DICOM tag metadata for a given series UID (scan)
     """
     endpoint = "getDicomTags"
@@ -1085,7 +1017,7 @@ def getDicomTags(seriesUid,
 
     data = queryData(endpoint, options, api_url, format)
     return data
-    
+
 
 def getSegRefSeries(uid):
     """
@@ -1112,7 +1044,7 @@ def getSegRefSeries(uid):
                 # Retrieve the value of "Series Instance UID" from the next row
                 refSeriesUid = df.loc[index + 1, 'data']
                 return refSeriesUid
-            
+
             else:
                 _log.warning(f"Series {uid} does not contain a Reference Series UID.")
                 refSeriesUid = "N/A"
@@ -1130,7 +1062,7 @@ def getSegRefSeries(uid):
                 # Retrieve the value of "Series Instance UID" from the next row
                 refSeriesUid = df.loc[index + 1, 'data']
                 return refSeriesUid
-            
+
             else:
                 _log.warning(f"Series {uid} does not contain a Reference Series UID.")
                 refSeriesUid = "N/A"
@@ -1174,10 +1106,7 @@ def getDoiMetadata(doi, output, api_url = "", format = ""):
 
     # get data & handle any request.post() errors
     try:
-        if api_url == "nlst":
-            metadata = requests.post(url, headers = nlst_api_call_headers, data = param)
-        else:
-            metadata = requests.post(url, headers = api_call_headers, data = param)
+        metadata = requests.post(url, headers = api_call_headers, data = param)
         metadata.raise_for_status()
 
         # check for empty results and format output
@@ -1206,9 +1135,7 @@ def getDoiMetadata(doi, output, api_url = "", format = ""):
     except requests.exceptions.RequestException as err:
         _log.error(err)
 
-####### getSimpleSearchWithModalityAndBodyPartPaged function
-# Takes the same parameters as the SimpleSearch GUI
-# Using more parameters narrows the number of subjects received.
+
 def getSimpleSearchWithModalityAndBodyPartPaged(
     collections = [],
     species = [],
@@ -1334,10 +1261,7 @@ def getSimpleSearchWithModalityAndBodyPartPaged(
 
     # get data & handle any request.post() errors
     try:
-        if api_url == "nlst":
-            metadata = requests.post(url, headers = nlst_api_call_headers, data = options)
-        else:
-            metadata = requests.post(url, headers = api_call_headers, data = options)
+        metadata = requests.post(url, headers = api_call_headers, data = options)
         metadata.raise_for_status()
 
         # check for empty results and format output
@@ -1370,31 +1294,29 @@ def getSimpleSearchWithModalityAndBodyPartPaged(
 ##########################
 # Miscellaneous
 
-def makeSeriesReport(series_data, input_type = "", format = "", filename = None, api_url = ""):
-# Ingests JSON output from any function that returns series-level data and creates summary report
-# Specify input_type = "manifest" to ingest a *.TCIA manifest file or "list" for a python list of UIDs
-# If input_type = "manifest" or "list" and there are series UIDs that are restricted
-#    you must call getToken() with a user ID that has access to all UIDs before calling this function.
-# Specifying api_url is only necessary if you are using input_type = "manifest" or "list" with NLST data (e.g. api_url = "nlst") 
-# Specify format = "var" to return the report values as a dictionary
-# Access variables example after saving function output to report_data: subjects = report_data["subjects"]
-# Specify format = "file" to save the report to a file
-# Specify a filename parameter to set a filename if you don't want the default
 
+def makeSeriesReport(series_data, input_type = "", format = "", filename = None, api_url = ""):
     """
-    Ingests JSON output from any function that returns series-level data and creates summary report
-    Specify input_type = "manifest" to ingest a *.TCIA manifest file or "list" for a python list of UIDs.
-    If input_type = "manifest" or "list" and there are series UIDs that are restricted, you must call getToken() with a user ID that has access to all UIDs before calling this function.
-    Specifying api_url is only necessary if you are using input_type = "manifest" or "list" with NLST data (e.g. api_url = "nlst").
+    Ingests JSON output from any function that returns series-level data
+    and creates summary report.
+    Specify input_type = "manifest" to ingest a *.TCIA manifest file
+    or "list" for a python list of UIDs.
+    If input_type = "manifest" or "list" and there are series UIDs 
+    that are restricted, you must call getToken() with a user ID that 
+    has access to all UIDs before calling this function.
+    Specifying api_url is only necessary if you are using
+    input_type = "manifest" or "list" with NLST data (e.g. api_url = "nlst").
     Specify format = "var" to return the report values as a dictionary.
-    Access variables example after saving function output to report_data: subjects = report_data["subjects"].
+    Access variables example after saving function output 
+    to report_data: subjects = report_data["subjects"].
     Specify format = "file" to save the report to a file.
-    Specify a filename parameter to set a filename if you don't want the default filename.
+    Specify a filename parameter to set a filename
+    if you don't want the default filename.
     """
     # if input_type is manifest convert it to a list
     if input_type == "manifest":
         series_data = manifestToList(series_data)
-        
+
     # if input_type is a list or manifest download relevant metadata
     if input_type == "list" or input_type == "manifest":
         df = getSeriesList(series_data, api_url = "", csv_filename = "")
@@ -1479,15 +1401,11 @@ def makeSeriesReport(series_data, input_type = "", format = "", filename = None,
     else:
         _log.info(report)
 
-####### manifestToList function
-# Ingests a TCIA manifest file and removes header
-# Returns a list of series UIDs
 
 def manifestToList(manifest):
     """
-    Ingests a TCIA manifest file and removes header
-    Returns a list of series UIDs
-    Because it is primarily a helper function used by downloadSeries() and makeSeriesReport(), please do NOT use this function.
+    Ingests a TCIA manifest file and removes header.
+    Returns a list of series UIDs.
     """
     # initialize variable
     data = []
@@ -1515,26 +1433,17 @@ def manifestToList(manifest):
             )
             return data
 
-####### makeVizLinks function
-# Ingests JSON output of getSeries() or getSharedCart()
-# Creates URLs to visualize them in a browser
-# The links appear in the last 2 columns of the dataframe
-# TCIA links display the individual series described in each row
-# IDC links display the entire study (all scans from that time point)
-# IDC links may not work if they haven't mirrored the series from TCIA yet
-# This function only works with fully public datasets (no limited-access data)
-# Optionally accepts a csv_filename parameter if you'd like to export a CSV file
 
 def makeVizLinks(series_data, csv_filename=""):
     """
-    Ingests JSON output of getSeries() or getSharedCart()
-    Creates URLs to visualize them in a browser
+    Ingests JSON output of getSeries() or getSharedCart().
+    Creates URLs to visualize them in a browser.
     The links appear in the last 2 columns of the dataframe.
     TCIA links display the individual series described in each row.
     IDC links display the entire study (all scans from that time point).
     IDC links may not work if they haven't mirrored the series from TCIA, yet.
-    This function only works with fully public datasets (no limited-access data).
-    Optionally accepts a csv_filename parameter if you'd like to export a CSV file.
+    This function only works with fully public datasets (not limited-access).
+    Accepts a csv_filename parameter if you'd like to export a CSV file.
     """
     # set base urls for tcia/idc
     tciaVizUrl = "https://nbia.cancerimagingarchive.net/viewer/?series="
@@ -1553,19 +1462,14 @@ def makeVizLinks(series_data, csv_filename=""):
     else:
         return df
 
-####### viewSeries function
-# Visualize a Series (scan) you've downloaded in the notebook
-# Requires EITHER a seriesUid or path parameter
-# Leave seriesUid empty if you want to provide a custom path
-# The function assumes "tciaDownload/<seriesUid>/" as path if seriesUid is
-#   provided since this is where downloadSeries() saves data
 
 def viewSeries(seriesUid = "", path = ""):
     """
     Visualizes a Series (scan) you've downloaded in the notebook
     Requires EITHER a seriesUid or path parameter
     Leave seriesUid empty if you want to provide a custom path.
-    The function assumes "tciaDownload/<seriesUid>/" as path if seriesUid is provided since this is where downloadSeries() saves data.
+    The function assumes "tciaDownload/<seriesUid>/" as path if
+    seriesUid is provided since this is where downloadSeries() saves data.
     """
     # set path where downloadSeries() saves the data if seriesUid is provided
     if seriesUid != "":
@@ -1627,20 +1531,15 @@ def viewSeries(seriesUid = "", path = ""):
         seriesInvalid(seriesUid)
 
 
-####### viewSeriesSEG function
-# Visualizes a Series (scan) you've downloaded in the notebook
-# Adds an overlay from the SEG series
-# Requires a path parameter for the reference series
-# Requires the file path for the annotative series
-# Not recommended to be used as a standalone function
 def viewSeriesSEG(seriesPath = "", SEGPath = ""):
     import pydicom_seg 
     """
-    Visualizes a Series (scan) you've downloaded in the notebook
-    Adds an overlay from the SEG series
-    Requires a path parameter for the reference series
-    Requires the file path for the annotative series
-    Not recommended to be used as a standalone function
+    Visualizes a Series (scan) you've downloaded and
+    adds an overlay from the SEG series.
+    Requires a path parameter for the reference series.
+    Requires the file path for the annotation series.
+    Used by the viewSeriesAnnotation() function.
+    Not recommended to be used as a standalone function.
     """
     slices = [pydicom.dcmread(seriesPath + '/' + s) for s in os.listdir(seriesPath) if s.endswith(".dcm")]
     slices.sort(key = lambda x: int(x.InstanceNumber), reverse = True)
@@ -1650,7 +1549,7 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
     except IndexError:
         seriesInvalid(seriesUid)
         raise StopExecution
-    
+
     image = np.stack([s.pixel_array for s in slices])
     image = image.astype(np.int16)
 
@@ -1679,8 +1578,8 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
         result = reader.read(SEG_data)
 
     if slices[0].SeriesInstanceUID != result.referenced_series_uid:
-        raise Exception("The selected reference series and the annotative series don't match!")
-    
+        raise Exception("The selected reference series and the annotation series don't match!")
+
     colorPaleatte = ["blue", "orange", "green", "red", "cyan", "brown", "lime", "purple", "yellow", "pink", "olive"] 
     def seg_animation(x, **kwargs):
         plt.imshow(pixel_data[x], cmap = plt.cm.gray)
@@ -1705,33 +1604,27 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
         interact(seg_animation, x=(0, len(pixel_data)-1), **kwargs)
 
 
-####### viewSeriesRT function
-# Visualizes a Series (scan) you've downloaded in the notebook
-# Adds an overlay from the RTSTRUCT series
-# Requires a path parameter for the reference series
-# Requires the file path for the annotative series
-# Currenly not able to visualize seed points
-# Not recommended to be used as a standalone function
 def viewSeriesRT(seriesPath = "", RTPath = ""):
     import rt_utils 
     """
-    Visualizes a Series (scan) you've downloaded in the notebook
-    Adds an overlay from the RTSTRUCT series
-    Requires a path parameter for the reference series
-    Requires the file path for the annotative series
-    Currenly not able to visualize seed points
-    Not recommended to be used as a standalone function
+    Visualizes a Series (scan) you've downloaded and
+    adds an overlay from the RTSTRUCT series.
+    Requires a path parameter for the reference series.
+    Requires the file path for the annotation series.
+    Currenly not able to visualize seed points.
+    Used by the viewSeriesAnnotation() function.
+    Not recommended to be used as a standalone function.
     """
     rtstruct = rt_utils.RTStructBuilder.create_from(seriesPath, RTPath)
     roi_names = rtstruct.get_roi_names()
-    
+
     slices = rtstruct.series_data
     try:
         modality = slices[0].Modality
     except IndexError:
         seriesInvalid(seriesUid)
         raise StopExecution
-    
+
     image = np.stack([s.pixel_array for s in slices])
     image = image.astype(np.int16)
 
@@ -1763,7 +1656,7 @@ def viewSeriesRT(seriesPath = "", RTPath = ""):
                 except Exception as e:
                     try:
                         if e.code == -215:
-                            _log.error(f"\nThe ROI '{roi_names[i]}' contains seed point(s), which is currently not supported.")
+                            _log.error(f"\nThe ROI '{roi_names[i]}' is too small to visualize.")
                         else:
                             _log.error(f"\n{e}")
                         pass
@@ -1772,32 +1665,25 @@ def viewSeriesRT(seriesPath = "", RTPath = ""):
                         pass
         plt.axis('scaled')
         plt.show()
-    
+
     kwargs = {v: True for i, v in enumerate(roi_names)}
     interact(rt_animation, x = (0, len(pixel_data)-1), **kwargs)
 
 
-####### viewSeriesAnnotative function
-# Visualizes a Series (scan) you've downloaded in the notebook
-# Adds an overlay from the annotative series (SEG or RTSTRUCT)
-# Directs to the correct visualization function depending on the modality of the annotative series
-# Requires EITHER a seriesUid or path parameter for the reference series
-# Requires EITHER a annotationUid or path parameter for the segmentation series
-# Opens a file browser for users to choose folder/file if the required parameters are not specified
-# Leave seriesUid and/or annotationUid empty if you want to provide a custom path
-# The function assumes "tciaDownload/<UID>/" as path if seriesUid and/or annotationUid is
-#   provided since this is where downloadSeries() saves data
-# Note that non-axial images might not be correctly displayed.
 def viewSeriesAnnotation(seriesUid = "", seriesPath = "", annotationUid = "", annotationPath = ""):
     """
-    Visualizes a Series (scan) you've downloaded in the notebook
-    Adds an overlay from the annotative series (SEG or RTSTRUCT)
-    Directs to the correct visualization function depending on the modality of the annotative series
-    Requires EITHER a seriesUid or path parameter for the reference series
-    Requires EITHER a annotationUid or path parameter for the segmentation series
-    Opens a file browser for users to choose folder/file if the required parameters are not specified
-    Leave seriesUid and/or annotationUid empty if you want to provide a custom path
-    The function assumes "tciaDownload/<UID>/" as path if seriesUid and/or annotationUid is provided since this is where downloadSeries() saves data.
+    Visualizes a Series (scan) you've downloaded and
+    adds an overlay from the annotation series (SEG or RTSTRUCT).
+    Directs to the correct visualization function depending
+    on the modality of the annotation series.
+    Requires EITHER a seriesUid or path parameter for the reference series.
+    Requires EITHER a annotationUid or path parameter for the segmentation series.
+    Opens a file browser for users to choose folder/file if
+    the required parameters are not specified.
+    Leave seriesUid and/or annotationUid empty if
+    you want to provide a custom path.
+    The function assumes "tciaDownload/<UID>/" as path if seriesUid and/or
+    annotationUid is provided since this is where downloadSeries() saves data.
     Note that non-axial images might not be correctly displayed.
     """
     import tkinter, pydicom_seg, rt_utils 
@@ -1813,7 +1699,7 @@ def viewSeriesAnnotation(seriesUid = "", seriesPath = "", annotationUid = "", an
             "If the data isn't restricted, you can alternatively view it in your browser (without downloading) using this link:\n"
             f"{link}"
         )
-    
+
     if seriesUid == "" and seriesPath == "":
         try:
             tkinter.Tk().withdraw()
@@ -1821,13 +1707,13 @@ def viewSeriesAnnotation(seriesUid = "", seriesPath = "", annotationUid = "", an
             seriesPath = folder_path
         except Exception:
             _log.error(
-                f"\nYou are executing the function with unspecified parameters in an unsupported envrioment,"
+                f"\nYou are executing the function with unspecified parameters in an unsupported enviroment,"
                 "\nplease specify the reference series UID or the folder path instead."
             )
             return
     elif seriesUid != "":
         seriesPath = "tciaDownload/" + seriesUid
-        
+
     if annotationUid == "" and annotationPath == "":
         try:
             tkinter.Tk().withdraw()
