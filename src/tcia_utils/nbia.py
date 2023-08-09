@@ -11,7 +11,6 @@ from datetime import timedelta
 from enum import Enum
 import matplotlib
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 import pydicom
 import numpy as np
 from ipywidgets import interact
@@ -1532,7 +1531,6 @@ def viewSeries(seriesUid = "", path = ""):
 
 
 def viewSeriesSEG(seriesPath = "", SEGPath = ""):
-    import pydicom_seg 
     """
     Visualizes a Series (scan) you've downloaded and
     adds an overlay from the SEG series.
@@ -1541,6 +1539,7 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
     Used by the viewSeriesAnnotation() function.
     Not recommended to be used as a standalone function.
     """
+    import pydicom_seg 
     slices = [pydicom.dcmread(seriesPath + '/' + s) for s in os.listdir(seriesPath) if s.endswith(".dcm")]
     slices.sort(key = lambda x: int(x.InstanceNumber), reverse = True)
 
@@ -1605,7 +1604,6 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
 
 
 def viewSeriesRT(seriesPath = "", RTPath = ""):
-    import rt_utils 
     """
     Visualizes a Series (scan) you've downloaded and
     adds an overlay from the RTSTRUCT series.
@@ -1615,6 +1613,7 @@ def viewSeriesRT(seriesPath = "", RTPath = ""):
     Used by the viewSeriesAnnotation() function.
     Not recommended to be used as a standalone function.
     """
+    import rt_utils 
     rtstruct = rt_utils.RTStructBuilder.create_from(seriesPath, RTPath)
     roi_names = rtstruct.get_roi_names()
 
@@ -1686,7 +1685,7 @@ def viewSeriesAnnotation(seriesUid = "", seriesPath = "", annotationUid = "", an
     annotationUid is provided since this is where downloadSeries() saves data.
     Note that non-axial images might not be correctly displayed.
     """
-    import tkinter, pydicom_seg, rt_utils 
+    import tkinter
     from tkinter import filedialog
     def seriesInvalid(uid, path):
         if uid:
