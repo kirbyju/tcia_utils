@@ -1482,9 +1482,9 @@ def viewSeries(seriesUid = "", path = ""):
             link = "https://nbia.cancerimagingarchive.net/viewer/?series=YOUR_SERIES_UID"
         _log.error(
             f"Cannot find a valid DICOM series at: {path}\n"
-            'Try running downloadSeries(seriesUid, input_type = "uid") to download it first.\n'
-            "If the data isn't restricted, you can alternatively view it in your browser (without downloading) using this link:\n"
-            f"{link}"
+            'Try running downloadSeries(seriesUid, input_type = "uid") to download it first.'
+            # "If the data isn't restricted, you can alternatively view it in your browser (without downloading) using this link:\n"
+            # f"{link}"
         )
 
     # Verify series exists before visualizing
@@ -1588,6 +1588,8 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
                 plt.imshow(mask_data[x], cmap = plt.cm.rainbow, alpha = 0.5*(mask_data[x] > 0), interpolation = None)
         else:
             for i in result.available_segments:
+                if i == 9 and len(result.available_segments) > 10:
+                    print(f"Previewing first 10 of {len(result.available_segments)} labels. Please use a DICOM workstation such as 3D Slicer to view the full dataset.")
                 if kwargs[list(kwargs)[i-1]] == True:
                     mask_data = result.segment_data(i)
                     cmap = matplotlib.colors.ListedColormap(colorPaleatte[i])
@@ -1599,7 +1601,7 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
         kwargs = {"Show Segments": True}
         interact(seg_animation, x=(0, len(pixel_data)-1), **kwargs)
     else:
-        kwargs = {v.SegmentDescription:True for i, v in enumerate(SEG_data.SegmentSequence)}
+        kwargs = {v.SegmentDescription:True for i, v in enumerate(SEG_data.SegmentSequence[:10])}
         interact(seg_animation, x=(0, len(pixel_data)-1), **kwargs)
 
 
@@ -1646,7 +1648,9 @@ def viewSeriesRT(seriesPath = "", RTPath = ""):
     colorPaleatte = ["blue", "orange", "green", "red", "cyan", "brown", "lime", "purple", "yellow", "pink", "olive"] 
     def rt_animation(x, **kwargs):
         plt.imshow(pixel_data[x], cmap = plt.cm.gray, interpolation = None)
-        for i in range(len(roi_names)):
+        for i in range(len(kwargs)):
+            if i == 9 and len(roi_names) > 10:
+                print(f"Previewing first 10 of {len(roi_names)} labels. Please use a DICOM workstation such as 3D Slicer to view the full dataset.")
             if kwargs[roi_names[i]] == True:
                 try:
                     mask_data = rtstruct.get_roi_mask_by_name(roi_names[i])
@@ -1665,7 +1669,7 @@ def viewSeriesRT(seriesPath = "", RTPath = ""):
         plt.axis('scaled')
         plt.show()
 
-    kwargs = {v: True for i, v in enumerate(roi_names)}
+    kwargs = {v: True for i, v in enumerate(roi_names[:10])}
     interact(rt_animation, x = (0, len(pixel_data)-1), **kwargs)
 
 
@@ -1694,9 +1698,9 @@ def viewSeriesAnnotation(seriesUid = "", seriesPath = "", annotationUid = "", an
             link = "https://nbia.cancerimagingarchive.net/viewer/?series=YOUR_SERIES_UID"
         _log.error(
             f"Cannot find a valid DICOM series at: {path}\n"
-            'Try running downloadSeries(seriesUid, input_type = "uid") to download it first.\n'
-            "If the data isn't restricted, you can alternatively view it in your browser (without downloading) using this link:\n"
-            f"{link}"
+            'Try running downloadSeries(seriesUid, input_type = "uid") to download it first.'
+            # "If the data isn't restricted, you can alternatively view it in your browser (without downloading) using this link:\n"
+            # f"{link}"
         )
 
     if seriesUid == "" and seriesPath == "":
