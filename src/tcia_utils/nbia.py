@@ -1588,12 +1588,15 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
                 plt.imshow(mask_data[x], cmap = plt.cm.rainbow, alpha = 0.5*(mask_data[x] > 0), interpolation = None)
         else:
             for i in result.available_segments:
-                if i == 9 and len(result.available_segments) > 10:
+                if i == 10 and len(result.available_segments) > 10:
                     print(f"Previewing first 10 of {len(result.available_segments)} labels. Please use a DICOM workstation such as 3D Slicer to view the full dataset.")
                 if kwargs[list(kwargs)[i-1]] == True:
                     mask_data = result.segment_data(i)
                     cmap = matplotlib.colors.ListedColormap(colorPaleatte[i])
-                    plt.imshow(mask_data[x], cmap = cmap, alpha = 0.5*(mask_data[x] > 0), interpolation = None)
+                    try:
+                        plt.imshow(mask_data[x], cmap = cmap, alpha = 0.5*(mask_data[x] > 0), interpolation = None)
+                    except IndexError:
+                        _log.error(f"Visualization for segment {list(kwargs.keys())[i-1]} failed, it does not have the same slide count as the reference series.\nPlease use a DICOM workstation such as 3D Slicer to view the full dataset.")
         plt.axis('scaled')
         plt.show()
 
@@ -1655,7 +1658,10 @@ def viewSeriesRT(seriesPath = "", RTPath = ""):
                 try:
                     mask_data = rtstruct.get_roi_mask_by_name(roi_names[i])
                     cmap = matplotlib.colors.ListedColormap(colorPaleatte[i])
-                    plt.imshow(mask_data[:, :, x], cmap = cmap, alpha = 0.5*(mask_data[:, :, x] > 0), interpolation = None)
+                    try:
+                        plt.imshow(mask_data[:, :, x], cmap = cmap, alpha = 0.5*(mask_data[:, :, x] > 0), interpolation = None)
+                    except IndexError:
+                        _log.error(f"Visualization for segment {roi_names[i]} failed, it does not have the same slide count as the reference series.\nPlease use a DICOM workstation such as 3D Slicer to view the full dataset.")
                 except Exception as e:
                     try:
                         if e.code == -215:
