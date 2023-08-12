@@ -1585,7 +1585,10 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
         if isinstance(reader, pydicom_seg.reader.MultiClassReader):
             if kwargs[list(kwargs)[0]] == True:
                 mask_data = result.data
-                plt.imshow(mask_data[x], cmap = plt.cm.rainbow, alpha = 0.5*(mask_data[x] > 0), interpolation = None)
+                try:
+                    plt.imshow(mask_data[x], cmap = plt.cm.rainbow, alpha = 0.5*(mask_data[x] > 0), interpolation = None)
+                except IndexError:
+                    _log.error(f"Visualization for the segment failed, it does not have the same slide count as the reference series.\nPlease use a DICOM workstation such as 3D Slicer to view the full dataset.")
         else:
             for i in result.available_segments:
                 if i == 10 and len(result.available_segments) > 10:
