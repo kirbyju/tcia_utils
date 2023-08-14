@@ -1607,7 +1607,7 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
         kwargs = {"Show Segments": True}
         interact(seg_animation, x=(0, len(pixel_data)-1), **kwargs)
     else:
-        kwargs = {v.SegmentDescription:True for i, v in enumerate(SEG_data.SegmentSequence[:10])}
+        kwargs = {f"{i+1} - {v.SegmentDescription}":True for i, v in enumerate(SEG_data.SegmentSequence[:10])}
         interact(seg_animation, x=(0, len(pixel_data)-1), **kwargs)
 
 
@@ -1657,7 +1657,7 @@ def viewSeriesRT(seriesPath = "", RTPath = ""):
         for i in range(len(kwargs)):
             if i == 9 and len(roi_names) > 10:
                 print(f"Previewing first 10 of {len(roi_names)} labels. Please use a DICOM workstation such as 3D Slicer to view the full dataset.")
-            if kwargs[roi_names[i]] == True:
+            if kwargs[f"{i+1} - {roi_names[i]}"] == True:
                 try:
                     mask_data = rtstruct.get_roi_mask_by_name(roi_names[i])
                     cmap = matplotlib.colors.ListedColormap(colorPaleatte[i])
@@ -1668,7 +1668,7 @@ def viewSeriesRT(seriesPath = "", RTPath = ""):
                 except Exception as e:
                     try:
                         if e.code == -215:
-                            _log.error(f"\nThe ROI '{roi_names[i]}' is too small to visualize.")
+                            _log.error(f"\nThe segment '{roi_names[i]}' is too small to visualize.")
                         else:
                             _log.error(f"\n{e}")
                         pass
@@ -1678,7 +1678,7 @@ def viewSeriesRT(seriesPath = "", RTPath = ""):
         plt.axis('scaled')
         plt.show()
 
-    kwargs = {v: True for i, v in enumerate(roi_names[:10])}
+    kwargs = {f"{i+1} - {v}": True for i, v in enumerate(roi_names[:10])}
     interact(rt_animation, x = (0, len(pixel_data)-1), **kwargs)
 
 
