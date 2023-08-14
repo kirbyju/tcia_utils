@@ -11,7 +11,6 @@ from datetime import timedelta
 from enum import Enum
 import matplotlib
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 import pydicom
 import numpy as np
 from ipywidgets import interact
@@ -1483,9 +1482,9 @@ def viewSeries(seriesUid = "", path = ""):
             link = "https://nbia.cancerimagingarchive.net/viewer/?series=YOUR_SERIES_UID"
         _log.error(
             f"Cannot find a valid DICOM series at: {path}\n"
-            'Try running downloadSeries(seriesUid, input_type = "uid") to download it first.\n'
-            "If the data isn't restricted, you can alternatively view it in your browser (without downloading) using this link:\n"
-            f"{link}"
+            'Try running downloadSeries(seriesUid, input_type = "uid") to download it first.'
+            # "If the data isn't restricted, you can alternatively view it in your browser (without downloading) using this link:\n"
+            # f"{link}"
         )
 
     # Verify series exists before visualizing
@@ -1532,7 +1531,6 @@ def viewSeries(seriesUid = "", path = ""):
 
 
 def viewSeriesSEG(seriesPath = "", SEGPath = ""):
-    import pydicom_seg 
     """
     Visualizes a Series (scan) you've downloaded and
     adds an overlay from the SEG series.
@@ -1541,6 +1539,7 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
     Used by the viewSeriesAnnotation() function.
     Not recommended to be used as a standalone function.
     """
+    import pydicom_seg 
     slices = [pydicom.dcmread(seriesPath + '/' + s) for s in os.listdir(seriesPath) if s.endswith(".dcm")]
     slices.sort(key = lambda x: int(x.InstanceNumber), reverse = True)
 
@@ -1586,13 +1585,21 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
         if isinstance(reader, pydicom_seg.reader.MultiClassReader):
             if kwargs[list(kwargs)[0]] == True:
                 mask_data = result.data
-                plt.imshow(mask_data[x], cmap = plt.cm.rainbow, alpha = 0.5*(mask_data[x] > 0), interpolation = None)
+                try:
+                    plt.imshow(mask_data[x], cmap = plt.cm.rainbow, alpha = 0.5*(mask_data[x] > 0), interpolation = None)
+                except IndexError:
+                    _log.error(f"Visualization for the segment failed, it does not have the same slide count as the reference series.\nPlease use a DICOM workstation such as 3D Slicer to view the full dataset.")
         else:
             for i in result.available_segments:
+                if i == 10 and len(result.available_segments) > 10:
+                    print(f"Previewing first 10 of {len(result.available_segments)} labels. Please use a DICOM workstation such as 3D Slicer to view the full dataset.")
                 if kwargs[list(kwargs)[i-1]] == True:
                     mask_data = result.segment_data(i)
                     cmap = matplotlib.colors.ListedColormap(colorPaleatte[i])
-                    plt.imshow(mask_data[x], cmap = cmap, alpha = 0.5*(mask_data[x] > 0), interpolation = None)
+                    try:
+                        plt.imshow(mask_data[x], cmap = cmap, alpha = 0.5*(mask_data[x] > 0), interpolation = None)
+                    except IndexError:
+                        _log.error(f"Visualization for segment {list(kwargs.keys())[i-1]} failed, it does not have the same slide count as the reference series.\nPlease use a DICOM workstation such as 3D Slicer to view the full dataset.")
         plt.axis('scaled')
         plt.show()
 
@@ -1600,12 +1607,11 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
         kwargs = {"Show Segments": True}
         interact(seg_animation, x=(0, len(pixel_data)-1), **kwargs)
     else:
-        kwargs = {v.SegmentDescription:True for i, v in enumerate(SEG_data.SegmentSequence)}
+        kwargs = {v.SegmentDescription:True for i, v in enumerate(SEG_data.SegmentSequence[:10])}
         interact(seg_animation, x=(0, len(pixel_data)-1), **kwargs)
 
 
 def viewSeriesRT(seriesPath = "", RTPath = ""):
-    import rt_utils 
     """
     Visualizes a Series (scan) you've downloaded and
     adds an overlay from the RTSTRUCT series.
@@ -1615,6 +1621,7 @@ def viewSeriesRT(seriesPath = "", RTPath = ""):
     Used by the viewSeriesAnnotation() function.
     Not recommended to be used as a standalone function.
     """
+    import rt_utils 
     rtstruct = rt_utils.RTStructBuilder.create_from(seriesPath, RTPath)
     roi_names = rtstruct.get_roi_names()
 
@@ -1647,12 +1654,17 @@ def viewSeriesRT(seriesPath = "", RTPath = ""):
     colorPaleatte = ["blue", "orange", "green", "red", "cyan", "brown", "lime", "purple", "yellow", "pink", "olive"] 
     def rt_animation(x, **kwargs):
         plt.imshow(pixel_data[x], cmap = plt.cm.gray, interpolation = None)
-        for i in range(len(roi_names)):
+        for i in range(len(kwargs)):
+            if i == 9 and len(roi_names) > 10:
+                print(f"Previewing first 10 of {len(roi_names)} labels. Please use a DICOM workstation such as 3D Slicer to view the full dataset.")
             if kwargs[roi_names[i]] == True:
                 try:
                     mask_data = rtstruct.get_roi_mask_by_name(roi_names[i])
                     cmap = matplotlib.colors.ListedColormap(colorPaleatte[i])
-                    plt.imshow(mask_data[:, :, x], cmap = cmap, alpha = 0.5*(mask_data[:, :, x] > 0), interpolation = None)
+                    try:
+                        plt.imshow(mask_data[:, :, x], cmap = cmap, alpha = 0.5*(mask_data[:, :, x] > 0), interpolation = None)
+                    except IndexError:
+                        _log.error(f"Visualization for segment {roi_names[i]} failed, it does not have the same slide count as the reference series.\nPlease use a DICOM workstation such as 3D Slicer to view the full dataset.")
                 except Exception as e:
                     try:
                         if e.code == -215:
@@ -1666,7 +1678,7 @@ def viewSeriesRT(seriesPath = "", RTPath = ""):
         plt.axis('scaled')
         plt.show()
 
-    kwargs = {v: True for i, v in enumerate(roi_names)}
+    kwargs = {v: True for i, v in enumerate(roi_names[:10])}
     interact(rt_animation, x = (0, len(pixel_data)-1), **kwargs)
 
 
@@ -1686,7 +1698,7 @@ def viewSeriesAnnotation(seriesUid = "", seriesPath = "", annotationUid = "", an
     annotationUid is provided since this is where downloadSeries() saves data.
     Note that non-axial images might not be correctly displayed.
     """
-    import tkinter, pydicom_seg, rt_utils 
+    import tkinter
     from tkinter import filedialog
     def seriesInvalid(uid, path):
         if uid:
@@ -1695,9 +1707,9 @@ def viewSeriesAnnotation(seriesUid = "", seriesPath = "", annotationUid = "", an
             link = "https://nbia.cancerimagingarchive.net/viewer/?series=YOUR_SERIES_UID"
         _log.error(
             f"Cannot find a valid DICOM series at: {path}\n"
-            'Try running downloadSeries(seriesUid, input_type = "uid") to download it first.\n'
-            "If the data isn't restricted, you can alternatively view it in your browser (without downloading) using this link:\n"
-            f"{link}"
+            'Try running downloadSeries(seriesUid, input_type = "uid") to download it first.'
+            # "If the data isn't restricted, you can alternatively view it in your browser (without downloading) using this link:\n"
+            # f"{link}"
         )
 
     if seriesUid == "" and seriesPath == "":
