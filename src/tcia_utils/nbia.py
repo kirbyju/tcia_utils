@@ -1654,7 +1654,7 @@ def viewSeriesRT(seriesPath = "", RTPath = ""):
 
     pixel_data = np.array(image, dtype=np.int16)
     colorPaleatte = ["blue", "orange", "green", "red", "cyan", "brown", "lime", "purple", "yellow", "pink", "olive"] 
-    def rt_animation(suppress_warnings, x, kwargs_update, **kwargs):
+    def rt_animation(suppress_warnings, x, **kwargs):
         plt.imshow(pixel_data[x], cmap = plt.cm.gray, interpolation = None)
         for i in range(len(kwargs)):
             if i == 9 and len(roi_names) > 10:
@@ -1683,7 +1683,7 @@ def viewSeriesRT(seriesPath = "", RTPath = ""):
         plt.show()
 
     kwargs = {f"{i+1} - {v}": True for i, v in enumerate(roi_names[:10])}
-    interact(rt_animation, suppress_warnings = False, x = (0, len(pixel_data)-1), kwargs_update = fixed(kwargs), **kwargs)
+    interact(rt_animation, suppress_warnings = False, x = (0, len(pixel_data)-1), **kwargs)
 
 
 def viewSeriesAnnotation(seriesUid = "", seriesPath = "", annotationUid = "", annotationPath = ""):
