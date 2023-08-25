@@ -1580,7 +1580,7 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
         raise Exception("The selected reference series and the annotation series don't match!")
 
     colorPaleatte = ["blue", "orange", "green", "red", "cyan", "brown", "lime", "purple", "yellow", "pink", "olive"] 
-    def seg_animation(x, **kwargs):
+    def seg_animation(suppress_warnings, x, **kwargs):
         plt.imshow(pixel_data[x], cmap = plt.cm.gray)
         if isinstance(reader, pydicom_seg.reader.MultiClassReader):
             if kwargs[list(kwargs)[0]] == True:
@@ -1588,7 +1588,8 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
                 try:
                     plt.imshow(mask_data[x], cmap = plt.cm.rainbow, alpha = 0.5*(mask_data[x] > 0), interpolation = None)
                 except IndexError:
-                    _log.error(f"Visualization for the segment failed, it does not have the same slide count as the reference series.\nPlease use a DICOM workstation such as 3D Slicer to view the full dataset.")
+                    if suppress_warnings == False:
+                        _log.error(f"Visualization for the segment failed, it does not have the same slide count as the reference series.\nPlease use a DICOM workstation such as 3D Slicer to view the full dataset.")
         else:
             for i in result.available_segments:
                 if i == 10 and len(result.available_segments) > 10:
@@ -1599,16 +1600,17 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
                     try:
                         plt.imshow(mask_data[x], cmap = cmap, alpha = 0.5*(mask_data[x] > 0), interpolation = None)
                     except IndexError:
-                        _log.error(f"Visualization for segment {list(kwargs.keys())[i-1]} failed, it does not have the same slide count as the reference series.\nPlease use a DICOM workstation such as 3D Slicer to view the full dataset.")
+                        if suppress_warnings == False:
+                            _log.error(f"Visualization for segment {list(kwargs.keys())[i-1]} failed, it does not have the same slide count as the reference series.\nPlease use a DICOM workstation such as 3D Slicer to view the full dataset.")
         plt.axis('scaled')
         plt.show()
 
     if isinstance(reader, pydicom_seg.reader.MultiClassReader):
         kwargs = {"Show Segments": True}
-        interact(seg_animation, x=(0, len(pixel_data)-1), **kwargs)
+        interact(seg_animation, suppress_warnings = False, x=(0, len(pixel_data)-1), **kwargs)
     else:
         kwargs = {f"{i+1} - {v.SegmentDescription}":True for i, v in enumerate(SEG_data.SegmentSequence[:10])}
-        interact(seg_animation, x=(0, len(pixel_data)-1), **kwargs)
+        interact(seg_animation, suppress_warnings = False, x=(0, len(pixel_data)-1), **kwargs)
 
 
 def viewSeriesRT(seriesPath = "", RTPath = ""):
@@ -1652,7 +1654,7 @@ def viewSeriesRT(seriesPath = "", RTPath = ""):
 
     pixel_data = np.array(image, dtype=np.int16)
     colorPaleatte = ["blue", "orange", "green", "red", "cyan", "brown", "lime", "purple", "yellow", "pink", "olive"] 
-    def rt_animation(x, **kwargs):
+    def rt_animation(suppress_warnings, x, **kwargs):
         plt.imshow(pixel_data[x], cmap = plt.cm.gray, interpolation = None)
         for i in range(len(kwargs)):
             if i == 9 and len(roi_names) > 10:
@@ -1664,22 +1666,24 @@ def viewSeriesRT(seriesPath = "", RTPath = ""):
                     try:
                         plt.imshow(mask_data[:, :, x], cmap = cmap, alpha = 0.5*(mask_data[:, :, x] > 0), interpolation = None)
                     except IndexError:
-                        _log.error(f"Visualization for segment {roi_names[i]} failed, it does not have the same slide count as the reference series.\nPlease use a DICOM workstation such as 3D Slicer to view the full dataset.")
+                        if suppress_warnings == False:
+                            _log.error(f"Visualization for segment {roi_names[i]} failed, it does not have the same slide count as the reference series.\nPlease use a DICOM workstation such as 3D Slicer to view the full dataset.")
                 except Exception as e:
                     try:
                         if e.code == -215:
-                            _log.error(f"\nThe segment '{roi_names[i]}' is too small to visualize.")
+                            error_message = f"\nThe segment '{roi_names[i]}' is too small to visualize."
                         else:
-                            _log.error(f"\n{e}")
+                            error_message = f"\nThe segment '{roi_names[i]}' is too small to visualize."
+                        if suppress_warnings == False: _log.error(error_message)
                         pass
                     except:
-                        _log.error(f"\n{e}")
+                        if suppress_warnings == False: _log.error(f"\n{e}")
                         pass
         plt.axis('scaled')
         plt.show()
 
     kwargs = {f"{i+1} - {v}": True for i, v in enumerate(roi_names[:10])}
-    interact(rt_animation, x = (0, len(pixel_data)-1), **kwargs)
+    interact(rt_animation, suppress_warnings = False, x = (0, len(pixel_data)-1), **kwargs)
 
 
 def viewSeriesAnnotation(seriesUid = "", seriesPath = "", annotationUid = "", annotationPath = ""):
