@@ -11,6 +11,7 @@ from datetime import timedelta
 from enum import Enum
 import matplotlib
 import matplotlib.pyplot as plt
+import plotly.express as px
 import pydicom
 import numpy as np
 from ipywidgets import interact
@@ -101,7 +102,6 @@ def setApiUrl(endpoint, api_url):
                     _log.info("Accessing Advanced API anonymously. To access restricted data use nbia.getToken() with your credentials.")
                 if 'token_exp_time' in globals() and datetime.now() > token_exp_time:
                     refreshToken()
-                    _log.info(f'Success - Token refreshed to api_call_headers variable and expires at {token_exp_time}')
                 base_url = "https://services.cancerimagingarchive.net/nbia-api/services/"
         elif api_url == "nlst":
             if endpoint in searchEndpoints:
@@ -124,7 +124,6 @@ def setApiUrl(endpoint, api_url):
                     raise StopExecution
                 if 'token_exp_time' in globals() and datetime.now() > token_exp_time:
                     refreshToken()
-                    _log.info(f'Success - Token refreshed to api_call_headers variable and expires at {token_exp_time}')
                 base_url = "https://services.cancerimagingarchive.net/nbia-api/services/v2/"
             if endpoint in advancedEndpoints:
                 _log.error(
@@ -161,7 +160,7 @@ def getToken(user="", pw=""):
     Interactive prompts are provided for user/pw if they're not specified as parameters.
     "Advanced APIs" can be accessed anonymously using the nbia_guest account with the default guest password.
     """
-    global token_exp_time, api_call_headers, refresh_token, id_token
+    global token_exp_time, api_call_headers, access_token, refresh_token, id_token
 
     # specify user/pw unless nbia_guest is being used for accessing Advanced API anonymously
 
@@ -217,7 +216,7 @@ def refreshToken():
     This function is called as needed by setApiUrl() and is generally not 
     something that needs to be called directly in your code.
     """
-    global token_exp_time, api_call_headers
+    global token_exp_time, api_call_headers, access_token, refresh_token, id_token
 
     try:
         token = refresh_token
@@ -246,7 +245,7 @@ def refreshToken():
 
     # handle errors
     except requests.exceptions.HTTPError as errh:
-        _log.error(f"HTTP Error: {data.status_code} -- Double check your user name and password.")
+        _log.error(f"HTTP Error: {data.status_code} -- Token refresh failed. Create a new one with getToken().")
     except requests.exceptions.ConnectionError as errc:
         _log.error(f"Connection Error: {data.status_code}")
     except requests.exceptions.Timeout as errt:
@@ -958,10 +957,11 @@ def getManufacturerCounts(collection = "",
     return data
 
 
-def getSeriesList(list, api_url = "", csv_filename = ""):
+def getSeriesList(list, api_url = "", csv_filename = "", format = ""):
     """
     Get metadata for a list of series from Advanced API.
-    Returns result as dataframe and CSV.
+    Returns result as dataframe (default) or as CSV if format = 'csv'.
+    Use csv_filename to set a custom filename. 
     """
     uids = ",".join(list)
     param = {'list': uids}
@@ -982,13 +982,16 @@ def getSeriesList(list, api_url = "", csv_filename = ""):
         # check for empty results and format output
         if metadata.text != "":
             df = pd.read_csv(io.StringIO(metadata.text), sep=',')
-            if csv_filename != "":
+            if format == "csv" and csv_filename != "":
                 df.to_csv(csv_filename + '.csv')
                 _log.info(f"Report saved as {csv_filename}.csv")
+            elif format == "csv":
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                filename = f'series_report_{timestamp}.csv'
+                grouped.to_csv(filename, index=False)
+                _log.info(f"Collection summary report saved as '{filename}'")
             else:
-                df.to_csv('scan_metadata.csv')
-                _log.info("Report saved as scan_metadata.csv")
-            return df
+                return df
         else:
             _log.info("No results found.")
 
@@ -1085,10 +1088,10 @@ def getSegRefSeries(uid):
 # Result includes whether the data are 3rd party analyses or not
 # Formats output as JSON by default with options for "df" (dataframe) and "csv"
 
-def getDoiMetadata(doi, output, api_url = "", format = ""):
+def getDoiMetadata(doi, output = "", api_url = "", format = ""):
     """
     Optional: output, api_url, format
-    Gets a list of Collections if output = "", or Series if output = "series", associated with a DOI.
+    Gets a list of Collections if output = "", or Series UIDs if output = "series", associated with a DOI.
     The result includes whether the data are 3rd party analyses or not.
     """
     param = {'DOI': doi,
@@ -1291,13 +1294,282 @@ def getSimpleSearchWithModalityAndBodyPartPaged(
 
 ##########################
 ##########################
-# Miscellaneous
+# Reports
+
+
+def formatSeriesInput(series_data, input_type, api_url):
+    """
+    Helper function to convert the various types of series metadata 
+    inputs and to standardize the data elements that come from those 
+    inputs into a uniform dataframe output that is harmonized to
+    the fields from getSeries() in order to be ingested by other functions.
+    Missing fields are set to None.
+    
+    series_data can be provided as JSON, df, TCIA manifest file or python list.
+    input_type informs the function which of those types are being used.
+    If input_type = "manifest" the series_data should be the path to the manifest file.
+    """
+
+    # if input_type is manifest convert it to a list
+    if input_type == "manifest":
+        series_data = manifestToList(series_data)
+
+    # if input_type is a list or manifest, download relevant metadata
+    if input_type == "list" or input_type == "manifest":
+        df = getSeriesList(series_data, api_url = "")
+        # Rename the headers
+        if df is None or df.empty:
+            raise StopExecution
+        else:
+            df = df.rename(columns={'Subject ID': 'PatientID',
+                                    'Study UID': 'StudyInstanceUID',
+                                    'Series ID': 'SeriesInstanceUID',
+                                    'Number of images': 'ImageCount',
+                                    'Collection Name': 'Collection',
+                                    'File Size (Bytes)': 'FileSize',
+                                    'Data Description URI': 'CollectionURI',
+                                    'License Name': 'LicenseName',
+                                    'Series Number': 'SeriesNumber',
+                                    'License URL': 'LicenseURI'})
+
+    elif input_type == "df":
+        df = series_data
+    else:
+        # Create a DataFrame from the series_data
+        df = pd.DataFrame(series_data)
+        
+    # Ensure the DataFrame contains the necessary columns even if they are missing
+    required_columns = ['Collection', 'CollectionURI', 'Modality', 'LicenseName',
+                        'Manufacturer', 'BodyPartExamined', 'PatientID', 'StudyInstanceUID',
+                        'SeriesInstanceUID', 'Series Description', 'SeriesNumber',
+                        'ProtocolName', 'SeriesDate', 'ImageCount', 'FileSize', 'TimeStamp',
+                        'ManufacturerModelName', 'SoftwareVersions', 'LicenseURI']
+    
+    for col in required_columns:
+            if col not in df.columns:
+                df[col] = None
+    
+    return df
+
+def reportCollectionSummary(series_data, input_type="", api_url = "", format=""):
+    """
+    Generate a collection-oriented summary report from series metadata created by the
+    output of getSeries(), getSeriesList(), getSharedcart() or getUpdatedSeries().
+
+    This function calculates various statistics based on the input series_data, including:
+    - Collection: List of unique collections (1 per row)
+    - DOIs: List of unique values by collection
+    - Modalities: List of unique values by collection
+    - Licenses: List of unique values by collection
+    - Manufacturers: List of unique values in the collection
+    - Body Parts: List of unique values by collection
+    - Subjects: Number of subjects by collection
+    - Studies: Number of studies by collection
+    - Series: Number of series by collection
+    - Images: Number of images by collection
+    - Disk Space: Formatted as KB/MB/GB/TB/PB by collection
+    - TimeStamp Min: Earliest TimeStamp date by collection
+    - TimeStamp Max: Latest TimeStamp date by collection
+    - UniqueTimestamps: List of dates on which new series were published by collection
+
+    Parameters:
+    series_data: The input data to be summarized (expects JSON by default).
+    input_type: Can be set to 'df' for dataframe, 'list' for python list, or 'manifest'.
+                If manifest is used, series_data should be the path to the TCIA manifest file.
+    format (str): Output format (default is dataframe, 'csv' for CSV file, 'chart' for charts).
+    """
+    # format series_data into df depending on input_type
+    df = formatSeriesInput(series_data, input_type, api_url)
+    
+    # Group by Collection and calculate aggregated statistics
+    grouped = df.groupby('Collection').agg({
+        'CollectionURI': 'unique',
+        'Modality': 'unique',
+        'LicenseName': 'unique',
+        'Manufacturer': 'unique',
+        'BodyPartExamined': 'unique',
+        'PatientID': 'nunique',
+        'StudyInstanceUID': 'nunique',
+        'SeriesInstanceUID': 'nunique',
+        'ImageCount': 'sum',
+        'FileSize': 'sum',
+        'TimeStamp': ['min', 'max']
+    }).reset_index()
+
+    # Flatten the multi-level TimeStamp column and rename columns
+    grouped.columns = [' '.join(col).strip() for col in grouped.columns.values]
+    grouped.rename(columns={'TimeStamp min': 'Min TimeStamp',
+                            'TimeStamp max': 'Max TimeStamp',
+                            'PatientID nunique': 'Subjects',
+                            'StudyInstanceUID nunique': 'Studies',
+                            'SeriesInstanceUID nunique': 'Series',
+                            'ImageCount sum': 'Images',
+                            'FileSize sum': 'File Size'}
+                            , inplace=True)
+    
+    # Create Disk Space column and convert bytes to MB/GB/TB/PB
+    grouped['Disk Space'] = grouped['File Size'].apply(format_disk_space)
+    
+    try:
+        # Extract unique submission dates per Collection
+        df['TimeStamp'] = pd.to_datetime(df['TimeStamp'])
+        unique_dates_df = df.groupby('Collection')['TimeStamp'].apply(lambda x: x.dt.date.unique()).reset_index()
+
+    except:
+        # if timestamps weren't provided in series_data, condense None values to unique string
+        unique_dates_df = df.groupby('Collection')['TimeStamp'].apply(lambda x: x.unique()).reset_index()
+
+    # rename columns
+    unique_dates_df.columns = ['Collection', 'UniqueTimeStamps']
+
+    # Merge the unique_dates_df with the grouped DataFrame
+    grouped = grouped.merge(unique_dates_df, on='Collection', how='left')
+    
+    # Convert aggregated lists to strings & insert 'Not Specified' for null values
+    grouped['DOIs'] = grouped['CollectionURI unique'].apply(lambda x: ', '.join(['Not Specified' if pd.isnull(val) or val == '' else val for val in x]))
+    grouped['Modalities'] = grouped['Modality unique'].apply(lambda x: ', '.join(['Not Specified' if pd.isnull(val) or val == '' else val for val in x]))
+    grouped['Licenses'] = grouped['LicenseName unique'].apply(lambda x: ', '.join(['Not Specified' if pd.isnull(val) or val == '' else val for val in x]))
+    grouped['Manufacturers'] = grouped['Manufacturer unique'].apply(lambda x: ', '.join(['Not Specified' if pd.isnull(val) or val == '' else val for val in x]))
+    grouped['Body Parts'] = grouped['BodyPartExamined unique'].apply(lambda x: ', '.join(['Not Specified' if pd.isnull(val) or val == '' else val for val in x]))
+    grouped['Min TimeStamp'] = grouped['Min TimeStamp'].apply(lambda x: 'Not Specified' if pd.isnull(x) or x == '' else x)
+    grouped['Max TimeStamp'] = grouped['Max TimeStamp'].apply(lambda x: 'Not Specified' if pd.isnull(x) or x == '' else x)
+    grouped['UniqueTimeStamps'] = grouped['UniqueTimeStamps'].apply(lambda x: ', '.join(['Not Specified' if pd.isnull(val) or val == '' else val.strftime('%Y-%m-%d') for val in x]))
+
+    
+    # Remove unnecessary columns
+    grouped.drop(columns=['CollectionURI unique', 'Modality unique', 'LicenseName unique',
+                        'Manufacturer unique', 'BodyPartExamined unique'], inplace=True)
+
+    # Reorder the columns
+    grouped = grouped[['Collection', 'DOIs', 'Licenses', 'Subjects', 'Studies', 'Series', 'Images', 'File Size', 'Disk Space',
+            'Body Parts', 'Modalities',  'Manufacturers', 'Min TimeStamp', 'Max TimeStamp', 'UniqueTimeStamps']]
+    
+    # generate charts if requested
+    if format == 'chart':        
+        
+        # define collections
+        collections = grouped['Collection'].tolist()
+    
+        # Calculate the metrics 
+        subjects = grouped['Subjects'].tolist()
+        studies = grouped['Studies'].tolist()
+        series = grouped['Series'].tolist()
+        images = grouped['Images'].tolist()
+        size = grouped['File Size'].tolist()
+        
+        # Create separate pie charts for each metric
+        data_label_pairs = [(subjects, 'Subjects'),
+                            (studies, 'Studies'),
+                            (series, 'Series'),
+                            (images, 'Images'),
+                            (size, 'File Size (Bytes)')]
+        
+        # Iterate through the pairs and call create_pie_chart if data is greater than 0
+        for data, label in data_label_pairs:
+                
+            # Check if data is not empty and contains values greater than 0
+            if data and all(x > 0 for x in data):
+                create_pie_chart(data, label, collections)
+            else:
+                _log.info("No data available for " + label)
+
+    if format == 'csv':
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'collection_report_{timestamp}.csv'
+        grouped.to_csv(filename, index=False)
+        _log.info(f"Collection summary report saved as '{filename}'")
+    
+    return grouped
+
+
+def create_pie_chart(data, metric_name, labels, width=800, height=600):
+    """
+    Helper function for reportCollections() to create pie charts with plotly.
+    """
+    
+    # Calculate the total sum of data points
+    total = sum(data)
+
+    # Create a DataFrame for the pie chart
+    df = pd.DataFrame({'Labels': labels, 'Values': data})
+
+    # Create the pie chart using Plotly
+    fig = px.pie(df, names='Labels', values='Values', title=f'{metric_name} Distribution Across Collections')
+    fig.update_traces(textposition='inside', textinfo='percent+label')
+    fig.update_layout(showlegend=True, legend_title_text='Collections', width=width, height=height)
+
+    # Show the pie chart
+    fig.show()
+
+
+def format_disk_space(size_in_bytes):
+    """
+    Helper function for reportCollections() to format bytes to other units.
+    """
+    if size_in_bytes < 1024 ** 2:
+        return f'{size_in_bytes / 1024:.2f} KB'
+    elif size_in_bytes < 1024 ** 3:
+        return f'{size_in_bytes / (1024 ** 2):.2f} MB'
+    elif size_in_bytes < 1024 ** 4:
+        return f'{size_in_bytes / (1024 ** 3):.2f} GB'
+    elif size_in_bytes < 1024 ** 5:
+        return f'{size_in_bytes / (1024 ** 4):.2f} TB'
+    else:
+        return f'{size_in_bytes / (1024 ** 5):.2f} PB'
+        
+        
+def reportSeriesReleaseDate(series_data, chart_width = 1024, chart_height = 768):
+    """
+    Ingests the results of getSeries() as df or JSON and visualizes the 
+    submission timeline of the series in it by collection.
+    
+    Currently this only supports getSeries(), but feature requests have been submitted
+    to the NBIA team to make it possible to use this with the other series API endpoints.
+    
+    Chart width and height can be customized.
+    """
+    
+    # format series_data into df depending on input_type
+    df = formatSeriesInput(series_data, input_type = "", api_url = "")
+    
+    # Convert 'TimeStamp' column to datetime
+    df['TimeStamp'] = pd.to_datetime(df['TimeStamp'])
+
+    # Filter out rows with missing timestamps
+    df = df.dropna(subset=['TimeStamp'])
+
+    # Group by 'Collection' and 'TimeStamp' (daily) and count unique 'SeriesInstanceUIDs'
+    daily_data = df.groupby(['Collection', pd.Grouper(key='TimeStamp', freq='D')])['SeriesInstanceUID'].nunique().reset_index()
+
+    # Calculate cumulative counts for each collection
+    daily_data['CumulativeCount'] = daily_data.groupby('Collection')['SeriesInstanceUID'].cumsum()
+
+    # Create a line chart using Plotly Express
+    fig = px.line(
+        daily_data,
+        x='TimeStamp',
+        y='CumulativeCount',
+        color='Collection',
+        labels={'CumulativeCount': 'Total Series'},
+        title='Cumulative Total Series Over Time by Collection (Daily Aggregation)',
+        markers='true'
+    )
+
+    # Customize the line thickness and chart size
+    fig.update_xaxes(title='Release Date')
+    fig.update_yaxes(title='Total Series')
+    fig.update_traces(line=dict(width=4), marker=dict(size=15))
+    fig.update_layout(width=chart_width, height=chart_height)
+
+    # display figure
+    fig.show()
 
 
 def makeSeriesReport(series_data, input_type = "", format = "", filename = None, api_url = ""):
     """
     Ingests JSON output from any function that returns series-level data
-    and creates summary report.
+    and creates summary report.  
+    If your series data is a dataframe instead of JSON you can use input_type = "df".    
     Specify input_type = "manifest" to ingest a *.TCIA manifest file
     or "list" for a python list of UIDs.
     If input_type = "manifest" or "list" and there are series UIDs 
@@ -1312,24 +1584,9 @@ def makeSeriesReport(series_data, input_type = "", format = "", filename = None,
     Specify a filename parameter to set a filename
     if you don't want the default filename.
     """
-    # if input_type is manifest convert it to a list
-    if input_type == "manifest":
-        series_data = manifestToList(series_data)
-
-    # if input_type is a list or manifest download relevant metadata
-    if input_type == "list" or input_type == "manifest":
-        df = getSeriesList(series_data, api_url = "", csv_filename = "")
-        # Rename the headers
-        if df is None or df.empty:
-            raise StopExecution
-        else:
-            df = df.rename(columns={'Subject ID': 'PatientID', 'Study UID': 'StudyInstanceUID', 'Series ID': 'SeriesInstanceUID', 'Number of images': 'ImageCount', 'Collection Name': 'Collection'})
-            # Add an empty column called "BodyPartExamined" since getSeriesList() doesn't return this info -- FEATURE REQUEST SUBMITTED TO ADD THIS
-            df['BodyPartExamined'] = ''
-    else:
-        # Create a DataFrame from the series_data
-        df = pd.DataFrame(series_data)
-
+    # format series_data into df depending on input_type
+    df = formatSeriesInput(series_data, input_type, api_url)
+    
     # Calculate summary statistics for a given collection
 
     # Scan Inventory
@@ -1400,6 +1657,10 @@ def makeSeriesReport(series_data, input_type = "", format = "", filename = None,
     else:
         _log.info(report)
 
+##########################
+##########################
+# Miscellaneous
+
 
 def manifestToList(manifest):
     """
@@ -1432,6 +1693,9 @@ def manifestToList(manifest):
             )
             return data
 
+##########################
+##########################
+# Visualization
 
 def makeVizLinks(series_data, csv_filename=""):
     """
