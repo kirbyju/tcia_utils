@@ -22,6 +22,7 @@ dependencies = [
   "requests",
   "pandas",
   "matplotlib",
+  "plotly",
   "numpy",
   "ipywidgets", 
   "pydicom-seg", 
