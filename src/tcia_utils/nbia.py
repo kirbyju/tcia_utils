@@ -16,6 +16,7 @@ import pydicom
 import numpy as np
 from ipywidgets import interact
 from tcia_utils.utils import searchDf
+from tcia_utils.datacite import getDoi
 
 
 class StopExecution(Exception):
@@ -957,12 +958,57 @@ def getManufacturerCounts(collection = "",
     return data
 
 
-def getSeriesList(list, api_url = "", csv_filename = "", format = ""):
+def getSeriesList(uids, api_url = "", csv_filename = "", format = ""):
     """
     Get metadata for a list of series from Advanced API.
     Returns result as dataframe (default) or as CSV if format = 'csv'.
     Use csv_filename to set a custom filename. 
     """
+    
+    # break up the list into smaller chunks if > 10,000 series
+    chunk_size = 10000
+    if len(uids) > chunk_size:
+        chunked_uids = list()
+        for i in range(0, len(uids), chunk_size):
+            chunked_uids.append(uids[i:i+chunk_size])
+        # Count how many chunks
+        chunk_count = len(chunked_uids)
+        _log.info(f'Your data has been split into {chunk_count} groups.')
+    else:
+        chunk_count = 0
+
+    
+    if chunk_count == 0:
+        df = getSeriesListData(uids, api_url)
+    else:
+        count = 0
+        dfs = []  # create an empty list to store DataFrames
+        for x in chunked_uids:
+            str_count = str(count)
+            chunk_df = getSeriesListData(x, api_url)
+            dfs.append(chunk_df)  # append the DataFrame for this chunk to the list
+            count += 1
+
+        # concatenate all the DataFrames in the list into a single DataFrame
+        df = pd.concat(dfs, ignore_index=True)
+    
+    if format == "csv" and csv_filename != "":
+        df.to_csv(csv_filename + '.csv')
+        _log.info(f"Report saved as {csv_filename}.csv")
+    elif format == "csv":
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'series_report_{timestamp}.csv'
+        grouped.to_csv(filename, index=False)
+        _log.info(f"Collection summary report saved as '{filename}'")
+    else:
+        return df
+
+def getSeriesListData(list, api_url):
+    """
+    Ingests input from getSeriesList().
+    Not intended to be used directly.
+    """
+    
     uids = ",".join(list)
     param = {'list': uids}
     endpoint = "getSeriesMetadata2"
@@ -982,16 +1028,7 @@ def getSeriesList(list, api_url = "", csv_filename = "", format = ""):
         # check for empty results and format output
         if metadata.text != "":
             df = pd.read_csv(io.StringIO(metadata.text), sep=',')
-            if format == "csv" and csv_filename != "":
-                df.to_csv(csv_filename + '.csv')
-                _log.info(f"Report saved as {csv_filename}.csv")
-            elif format == "csv":
-                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                filename = f'series_report_{timestamp}.csv'
-                grouped.to_csv(filename, index=False)
-                _log.info(f"Collection summary report saved as '{filename}'")
-            else:
-                return df
+            return df
         else:
             _log.info("No results found.")
 
@@ -1351,39 +1388,81 @@ def formatSeriesInput(series_data, input_type, api_url):
     
     return df
 
+
+def reportDoiSummary(series_data, input_type="", api_url = "", format=""):
+    """
+    Generate a summary report about DOIs from series metadata created by the
+    output of getSeries(), getSeriesList(), a python list of Series UIDs, or
+    from a TCIA manifest.  See reportDataSummary() for more details.
+    """
+    
+    df = reportDataSummary(series_data, input_type, report_type = "doi", api_url = api_url, format = format)   
+    return df
+
+
 def reportCollectionSummary(series_data, input_type="", api_url = "", format=""):
     """
-    Generate a collection-oriented summary report from series metadata created by the
-    output of getSeries(), getSeriesList(), getSharedcart() or getUpdatedSeries().
+    Generate a summary report about Collections from series metadata created by the
+    output of getSeries(), getSeriesList(), getSharedcart(), getUpdatedSeries(),
+    a python list of Series UIDs, or from a TCIA manifest. 
+    See reportDataSummary() for more details.
+    """
+    
+    df = reportDataSummary(series_data, input_type, report_type = "", api_url = api_url, format = format)
+    return df
 
-    This function calculates various statistics based on the input series_data, including:
-    - Collection: List of unique collections (1 per row)
-    - DOIs: List of unique values by collection
-    - Modalities: List of unique values by collection
-    - Licenses: List of unique values by collection
-    - Manufacturers: List of unique values in the collection
-    - Body Parts: List of unique values by collection
-    - Subjects: Number of subjects by collection
-    - Studies: Number of studies by collection
-    - Series: Number of series by collection
-    - Images: Number of images by collection
-    - Disk Space: Formatted as KB/MB/GB/TB/PB by collection
-    - TimeStamp Min: Earliest TimeStamp date by collection
-    - TimeStamp Max: Latest TimeStamp date by collection
-    - UniqueTimestamps: List of dates on which new series were published by collection
+
+def reportDataSummary(series_data, input_type="", report_type = "", api_url = "", format=""):
+    """
+    This function summarizes the input series_data by reporting
+    on the following attributes where available in series_data:
+    - Collections: List of unique collections
+    - DOIs: List of unique values
+    - Modalities: List of unique values
+    - Licenses: List of unique values
+    - Manufacturers: List of unique values
+    - Body Parts: List of unique values
+    - Subjects: Number of subjects
+    - Studies: Number of studies
+    - Series: Number of series
+    - Images: Number of images
+    - Disk Space: Formatted as KB/MB/GB/TB/PB
+    - TimeStamp Min: Earliest TimeStamp date
+    - TimeStamp Max: Latest TimeStamp date
+    - UniqueTimestamps: List of dates on which new series were published
 
     Parameters:
     series_data: The input data to be summarized (expects JSON by default).
-    input_type: Can be set to 'df' for dataframe, 'list' for python list, or 'manifest'.
+    input_type: Set to 'df' for dataframe.  
+                Set to 'list' for python list, or 'manifest' for *.TCIA manifest file.
                 If manifest is used, series_data should be the path to the TCIA manifest file.
-    format (str): Output format (default is dataframe, 'csv' for CSV file, 'chart' for charts).
+    format: Output format (default is dataframe, 'csv' for CSV file, 'chart' for charts).
+    report_type: Defaults to summarizing by collection. Use 'doi' to group by DOIs.
+                Helper functions reportCollectionSummary() and reportDoiSummary() are
+                the expected way to deal with this, which pass this parameter accordingly.
+    api_url: Only necessary if input_type = list or manifest.
+            Set to 'restricted' for limited-access collections or 
+            'nlst' for National Lung Screening trial.
     """
     # format series_data into df depending on input_type
     df = formatSeriesInput(series_data, input_type, api_url)
     
+    # choose between collection report or DOI report
+    # these are used later when renaming and formatting the columns/charts
+    if report_type == "doi":
+        group = "CollectionURI"
+        column = "Collection"
+        columnGrouped = "Collections"
+        chartLabel = "Identifier"
+    else:
+        group = "Collection"
+        column = "CollectionURI"
+        columnGrouped = "DOIs"
+        chartLabel = "Collection"
+    
     # Group by Collection and calculate aggregated statistics
-    grouped = df.groupby('Collection').agg({
-        'CollectionURI': 'unique',
+    grouped = df.groupby(group).agg({
+        column: 'unique',
         'Modality': 'unique',
         'LicenseName': 'unique',
         'Manufacturer': 'unique',
@@ -1413,20 +1492,20 @@ def reportCollectionSummary(series_data, input_type="", api_url = "", format="")
     try:
         # Extract unique submission dates per Collection
         df['TimeStamp'] = pd.to_datetime(df['TimeStamp'])
-        unique_dates_df = df.groupby('Collection')['TimeStamp'].apply(lambda x: x.dt.date.unique()).reset_index()
+        unique_dates_df = df.groupby(group)['TimeStamp'].apply(lambda x: x.dt.date.unique()).reset_index()
 
     except:
         # if timestamps weren't provided in series_data, condense None values to unique string
-        unique_dates_df = df.groupby('Collection')['TimeStamp'].apply(lambda x: x.unique()).reset_index()
+        unique_dates_df = df.groupby(group)['TimeStamp'].apply(lambda x: x.unique()).reset_index()
 
     # rename columns
-    unique_dates_df.columns = ['Collection', 'UniqueTimeStamps']
+    unique_dates_df.columns = [group, 'UniqueTimeStamps']
 
     # Merge the unique_dates_df with the grouped DataFrame
-    grouped = grouped.merge(unique_dates_df, on='Collection', how='left')
+    grouped = grouped.merge(unique_dates_df, on=group, how='left')
     
     # Convert aggregated lists to strings & insert 'Not Specified' for null values
-    grouped['DOIs'] = grouped['CollectionURI unique'].apply(lambda x: ', '.join(['Not Specified' if pd.isnull(val) or val == '' else val for val in x]))
+    grouped[columnGrouped] = grouped[column + ' unique'].apply(lambda x: ', '.join(['Not Specified' if pd.isnull(val) or val == '' else val for val in x]))
     grouped['Modalities'] = grouped['Modality unique'].apply(lambda x: ', '.join(['Not Specified' if pd.isnull(val) or val == '' else val for val in x]))
     grouped['Licenses'] = grouped['LicenseName unique'].apply(lambda x: ', '.join(['Not Specified' if pd.isnull(val) or val == '' else val for val in x]))
     grouped['Manufacturers'] = grouped['Manufacturer unique'].apply(lambda x: ', '.join(['Not Specified' if pd.isnull(val) or val == '' else val for val in x]))
@@ -1437,18 +1516,45 @@ def reportCollectionSummary(series_data, input_type="", api_url = "", format="")
 
     
     # Remove unnecessary columns
-    grouped.drop(columns=['CollectionURI unique', 'Modality unique', 'LicenseName unique',
+    grouped.drop(columns=[column + ' unique', 'Modality unique', 'LicenseName unique',
                         'Manufacturer unique', 'BodyPartExamined unique'], inplace=True)
 
     # Reorder the columns
-    grouped = grouped[['Collection', 'DOIs', 'Licenses', 'Subjects', 'Studies', 'Series', 'Images', 'File Size', 'Disk Space',
+    grouped = grouped[[group, columnGrouped, 'Licenses', 'Subjects', 'Studies', 'Series', 'Images', 'File Size', 'Disk Space',
             'Body Parts', 'Modalities',  'Manufacturers', 'Min TimeStamp', 'Max TimeStamp', 'UniqueTimeStamps']]
+    
+    if report_type == "doi":
+        # look up DOI info from datacite and create dataframe
+        datacite = getDoi(format = "df")
+        
+        # drop unnecessary columns in datacite df
+        datacite = datacite[["DOI", "Identifier"]]
+            
+        # Extract DOI from the end of CollectionURI and store it in "DOI" column
+        grouped["DOI"] = grouped["CollectionURI"].str.extract(r'doi.org/(\S+)$')
+        
+        # format the DOI values consistently
+        grouped['DOI'] = grouped['DOI'].str.strip()
+        grouped['DOI'] = grouped['DOI'].str.lower()
+        datacite['DOI'] = datacite['DOI'].str.strip()
+        datacite['DOI'] = datacite['DOI'].str.lower()
+
+        # Merge datacite with the df DataFrame
+        grouped = grouped.merge(datacite, on='DOI', how='left')
+        
+        # drop DOI column
+        grouped.drop(columns=['DOI'], inplace=True)
+
+        # Move the 'Identifier' column to the first position
+        cols = list(grouped.columns)
+        cols.insert(0, cols.pop(cols.index('Identifier')))
+        grouped = grouped[cols]
     
     # generate charts if requested
     if format == 'chart':        
         
-        # define collections
-        collections = grouped['Collection'].tolist()
+        # define datasets
+        datasets = grouped[chartLabel].tolist()
     
         # Calculate the metrics 
         subjects = grouped['Subjects'].tolist()
@@ -1469,7 +1575,7 @@ def reportCollectionSummary(series_data, input_type="", api_url = "", format="")
                 
             # Check if data is not empty and contains values greater than 0
             if data and all(x > 0 for x in data):
-                create_pie_chart(data, label, collections)
+                create_pie_chart(data, label, datasets)
             else:
                 _log.info("No data available for " + label)
 
@@ -1494,9 +1600,9 @@ def create_pie_chart(data, metric_name, labels, width=800, height=600):
     df = pd.DataFrame({'Labels': labels, 'Values': data})
 
     # Create the pie chart using Plotly
-    fig = px.pie(df, names='Labels', values='Values', title=f'{metric_name} Distribution Across Collections')
+    fig = px.pie(df, names='Labels', values='Values', title=f'{metric_name} Distribution Across Datasets')
     fig.update_traces(textposition='inside', textinfo='percent+label')
-    fig.update_layout(showlegend=True, legend_title_text='Collections', width=width, height=height)
+    fig.update_layout(showlegend=True, legend_title_text='Datasets', width=width, height=height)
 
     # Show the pie chart
     fig.show()
