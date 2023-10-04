@@ -998,7 +998,7 @@ def getSeriesList(uids, api_url = "", csv_filename = "", format = ""):
     elif format == "csv":
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f'series_report_{timestamp}.csv'
-        grouped.to_csv(filename, index=False)
+        df.to_csv(filename, index=False)
         _log.info(f"Collection summary report saved as '{filename}'")
     else:
         return df
