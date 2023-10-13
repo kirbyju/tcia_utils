@@ -1759,9 +1759,65 @@ def makeSeriesReport(series_data, input_type = "", format = "", filename = None,
         # Save the report to a text file
         with open(filename, "w") as file:
             file.write(report)
-        print(f"Report saved to {filename}.")
+        _log.info(f"Report saved to {filename}.")
     else:
         _log.info(report)
+
+
+def reportDicomTags(series_uids, elements=None):
+    """
+    Extract DICOM tags for a list of Series Instance UIDs.
+
+    Args:
+    - series_uids: A list of Series Instance UIDs to extract DICOM tags.
+    - elements: (optional) A list of elements to extract. If not specified, all elements are extracted.
+                Elements should be specified with parentheses, e.g. ['(0018,0015)', '(0008,0060)'].
+
+    Returns:
+    - A DataFrame containing the extracted DICOM tags with concatenated column headers.
+    """
+    # Initialize an empty list to store DataFrames
+    tag_summary_list = []
+
+    for uid in series_uids:
+        # Call nbia.getDicomTags to get tags for each uid
+        tags = getDicomTags(uid, format="df")
+
+        # Create a dictionary to store the extracted information with concatenated column headers
+        extracted_info = {}
+        
+        # Add the 'Series Instance UID' column
+        extracted_info['Series Instance UID (0020,000E)'] = uid
+
+        # Extract the relevant information from tags based on elements
+        if not elements:
+            # Extract all elements
+            for index, row in tags.iterrows():
+                name = row['name']
+                element = row['element']
+                if name != 'Series Instance UID':
+                    extracted_info[f'{name} {element}'] = row['data']
+        else:
+            # Extract specific elements
+            for element in elements:
+                matching_rows = tags[tags['element'] == element]
+                if not matching_rows.empty:
+                    # Use the 'name' and 'data' columns with concatenated column headers
+                    name = matching_rows['name'].values[0]
+                    element = matching_rows['element'].values[0]
+                    extracted_info[f'{name} {element}'] = matching_rows['data'].values[0]
+
+        # Create a DataFrame for the current uid and extracted information
+        tag_summary_df = pd.DataFrame(extracted_info, index=[0])
+
+        # Append the DataFrame to the list
+        tag_summary_list.append(tag_summary_df)
+
+    # Concatenate all DataFrames in the list to create tagSummary
+    tagSummary = pd.concat(tag_summary_list, ignore_index=True)
+
+    return tagSummary
+    
 
 ##########################
 ##########################
@@ -1963,7 +2019,7 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
         else:
             for i in result.available_segments:
                 if i == 10 and len(result.available_segments) > 10:
-                    print(f"Previewing first 10 of {len(result.available_segments)} labels. Please use a DICOM workstation such as 3D Slicer to view the full dataset.")
+                    _log.warning(f"Previewing first 10 of {len(result.available_segments)} labels. Please use a DICOM workstation such as 3D Slicer to view the full dataset.")
                 if kwargs[list(kwargs)[i-1]] == True:
                     mask_data = result.segment_data(i)
                     cmap = matplotlib.colors.ListedColormap(colorPaleatte[i])
@@ -2028,7 +2084,7 @@ def viewSeriesRT(seriesPath = "", RTPath = ""):
         plt.imshow(pixel_data[x], cmap = plt.cm.gray, interpolation = None)
         for i in range(len(kwargs)):
             if i == 9 and len(roi_names) > 10:
-                print(f"Previewing first 10 of {len(roi_names)} labels. Please use a DICOM workstation such as 3D Slicer to view the full dataset.")
+                _log.warning(f"Previewing first 10 of {len(roi_names)} labels. Please use a DICOM workstation such as 3D Slicer to view the full dataset.")
             if kwargs[f"{i+1} - {roi_names[i]}"] == True:
                 try:
                     mask_data = rtstruct.get_roi_mask_by_name(roi_names[i])
@@ -2121,7 +2177,7 @@ def viewSeriesAnnotation(seriesUid = "", seriesPath = "", annotationUid = "", an
         elif annotationModality == "RTSTRUCT":
             viewSeriesRT(seriesPath, annotationPath)
         else:
-            print("Wrong modality for the segmentation series, please check your selection.")
+            _log.error(f"Wrong modality for the segmentation series, please check your selection.")
     elif not os.path.isdir(seriesPath):
         seriesInvalid(seriesUid, seriesPath)
     else:
