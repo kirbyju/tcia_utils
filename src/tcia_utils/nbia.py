@@ -670,6 +670,7 @@ def downloadSeries(series_data,
     Set hash = "y" if you'd like to retrieve MD5 hash values for each image.
     Saves to tciaDownload folder in current directory if no path is specified.
     Set input_type = "list" to pass a list of Series UIDs instead of JSON.
+    Set input_type = "df" to pass a dataframe that contains a "SeriesInstanceUID" column.
     Set input_type = "manifest" to pass the path of a *.TCIA manifest file as series_data.
     Format can be set to "df" or "csv" to return series metadata.
     Setting a csv_filename will create the csv even if format isn't specified.
@@ -692,6 +693,9 @@ def downloadSeries(series_data,
     # if input = manifest convert manifest to python list of uids
     if input_type == "manifest":
         series_data = manifestToList(series_data)
+    
+    if input_type == "df":
+        series_data = series_data['SeriesInstanceUID'].tolist()
 
     # set sample size if you don't want to download the full set of results
     if number > 0:
@@ -709,10 +713,10 @@ def downloadSeries(series_data,
     try:
         for x in series_data:
             # specify whether input data is json or list
-            if input_type == "list" or input_type == "manifest":
-                seriesUID = x
-            else:
+            if input_type == "":
                 seriesUID = x['SeriesInstanceUID']
+            else:                
+                seriesUID = x
             # set path for downloads and check for previously downloaded data
             if path != "":
                 pathTmp = path + "/" + seriesUID
