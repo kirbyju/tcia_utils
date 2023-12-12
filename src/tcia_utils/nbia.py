@@ -1357,7 +1357,7 @@ def formatSeriesInput(series_data, input_type, api_url):
 
     # if input_type is a list or manifest, download relevant metadata
     if input_type == "list" or input_type == "manifest":
-        df = getSeriesList(series_data, api_url = "")
+        df = getSeriesList(series_data, api_url = api_url)
         # Rename the headers
         if df is None or df.empty:
             raise StopExecution
@@ -1612,9 +1612,10 @@ def create_pie_chart(data, metric_name, labels, width=800, height=600):
     fig.show()
 
 
-def format_disk_space(size_in_bytes):
+def format_disk_space_binary(size_in_bytes):
     """
-    Helper function for reportCollections() to format bytes to other units.
+    Helper function for reportCollections() to format bytes to other binary units.
+    I.e. Mebibytes (MiB) reported in Windows.
     """
     if size_in_bytes < 1024 ** 2:
         return f'{size_in_bytes / 1024:.2f} KB'
@@ -1627,6 +1628,23 @@ def format_disk_space(size_in_bytes):
     else:
         return f'{size_in_bytes / (1024 ** 5):.2f} PB'
         
+def format_disk_space(size_in_bytes):
+    """
+    Helper function for reportCollections() to format bytes to other units.
+    I.e. Megabytes (MB) reported in Mac/Linux.
+    """
+    if size_in_bytes < 1000:
+        return f'{size_in_bytes:.2f} B'
+    elif size_in_bytes < 1000 ** 2:
+        return f'{size_in_bytes / 1000:.2f} kB'
+    elif size_in_bytes < 1000 ** 3:
+        return f'{size_in_bytes / (1000 ** 2):.2f} MB'
+    elif size_in_bytes < 1000 ** 4:
+        return f'{size_in_bytes / (1000 ** 3):.2f} GB'
+    elif size_in_bytes < 1000 ** 5:
+        return f'{size_in_bytes / (1000 ** 4):.2f} TB'
+    else:
+        return f'{size_in_bytes / (1000 ** 5):.2f} PB'
         
 def reportSeriesReleaseDate(series_data, chart_width = 1024, chart_height = 768):
     """
