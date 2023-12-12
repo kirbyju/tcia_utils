@@ -1397,7 +1397,22 @@ def reportDoiSummary(series_data, input_type="", api_url = "", format=""):
     """
     Generate a summary report about DOIs from series metadata created by the
     output of getSeries(), getSeriesList(), a python list of Series UIDs, or
-    from a TCIA manifest.  See reportDataSummary() for more details.
+    from a TCIA manifest.  
+    
+    Parameters:
+    series_data: The input data to be summarized (expects JSON by default).
+    input_type: Set to 'df' for dataframe.  
+                Set to 'list' for python list, or 'manifest' for *.TCIA manifest file.
+                If manifest is used, series_data should be the path to the TCIA manifest file.
+    format: Output format (default is dataframe, 'csv' for CSV file, 'chart' for charts).
+    report_type: Defaults to summarizing by collection. Use 'doi' to group by DOIs.
+                Helper functions reportCollectionSummary() and reportDoiSummary() are
+                the expected way to deal with this, which pass this parameter accordingly.
+    api_url: Only necessary if input_type = list or manifest.
+            Set to 'restricted' for limited-access collections or 
+            'nlst' for National Lung Screening trial.
+            
+    See reportDataSummary() for more details.
     """
     
     df = reportDataSummary(series_data, input_type, report_type = "doi", api_url = api_url, format = format)   
@@ -1409,6 +1424,20 @@ def reportCollectionSummary(series_data, input_type="", api_url = "", format="")
     Generate a summary report about Collections from series metadata created by the
     output of getSeries(), getSeriesList(), getSharedcart(), getUpdatedSeries(),
     a python list of Series UIDs, or from a TCIA manifest. 
+    
+    Parameters:
+    series_data: The input data to be summarized (expects JSON by default).
+    input_type: Set to 'df' for dataframe.  
+                Set to 'list' for python list, or 'manifest' for *.TCIA manifest file.
+                If manifest is used, series_data should be the path to the TCIA manifest file.
+    format: Output format (default is dataframe, 'csv' for CSV file, 'chart' for charts).
+    report_type: Defaults to summarizing by collection. Use 'doi' to group by DOIs.
+                Helper functions reportCollectionSummary() and reportDoiSummary() are
+                the expected way to deal with this, which pass this parameter accordingly.
+    api_url: Only necessary if input_type = list or manifest.
+            Set to 'restricted' for limited-access collections or 
+            'nlst' for National Lung Screening trial.
+            
     See reportDataSummary() for more details.
     """
     
