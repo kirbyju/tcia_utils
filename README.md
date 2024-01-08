@@ -10,6 +10,11 @@ pip install tcia_utils
 
 # Usage
 
+To import functions related to Wordpress, which holds metadata for TCIA datasets:
+```
+from tcia_utils import wordpress
+```
+
 To import functions related to the NBIA software, which holds TCIA's DICOM radiology data:
 ```
 from tcia_utils import nbia
@@ -20,7 +25,7 @@ To import functions related to the PathDB software, which holds TCIA's histopath
 from tcia_utils import pathdb
 ```
 
-To import functions related to Datacite, which holds metadata and Digital Object Identifiers (DOIs) for TCIA datasets:
+To import functions related to Datacite, which holds information about citations and Digital Object Identifiers (DOIs) for TCIA datasets:
 ```
 from tcia_utils import datacite
 ```

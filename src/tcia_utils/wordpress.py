@@ -213,3 +213,32 @@ def getCitations(per_page=200, format="", file_name=None, fields=None, ids=None,
     # Call getQuery to retrieve the data
     data = getQuery(endpoint, per_page, format, file_name, fields, ids, query)
     return data
+
+
+def getVersions(per_page=200, format="", file_name=None, fields=None, ids=None, query=None):
+    """
+    Retrieve Version metadata from the API.
+
+    Args:
+        per_page (int, optional): Number of citations per page (default is 200).
+        format (str, optional): Output format ('json' or 'df') (default is JSON if not populated).
+        file_name (str, optional): File name to save the output as JSON or CSV if format = "df".
+        fields (list, optional): List of custom fields to include in the return values (default is None).
+                                 Possible fields: id, date, date_gmt, guid, modified, modified_gmt, slug,
+                                 status, type, link, title, template, yoast_head, yoast_head_json, 
+                                 version_number, version_text, version_date, version_downloads, 
+                                 related_collection, related_analysis_result, _links.
+.
+        ids (list, optional): List of IDs to include in the request (default is None).
+        query (str, optional): Search criteria to filter results (default is None).
+
+    Returns:
+        list or DataFrame: Retrieved citation metadata based on the specified parameters and format.
+
+    """
+    # Set the endpoint for a Citation query
+    endpoint = "versions/"
+    
+    # Call getQuery to retrieve the data
+    data = getQuery(endpoint, per_page, format, file_name, fields, ids, query)
+    return data
