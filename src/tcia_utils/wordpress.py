@@ -4,6 +4,7 @@ import requests
 from datetime import datetime
 import logging
 from tcia_utils.utils import searchDf
+from tcia_utils.utils import remove_html_tags
 
 _log = logging.getLogger(__name__)
 logging.basicConfig(
@@ -13,7 +14,7 @@ logging.basicConfig(
 
 base_url = "https://cancerimagingarchive.net/api/v1/"
 
-def getQuery(endpoint, per_page, format="", file_name=None, fields=None, ids=None, query=None):
+def getQuery(endpoint, per_page, format="", file_name=None, fields=None, ids=None, query=None, removeHtml=None):
     """
     Handle query basics that are common to all endpoints such as
     paging results, setting output formats, and file names.
@@ -83,6 +84,34 @@ def getQuery(endpoint, per_page, format="", file_name=None, fields=None, ids=Non
         elif format == "df":
             # Convert to DataFrame
             df = pd.DataFrame(data)
+            # optionally remove HTML formatting for relevant columns
+            if removeHtml == "yes":
+                if "collections" in endpoint:
+                    for column in ["collection_summary", "detailed_description", "publications_using", 
+                                   "additional_resources", "collection_download_info", "publications_related",
+                                   "version_change_log", "collection_acknowledgements"]:
+                        if column in df:
+                            df[column] = df[column].apply(remove_html_tags)
+                elif "analysis" in endpoint:
+                    for column in ["result_summary", "detailed_description", "publications_using", 
+                                   "additional_resources", "collection_download_info", "publications_related",
+                                   "version_change_log", "result_acknowledgements"]:
+                        if column in df:
+                            df[column] = df[column].apply(remove_html_tags)
+                elif "downloads" in endpoint:
+                    for column in ["description"]:
+                        if column in df:
+                            df[column] = df[column].apply(remove_html_tags)
+                elif "citations" in endpoint:
+                    for column in ["tcia_citation_text, tcia_citation_statement"]:
+                        if column in df:
+                            df[column] = df[column].apply(remove_html_tags)
+                elif "versions" in endpoint:
+                    for column in ["version_text"]:
+                        if column in df:
+                            df[column] = df[column].apply(remove_html_tags)
+
+            # save csv if file name provided
             if file_name:
                 df.to_csv(file_name, index=False)
             return df
@@ -93,7 +122,7 @@ def getQuery(endpoint, per_page, format="", file_name=None, fields=None, ids=Non
         return None
 
 
-def getCollections(per_page=100, format="", file_name=None, fields=None, ids=None, query=None):
+def getCollections(per_page=100, format="", file_name=None, fields=None, ids=None, query=None, removeHtml=None):
     """
     Retrieve collections from the API.
 
@@ -121,11 +150,11 @@ def getCollections(per_page=100, format="", file_name=None, fields=None, ids=Non
     endpoint = "collections/"
     
     # call getQuery to retrieve the data
-    data = getQuery(endpoint, per_page, format, file_name, fields, ids, query)
+    data = getQuery(endpoint, per_page, format, file_name, fields, ids, query, removeHtml)
     return data
 
 
-def getAnalyses(per_page=100, format="", file_name=None, fields=None, ids=None, query=None):
+def getAnalyses(per_page=100, format="", file_name=None, fields=None, ids=None, query=None, removeHtml=None):
     """
     Retrieve Analysis Results from the API.
 
@@ -153,11 +182,11 @@ def getAnalyses(per_page=100, format="", file_name=None, fields=None, ids=None, 
     endpoint = "analysis-results/"
     
     # call getQuery to retrieve the data
-    data = getQuery(endpoint, per_page, format, file_name, fields, ids, query)
+    data = getQuery(endpoint, per_page, format, file_name, fields, ids, query, removeHtml)
     return data
 
 
-def getDownloads(per_page=200, format="", file_name=None, fields=None, ids=None, query=None):
+def getDownloads(per_page=200, format="", file_name=None, fields=None, ids=None, query=None, removeHtml=None):
     """
     Retrieve Download metadata from the API.
 
@@ -184,11 +213,11 @@ def getDownloads(per_page=200, format="", file_name=None, fields=None, ids=None,
     endpoint = "downloads/"
     
     # Call getQuery to retrieve the data
-    data = getQuery(endpoint, per_page, format, file_name, fields, ids, query)
+    data = getQuery(endpoint, per_page, format, file_name, fields, ids, query, removeHtml)
     return data
 
 
-def getCitations(per_page=200, format="", file_name=None, fields=None, ids=None, query=None):
+def getCitations(per_page=200, format="", file_name=None, fields=None, ids=None, query=None, removeHtml=None):
     """
     Retrieve Citation metadata from the API.
 
@@ -205,17 +234,16 @@ def getCitations(per_page=200, format="", file_name=None, fields=None, ids=None,
 
     Returns:
         list or DataFrame: Retrieved citation metadata based on the specified parameters and format.
-
     """
     # Set the endpoint for a Citation query
     endpoint = "citations/"
     
     # Call getQuery to retrieve the data
-    data = getQuery(endpoint, per_page, format, file_name, fields, ids, query)
+    data = getQuery(endpoint, per_page, format, file_name, fields, ids, query, removeHtml)
     return data
 
 
-def getVersions(per_page=200, format="", file_name=None, fields=None, ids=None, query=None):
+def getVersions(per_page=200, format="", file_name=None, fields=None, ids=None, query=None, removeHtml=None):
     """
     Retrieve Version metadata from the API.
 
@@ -240,5 +268,5 @@ def getVersions(per_page=200, format="", file_name=None, fields=None, ids=None, 
     endpoint = "versions/"
     
     # Call getQuery to retrieve the data
-    data = getQuery(endpoint, per_page, format, file_name, fields, ids, query)
+    data = getQuery(endpoint, per_page, format, file_name, fields, ids, query, removeHtml)
     return data

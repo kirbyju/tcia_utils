@@ -13,9 +13,15 @@ import matplotlib
 import matplotlib.pyplot as plt
 import plotly.express as px
 import pydicom
+import pydicom_seg
+import rt_utils
+import tkinter
+from tkinter import filedialog
 import numpy as np
 from ipywidgets import interact
 from tcia_utils.utils import searchDf
+from tcia_utils.utils import format_disk_space
+from tcia_utils.utils import remove_html_tags
 from tcia_utils.datacite import getDoi
 
 
@@ -542,13 +548,16 @@ def getUpdatedSeries(date,
     """
     Gets "new" series metadata from a specified api_url.
     The date format is YYYY/MM/DD.
-    NOTE: Unlike other API endpoints, this one expects MM/DD/YYYY, 
-      but we convert from YYYY/MM/DD so tcia-utils date inputs are consistent.
+    NOTE: Unlike other API endpoints, this one expects DD/MM/YYYY, 
+      but we convert to YYYY/MM/DD so tcia-utils date inputs are consistent.
     """
     endpoint = "getUpdatedSeries"
 
     # convert to NBIA's expected date format
-    nbiaDate = datetime.strptime(date, "%Y/%m/%d").strftime("%m/%d/%Y")
+    # It appears there is likely a bug in the API here.  
+    # Date format for the API is currently DD/MM/YYYY so we'll convert it.
+    nbiaDate = datetime.strptime(date, "%Y/%m/%d").strftime("%d/%m/%Y")
+
 
     # create options dict to construct URL
     options = {}
@@ -871,7 +880,7 @@ def downloadImage(seriesUID,
 # Advanced API Endpoints
 
 
-def getCollectionDescriptions(api_url = "", format = ""):
+def getCollectionDescriptions(api_url = "", format = "", removeHtml = None):
     """
     Gets HTML-formatted descriptions of collections and their DOIs
     """
@@ -879,7 +888,11 @@ def getCollectionDescriptions(api_url = "", format = ""):
     options = {}
 
     data = queryData(endpoint, options, api_url, format)
-    return data
+    if format == "df" and removeHtml == "yes":
+        data['description'] = data['description'].apply(remove_html_tags)
+        return data
+    else:
+        return data
 
 
 def getCollectionPatientCounts(api_url = "", format = ""):
@@ -1413,8 +1426,7 @@ def reportDoiSummary(series_data, input_type="", api_url = "", format=""):
             'nlst' for National Lung Screening trial.
             
     See reportDataSummary() for more details.
-    """
-    
+    """    
     df = reportDataSummary(series_data, input_type, report_type = "doi", api_url = api_url, format = format)   
     return df
 
@@ -1640,41 +1652,7 @@ def create_pie_chart(data, metric_name, labels, width=800, height=600):
     # Show the pie chart
     fig.show()
 
-
-def format_disk_space_binary(size_in_bytes):
-    """
-    Helper function for reportCollections() to format bytes to other binary units.
-    I.e. Mebibytes (MiB) reported in Windows.
-    """
-    if size_in_bytes < 1024 ** 2:
-        return f'{size_in_bytes / 1024:.2f} KB'
-    elif size_in_bytes < 1024 ** 3:
-        return f'{size_in_bytes / (1024 ** 2):.2f} MB'
-    elif size_in_bytes < 1024 ** 4:
-        return f'{size_in_bytes / (1024 ** 3):.2f} GB'
-    elif size_in_bytes < 1024 ** 5:
-        return f'{size_in_bytes / (1024 ** 4):.2f} TB'
-    else:
-        return f'{size_in_bytes / (1024 ** 5):.2f} PB'
-        
-def format_disk_space(size_in_bytes):
-    """
-    Helper function for reportCollections() to format bytes to other units.
-    I.e. Megabytes (MB) reported in Mac/Linux.
-    """
-    if size_in_bytes < 1000:
-        return f'{size_in_bytes:.2f} B'
-    elif size_in_bytes < 1000 ** 2:
-        return f'{size_in_bytes / 1000:.2f} kB'
-    elif size_in_bytes < 1000 ** 3:
-        return f'{size_in_bytes / (1000 ** 2):.2f} MB'
-    elif size_in_bytes < 1000 ** 4:
-        return f'{size_in_bytes / (1000 ** 3):.2f} GB'
-    elif size_in_bytes < 1000 ** 5:
-        return f'{size_in_bytes / (1000 ** 4):.2f} TB'
-    else:
-        return f'{size_in_bytes / (1000 ** 5):.2f} PB'
-        
+    
 def reportSeriesReleaseDate(series_data, chart_width = 1024, chart_height = 768):
     """
     Ingests the results of getSeries() as df or JSON and visualizes the 
@@ -1941,14 +1919,26 @@ def makeVizLinks(series_data, csv_filename=""):
 
 def viewSeries(seriesUid = "", path = ""):
     """
-    Visualizes a Series (scan) you've downloaded in the notebook
-    Requires EITHER a seriesUid or path parameter
-    Leave seriesUid empty if you want to provide a custom path.
+    Visualizes a Series (scan) you've downloaded.
+    If neither seriesUid nor path is specified, the user will be 
+    prompted to select a directory using a GUI.
     The function assumes "tciaDownload/<seriesUid>/" as path if
     seriesUid is provided since this is where downloadSeries() saves data.
+    Leave seriesUid empty if you want to provide a custom path.
     """
     # set path where downloadSeries() saves the data if seriesUid is provided
-    if seriesUid != "":
+    if seriesUid == "" and path == "":
+        try:
+            tkinter.Tk().withdraw()
+            folder_path = filedialog.askdirectory()
+            path = folder_path
+        except Exception:
+            _log.error(
+                f"\nYou are executing the function with unspecified parameters in an unsupported enviroment,"
+                "\nor with an unsupported modality. Please specify the reference series UID or the folder path instead."
+            )
+            return
+    elif seriesUid != "":
         path = "tciaDownload/" + seriesUid
 
     # error message function for when series doesn't exist or is invalid data
@@ -2016,7 +2006,6 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
     Used by the viewSeriesAnnotation() function.
     Not recommended to be used as a standalone function.
     """
-    import pydicom_seg 
     slices = [pydicom.dcmread(seriesPath + '/' + s) for s in os.listdir(seriesPath) if s.endswith(".dcm")]
     slices.sort(key = lambda x: int(x.InstanceNumber), reverse = True)
 
@@ -2100,7 +2089,6 @@ def viewSeriesRT(seriesPath = "", RTPath = ""):
     Used by the viewSeriesAnnotation() function.
     Not recommended to be used as a standalone function.
     """
-    import rt_utils 
     rtstruct = rt_utils.RTStructBuilder.create_from(seriesPath, RTPath)
     roi_names = rtstruct.get_roi_names()
 
@@ -2179,8 +2167,6 @@ def viewSeriesAnnotation(seriesUid = "", seriesPath = "", annotationUid = "", an
     annotationUid is provided since this is where downloadSeries() saves data.
     Note that non-axial images might not be correctly displayed.
     """
-    import tkinter
-    from tkinter import filedialog
     def seriesInvalid(uid, path):
         if uid:
             link = f"https://nbia.cancerimagingarchive.net/viewer/?series={uid}"
