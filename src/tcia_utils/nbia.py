@@ -15,14 +15,17 @@ import plotly.express as px
 import pydicom
 import pydicom_seg
 import rt_utils
-import tkinter
-from tkinter import filedialog
 import numpy as np
 from ipywidgets import interact
 from tcia_utils.utils import searchDf
 from tcia_utils.utils import format_disk_space
 from tcia_utils.utils import remove_html_tags
 from tcia_utils.datacite import getDoi
+try:
+    import tkinter
+    from tkinter import filedialog
+except ModuleNotFoundError:
+    tkinter = None
 
 
 class StopExecution(Exception):
