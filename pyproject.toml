@@ -29,7 +29,7 @@ dependencies = [
   "ipywidgets", 
   "pydicom-seg", 
   "rt-utils",
-  { package = "jsonschema", version = "^4.21.1" } # Prevent pydicom-seg from installing v3.2.0
+  "jsonschema==4.21.1" # Prevent pydicom-seg from installing v3.2.0
 ]
 
 [project.urls]
