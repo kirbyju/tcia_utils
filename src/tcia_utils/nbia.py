@@ -40,7 +40,7 @@ logging.basicConfig(
 )
 
 # set token creation URL for getToken and refreshToken
-token_url = "https://keycloak.dbmi.cloud/auth/realms/TCIA/protocol/openid-connect/token"
+token_url = "https://keycloak-stg.dbmi.cloud/auth/realms/TCIA/protocol/openid-connect/token"
 
 # Used by functions that accept parameters used in GUI Simple Search
 # e.g. getSimpleSearchWithModalityAndBodyPartPaged()
