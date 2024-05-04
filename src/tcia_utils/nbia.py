@@ -1405,6 +1405,10 @@ def formatSeriesInput(series_data, input_type, api_url):
     for col in required_columns:
             if col not in df.columns:
                 df[col] = None
+                
+    # Make all URLs lower case
+    df['CollectionURI'] = df['CollectionURI'].str.lower()
+    df['LicenseURI'] = df['LicenseURI'].str.lower()
     
     return df
 
