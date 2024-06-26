@@ -131,8 +131,8 @@ def setApiUrl(endpoint, api_url):
                 # Using "Search with Authentication" API (login required): https://wiki.cancerimagingarchive.net/x/X4ATBg
                 # Checking to see if a valid authentication token exists
                 if 'token_exp_time' not in globals():
-                    _log.error("Error using token for accessing the Restricted API. Create one using getToken().")
-                    raise StopExecution
+                    getToken(user = "nbia_guest")
+                    _log.info("Accessing the API anonymously. To access restricted data use nbia.getToken() with your credentials.")
                 if 'token_exp_time' in globals() and datetime.now() > token_exp_time:
                     refreshToken()
                 base_url = "https://services.cancerimagingarchive.net/nbia-api/services/v2/"
@@ -326,8 +326,8 @@ def queryData(endpoint, options, api_url, format):
             elif format == "csv":
                 df = pd.DataFrame(data)
                 df.to_csv(endpoint + ".csv")
-                df.to_csv(f"{endpoint}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}.csv")
-                _log.info(f"CSV saved to: {endpoint}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}.csv")
+                df.to_csv(f"{endpoint}_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.csv")
+                _log.info(f"CSV saved to: {endpoint}_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.csv")
                 return df
             else:
                 return data
@@ -1773,7 +1773,7 @@ def create_pie_chart(data, metric_name, labels, width=800, height=600):
     fig.show()
 
     
-def reportSeriesReleaseDate(series_data, chart_width = 1024, chart_height = 768):
+def reportSeriesSubmissionDate(series_data, chart_width = 1024, chart_height = 768):
     """
     Ingests the results of getSeries() as df or JSON and visualizes the 
     submission timeline of the series in it by collection.
@@ -1819,6 +1819,52 @@ def reportSeriesReleaseDate(series_data, chart_width = 1024, chart_height = 768)
     # display figure
     fig.show()
 
+    
+def reportSeriesReleaseDate(series_data, chart_width = 1024, chart_height = 768):
+    """
+    Ingests the results of getSeries() as df or JSON and visualizes the 
+    release/publication timeline of the series in it by collection.
+    
+    Currently this only supports getSeries(), but feature requests have been submitted
+    to the NBIA team to make it possible to use this with the other series API endpoints.
+    
+    Chart width and height can be customized.
+    """
+    
+    # format series_data into df depending on input_type
+    df = formatSeriesInput(series_data, input_type = "", api_url = "")
+    
+    # Convert 'DateReleased' column to datetime
+    df['DateReleased'] = pd.to_datetime(df['DateReleased'])
+
+    # Filter out rows with missing timestamps
+    df = df.dropna(subset=['DateReleased'])
+
+    # Group by 'Collection' and 'DateReleased' (daily) and count unique 'SeriesInstanceUIDs'
+    daily_data = df.groupby(['Collection', pd.Grouper(key='DateReleased', freq='D')])['SeriesInstanceUID'].nunique().reset_index()
+
+    # Calculate cumulative counts for each collection
+    daily_data['CumulativeCount'] = daily_data.groupby('Collection')['SeriesInstanceUID'].cumsum()
+
+    # Create a line chart using Plotly Express
+    fig = px.line(
+        daily_data,
+        x='TimeStamp',
+        y='CumulativeCount',
+        color='Collection',
+        labels={'CumulativeCount': 'Total Series'},
+        title='Cumulative Total Series Over Time by Collection (Daily Aggregation)',
+        markers='true'
+    )
+
+    # Customize the line thickness and chart size
+    fig.update_xaxes(title='Release Date')
+    fig.update_yaxes(title='Total Series')
+    fig.update_traces(line=dict(width=4), marker=dict(size=15))
+    fig.update_layout(width=chart_width, height=chart_height)
+
+    # display figure
+    fig.show()    
 
 def makeSeriesReport(series_data, input_type = "", format = "", filename = None, api_url = ""):
     """

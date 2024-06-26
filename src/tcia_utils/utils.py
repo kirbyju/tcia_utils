@@ -3,34 +3,75 @@ import inspect
 from bs4 import BeautifulSoup
 from unidecode import unidecode
 
-def searchDf(search_term, column_name=None, dataframe=None):
+def searchDf(search_term, dataframe='df', column_name=None):
     """
-    Helper function to filter dataframes.
-    It allows you to specify a search_term, the column_name 
-    (optional: if you'd like to narrow the search to a single column),
-    and the variable name of the dataframe object to filter.  
-    It assumes the dataframe variable is df if no dataframe name
-    is specified.
-    """
+    This function searches for a term or a list of terms in a specified dataframe and column.
     
-    if dataframe is not None:
-        df = dataframe
-    else:
-        caller_frame = inspect.currentframe().f_back
-        caller_globals = caller_frame.f_globals
+    Parameters:
+    search_term (str or list): The term or list of terms to search for.
+    dataframe (str or pd.DataFrame, optional): The dataframe to search in. If a string is provided, it is assumed to be the name of a dataframe in the global scope. Defaults to 'df'.
+    column_name (str, optional): The name of the column to restrict the search to. If not provided, the search is performed across all columns.
 
-        if 'df' in caller_globals:
-            df = caller_globals['df']
-        else:
-            raise ValueError("Dataframe variable 'df' not found in the global namespace.")
+    Returns:
+    pd.DataFrame: A dataframe containing the rows where the search term was found.
+    """
+    # If search_term is a string, convert it to a list
+    if isinstance(search_term, str):
+        search_term = [search_term]
 
+    # If dataframe is a string, assume it's the name of a dataframe in the global scope
+    if isinstance(dataframe, str):
+        try:
+            dataframe = globals()[dataframe]
+        except KeyError:
+            raise ValueError(f"No dataframe named '{dataframe}' found in the global scope.")
+
+    # If column_name is provided, restrict the search to that column
     if column_name:
-        result = df[df[column_name].astype(str).str.contains(search_term, case=False)]
+        try:
+            contains_values = dataframe[column_name].apply(lambda x: any(value.lower() in str(x).lower() for value in search_term))
+        except KeyError:
+            raise ValueError(f"No column named '{column_name}' found in the dataframe.")
     else:
-        result = df[df.apply(lambda row: any(row.astype(str).str.contains(search_term, case=False)), axis=1)]
-    # reset the index
-    result = result.reset_index(drop=True)
-    return result
+        contains_values = dataframe.applymap(lambda x: any(value.lower() in str(x).lower() for value in search_term))
+
+    rows_with_values = contains_values.any(axis=1)
+    df_with_values = dataframe[rows_with_values]
+
+    return df_with_values
+
+
+def copy_df_cols(df_to_update, columns_to_copy, source_df, key_column):
+    """
+    Copy specified columns from source_df to df_to_update based on a key_column used as the lookup.
+    
+    Parameters:
+    df_to_update (pd.DataFrame): The dataframe that needs to be updated.
+    columns_to_copy (str or list): The column(s) to copy from source_df to df_to_update. Can be a single column name (str) or a list of column names.
+    source_df (pd.DataFrame): The dataframe with the values you want to copy.
+    key_column (str): The column name to use for matching the rows between the two dataframes.
+    
+    Returns:
+    pd.DataFrame: The updated dataframe.
+    """
+    # If columns_to_copy is a string, convert it to a list
+    if isinstance(columns_to_copy, str):
+        columns_to_copy = [columns_to_copy]
+
+    for column_to_copy in columns_to_copy:
+        # Merging df_to_update with the specified column from source_df using the match_column as the key
+        updated_df = df_to_update.merge(source_df[[key_column, column_to_copy]], 
+                                        on=key_column, 
+                                        how='left', 
+                                        suffixes=('', '_lookup'))
+
+        # Updating the specified column in df_to_update with the values from source_df
+        updated_df[column_to_copy] = updated_df[f"{column_to_copy}_lookup"].combine_first(updated_df[column_to_copy])
+
+        # Dropping the temporary column created during the merge
+        updated_df.drop(columns=[f"{column_to_copy}_lookup"], inplace=True)
+
+    return updated_df
 
 
 def format_disk_space_binary(size_in_bytes):
