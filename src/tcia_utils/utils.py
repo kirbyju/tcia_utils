@@ -15,6 +15,8 @@ def searchDf(search_term, dataframe='df', column_name=None):
     Returns:
     pd.DataFrame: A dataframe containing the rows where the search term was found.
     """
+    import pandas as pd
+
     # If search_term is a string, convert it to a list
     if isinstance(search_term, str):
         search_term = [search_term]
@@ -29,16 +31,21 @@ def searchDf(search_term, dataframe='df', column_name=None):
     # If column_name is provided, restrict the search to that column
     if column_name:
         try:
-            contains_values = dataframe[column_name].apply(lambda x: any(value.lower() in str(x).lower() for value in search_term))
+            contains_values = dataframe[column_name].apply(
+                lambda x: any(value.lower() in str(x).lower() for value in search_term)
+            )
         except KeyError:
             raise ValueError(f"No column named '{column_name}' found in the dataframe.")
     else:
-        contains_values = dataframe.applymap(lambda x: any(value.lower() in str(x).lower() for value in search_term))
+        contains_values = dataframe.applymap(
+            lambda x: any(value.lower() in str(x).lower() for value in search_term)
+        )
 
-    rows_with_values = contains_values.any(axis=1)
+    rows_with_values = contains_values if column_name else contains_values.any(axis=1)
     df_with_values = dataframe[rows_with_values]
 
     return df_with_values
+
 
 
 def copy_df_cols(df_to_update, columns_to_copy, source_df, key_column):
