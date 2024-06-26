@@ -186,6 +186,24 @@ def getAnalyses(per_page=100, format="", file_name=None, fields=None, ids=None, 
     return data
 
 
+def update_download_file_column(data):
+    # Define a function to fetch 'source_url' from the API
+    def fetch_source_url(row, current_url):
+        if current_url:
+            return current_url
+        if isinstance(row, dict) and 'ID' in row:
+            media_id = row['ID']
+            response = requests.get(f'https://cancerimagingarchive.net/api/wp/v2/media/{media_id}')
+            if response.status_code == 200:
+                media_data = response.json()
+                return media_data.get('source_url', '')
+        return ''
+    
+    # Apply the function to the 'download_file' column to update it with the fetched URLs
+    data['download_url'] = data.apply(lambda x: fetch_source_url(x['download_file'], x.get('download_url')), axis=1)
+    return data
+
+
 def getDownloads(per_page=200, format="", file_name=None, fields=None, ids=None, query=None, removeHtml=None):
     """
     Retrieve Download metadata from the API.
@@ -214,6 +232,15 @@ def getDownloads(per_page=200, format="", file_name=None, fields=None, ids=None,
     
     # Call getQuery to retrieve the data
     data = getQuery(endpoint, per_page, format, file_name, fields, ids, query, removeHtml)
+    
+    if format == 'df':
+        # Convert the data to a DataFrame if it's not already one
+        if not isinstance(data, pd.DataFrame):
+            data = pd.DataFrame(data)
+        
+        # Copy download URLs from download_file to download_url column
+        data = update_download_file_column(data)
+        
     return data
 
 
