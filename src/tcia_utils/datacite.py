@@ -3,6 +3,7 @@ import requests
 from datetime import datetime
 import logging
 from tcia_utils.utils import searchDf
+from tcia_utils.utils import copy_df_cols
 
 _log = logging.getLogger(__name__)
 logging.basicConfig(

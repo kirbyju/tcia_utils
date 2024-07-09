@@ -15,7 +15,6 @@ def searchDf(search_term, dataframe='df', column_name=None):
     Returns:
     pd.DataFrame: A dataframe containing the rows where the search term was found.
     """
-    import pandas as pd
 
     # If search_term is a string, convert it to a list
     if isinstance(search_term, str):
@@ -32,25 +31,26 @@ def searchDf(search_term, dataframe='df', column_name=None):
     if column_name:
         try:
             contains_values = dataframe[column_name].apply(
-                lambda x: any(value.lower() in str(x).lower() for value in search_term)
+                lambda x: any(str(value).lower() in str(x).lower() for value in search_term)
             )
         except KeyError:
             raise ValueError(f"No column named '{column_name}' found in the dataframe.")
     else:
-        contains_values = dataframe.applymap(
-            lambda x: any(value.lower() in str(x).lower() for value in search_term)
+        contains_values = dataframe.apply(
+            lambda row: any(any(str(value).lower() in str(cell).lower() for value in search_term) for cell in row),
+            axis=1
         )
 
-    rows_with_values = contains_values if column_name else contains_values.any(axis=1)
+    rows_with_values = contains_values if column_name else contains_values
     df_with_values = dataframe[rows_with_values]
 
     return df_with_values
 
 
-
 def copy_df_cols(df_to_update, columns_to_copy, source_df, key_column):
     """
-    Copy specified columns from source_df to df_to_update based on a key_column used as the lookup.
+    Create a new dataframe which includes specified columns copied
+    from source_df to df_to_update based on a key_column used as the lookup.
     
     Parameters:
     df_to_update (pd.DataFrame): The dataframe that needs to be updated.
@@ -61,24 +61,35 @@ def copy_df_cols(df_to_update, columns_to_copy, source_df, key_column):
     Returns:
     pd.DataFrame: The updated dataframe.
     """
+    # Create a copy of df_to_update to avoid modifying the original DataFrame
+    df_to_update_copy = df_to_update.copy()
+    
     # If columns_to_copy is a string, convert it to a list
     if isinstance(columns_to_copy, str):
         columns_to_copy = [columns_to_copy]
 
     for column_to_copy in columns_to_copy:
-        # Merging df_to_update with the specified column from source_df using the match_column as the key
-        updated_df = df_to_update.merge(source_df[[key_column, column_to_copy]], 
-                                        on=key_column, 
-                                        how='left', 
-                                        suffixes=('', '_lookup'))
+        # Ensure the column_to_copy exists in the source_df
+        if column_to_copy not in source_df.columns:
+            _log.warning(f"Column '{column_to_copy}' does not exist in the source DataFrame.")
+            # If the column doesn't exist in source_df, create it in df_to_update with NaN values
+            df_to_update[column_to_copy] = pd.NA
+        else:
+            # Merging df_to_update with the specified column from source_df using the key_column as the key
+            updated_df = df_to_update.merge(source_df[[key_column, column_to_copy]], 
+                                            on=key_column, 
+                                            how='left', 
+                                            suffixes=('', '_lookup'))
 
-        # Updating the specified column in df_to_update with the values from source_df
-        updated_df[column_to_copy] = updated_df[f"{column_to_copy}_lookup"].combine_first(updated_df[column_to_copy])
+            # Check if the merged column exists before combining
+            lookup_col = f"{column_to_copy}_lookup"
+            if lookup_col in updated_df.columns:
+                # Updating the specified column in df_to_update with the values from source_df
+                updated_df[column_to_copy] = updated_df[lookup_col].combine_first(updated_df[column_to_copy])
 
-        # Dropping the temporary column created during the merge
-        updated_df.drop(columns=[f"{column_to_copy}_lookup"], inplace=True)
+            df_to_update = updated_df  # Update the df_to_update with merged results
 
-    return updated_df
+    return df_to_update
 
 
 def format_disk_space_binary(size_in_bytes):

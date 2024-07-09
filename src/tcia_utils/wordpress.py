@@ -5,6 +5,7 @@ from datetime import datetime
 import logging
 from tcia_utils.utils import searchDf
 from tcia_utils.utils import remove_html_tags
+from tcia_utils.utils import copy_df_cols
 
 _log = logging.getLogger(__name__)
 logging.basicConfig(
@@ -234,12 +235,10 @@ def getDownloads(per_page=200, format="", file_name=None, fields=None, ids=None,
     data = getQuery(endpoint, per_page, format, file_name, fields, ids, query, removeHtml)
     
     if format == 'df':
-        # Convert the data to a DataFrame if it's not already one
-        if not isinstance(data, pd.DataFrame):
-            data = pd.DataFrame(data)
-        
-        # Copy download URLs from download_file to download_url column
-        data = update_download_file_column(data)
+        # Check if 'download_file' column exists in the DataFrame
+        if 'download_file' in data.columns:
+            # Copy download URLs from download_file to download_url column
+            data = update_download_file_column(data)
         
     return data
 

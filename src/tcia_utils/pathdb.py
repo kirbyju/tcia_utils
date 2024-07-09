@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import logging
 from tcia_utils.utils import searchDf
+from tcia_utils.utils import copy_df_cols
 
 _log = logging.getLogger(__name__)
 logging.basicConfig(

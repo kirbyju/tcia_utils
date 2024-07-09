@@ -18,6 +18,7 @@ import rt_utils
 import numpy as np
 from ipywidgets import interact
 from tcia_utils.utils import searchDf
+from tcia_utils.utils import copy_df_cols
 from tcia_utils.utils import format_disk_space
 from tcia_utils.utils import remove_html_tags
 from tcia_utils.datacite import getDoi
@@ -1849,7 +1850,7 @@ def reportSeriesReleaseDate(series_data, chart_width = 1024, chart_height = 768)
     # Create a line chart using Plotly Express
     fig = px.line(
         daily_data,
-        x='TimeStamp',
+        x='DateReleased',
         y='CumulativeCount',
         color='Collection',
         labels={'CumulativeCount': 'Total Series'},
