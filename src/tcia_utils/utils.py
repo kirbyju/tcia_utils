@@ -13,7 +13,7 @@ def searchDf(search_term, dataframe='df', column_name=None):
     column_name (str, optional): The name of the column to restrict the search to. If not provided, the search is performed across all columns.
 
     Returns:
-    pd.DataFrame: A dataframe containing the rows where the search term was found.
+    pd.DataFrame: A dataframe containing the rows where the search term was found. Returns None if an error occurs.
     """
 
     # If search_term is a string, convert it to a list
@@ -25,7 +25,11 @@ def searchDf(search_term, dataframe='df', column_name=None):
         try:
             dataframe = globals()[dataframe]
         except KeyError:
-            raise ValueError(f"No dataframe named '{dataframe}' found in the global scope.")
+            _log.error(f"No dataframe named '{dataframe}' found in the global scope.")
+            return None
+    elif not isinstance(dataframe, pd.DataFrame):
+        _log.error("The dataframe parameter must be either a string or a pandas DataFrame.")
+        return None
 
     # If column_name is provided, restrict the search to that column
     if column_name:
@@ -34,14 +38,15 @@ def searchDf(search_term, dataframe='df', column_name=None):
                 lambda x: any(str(value).lower() in str(x).lower() for value in search_term)
             )
         except KeyError:
-            raise ValueError(f"No column named '{column_name}' found in the dataframe.")
+            _log.error(f"No column named '{column_name}' found in the dataframe.")
+            return None
     else:
         contains_values = dataframe.apply(
             lambda row: any(any(str(value).lower() in str(cell).lower() for value in search_term) for cell in row),
             axis=1
         )
 
-    rows_with_values = contains_values if column_name else contains_values
+    rows_with_values = contains_values
     df_with_values = dataframe[rows_with_values]
 
     return df_with_values
@@ -71,7 +76,7 @@ def copy_df_cols(df_to_update, columns_to_copy, source_df, key_column):
     for column_to_copy in columns_to_copy:
         # Ensure the column_to_copy exists in the source_df
         if column_to_copy not in source_df.columns:
-            _log.warning(f"Column '{column_to_copy}' does not exist in the source DataFrame.")
+            _log.error(f"Column '{column_to_copy}' does not exist in the source DataFrame.")
             # If the column doesn't exist in source_df, create it in df_to_update with NaN values
             df_to_update[column_to_copy] = pd.NA
         else:
