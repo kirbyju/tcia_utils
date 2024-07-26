@@ -1,7 +1,13 @@
 import pandas as pd
-import inspect
+import logging
 from bs4 import BeautifulSoup
 from unidecode import unidecode
+
+_log = logging.getLogger(__name__)
+logging.basicConfig(
+    format='%(asctime)s:%(levelname)s:%(message)s'
+    , level=logging.INFO
+)
 
 def searchDf(search_term, dataframe='df', column_name=None):
     """
