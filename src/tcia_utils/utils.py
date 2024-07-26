@@ -5,17 +5,17 @@ from unidecode import unidecode
 
 _log = logging.getLogger(__name__)
 logging.basicConfig(
-    format='%(asctime)s:%(levelname)s:%(message)s'
-    , level=logging.INFO
+    format='%(asctime)s:%(levelname)s:%(message)s',
+    level=logging.INFO
 )
 
-def searchDf(search_term, dataframe='df', column_name=None):
+def searchDf(search_term, dataframe=None, column_name=None):
     """
     This function searches for a term or a list of terms in a specified dataframe and column.
     
     Parameters:
     search_term (str or list): The term or list of terms to search for.
-    dataframe (str or pd.DataFrame, optional): The dataframe to search in. If a string is provided, it is assumed to be the name of a dataframe in the global scope. Defaults to 'df'.
+    dataframe (pd.DataFrame, optional): The dataframe to search in. Defaults to None.
     column_name (str, optional): The name of the column to restrict the search to. If not provided, the search is performed across all columns.
 
     Returns:
@@ -26,34 +26,26 @@ def searchDf(search_term, dataframe='df', column_name=None):
     if isinstance(search_term, str):
         search_term = [search_term]
 
-    # If dataframe is a string, assume it's the name of a dataframe in the global scope
-    if isinstance(dataframe, str):
-        try:
-            dataframe = globals()[dataframe]
-        except KeyError:
-            _log.error(f"No dataframe named '{dataframe}' found in the global scope.")
-            return None
-    elif not isinstance(dataframe, pd.DataFrame):
-        _log.error("The dataframe parameter must be either a string or a pandas DataFrame.")
+    # If dataframe is None, log an error and return None
+    if dataframe is None:
+        _log.error("No dataframe provided.")
         return None
 
     # If column_name is provided, restrict the search to that column
     if column_name:
-        try:
-            contains_values = dataframe[column_name].apply(
-                lambda x: any(str(value).lower() in str(x).lower() for value in search_term)
-            )
-        except KeyError:
+        if column_name not in dataframe.columns:
             _log.error(f"No column named '{column_name}' found in the dataframe.")
             return None
+        contains_values = dataframe[column_name].apply(
+            lambda x: any(str(value).lower() in str(x).lower() for value in search_term)
+        )
     else:
         contains_values = dataframe.apply(
             lambda row: any(any(str(value).lower() in str(cell).lower() for value in search_term) for cell in row),
             axis=1
         )
 
-    rows_with_values = contains_values
-    df_with_values = dataframe[rows_with_values]
+    df_with_values = dataframe[contains_values]
 
     return df_with_values
 
