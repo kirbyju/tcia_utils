@@ -131,3 +131,79 @@ def getDoi(format = ""):
         _log.error(f'Error: {errt}')
     except requests.exceptions.RequestException as err:
         _log.error(f'Error: {err}')
+        
+        
+def getDerivedDois(dois, format='df'):
+    """
+    Retrieve datasets that are derived from a given list of DOIs or a single DOI using the DataCite API.
+
+    This function queries the DataCite API to find datasets that have a "IsDerivedFrom" relationship
+    with each DOI in the provided list or the single DOI provided. The results can be returned in various formats: 
+    a pandas DataFrame, a CSV string, or a list of dictionaries (JSON).
+
+    Parameters:
+    -----------
+    dois : list of str or str
+        A list of Digital Object Identifiers (DOIs) or a single DOI as a string to search for derived datasets.
+    format : str, optional
+        The format in which to return the results. Options are:
+        - 'df' (default): Return results as a pandas DataFrame.
+        - 'csv': Return results as a CSV string.
+        - 'json': Return results as a list of dictionaries.
+
+    Returns:
+    --------
+    pandas.DataFrame or str or list of dict
+        The derived datasets in the specified format:
+        - If format='df', returns a pandas DataFrame.
+        - If format='csv', returns a CSV string.
+        - If format='json', returns a list of dictionaries.
+
+    Example:
+    --------
+    >>> dois = ["10.1234/example.doi1", "10.5678/example.doi2"]
+    >>> df = getDerivedDois(dois, format='df')
+    >>> print(df)
+    
+    >>> single_doi = "10.1234/example.doi1"
+    >>> df = getDerivedDois(single_doi, format='df')
+    >>> print(df)
+    """
+    if isinstance(dois, str):
+        dois = [dois]
+    
+    base_url = "https://api.datacite.org/works"
+    all_datasets = []
+
+    for doi in dois:
+        query = f'relatedIdentifiers.relatedIdentifierType:DOI AND relatedIdentifiers.relatedIdentifier:{doi} AND relatedIdentifiers.relationType:IsDerivedFrom'
+        params = {
+            'query': query,
+            'rows': 1000  # Adjust as needed for pagination
+        }
+        response = requests.get(base_url, params=params)
+
+        if response.status_code == 200:
+            data = response.json()
+            if 'data' in data:
+                datasets = data['data']
+                for dataset in datasets:
+                    dataset['search_related_identifier'] = doi
+                all_datasets.extend(datasets)
+                _log.info(f"Found {len(datasets)} datasets derived from DOI: {doi}")
+            else:
+                _log.info(f"No datasets found derived from DOI: {doi}")
+        else:
+            _log.error(f"Failed to retrieve data for DOI: {doi}, Error: {response.text}")
+    
+    if format == 'df':
+        df = pd.json_normalize(all_datasets)
+        return df
+    elif format == 'csv':
+        df = pd.json_normalize(all_datasets)
+        csv_data = df.to_csv(index=False)
+        return csv_data
+    elif format == 'json':
+        return all_datasets
+    else:
+        _log.error(f"Invalid format specified. Use 'df', 'csv', or 'json'.")
