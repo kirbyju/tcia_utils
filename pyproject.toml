@@ -27,10 +27,13 @@ dependencies = [
   "plotly",
   "numpy",
   "ipywidgets", 
-  {git = "https://github.com/kirbyju/pydicom-seg.git", branch = "main"},
+  "pydicom-seg @ git+https://github.com/kirbyju/pydicom-seg.git@main", 
   "rt-utils"
 ]
 
 [project.urls]
 "Homepage" = "https://github.com/kirbyju/tcia_utils"
 "Bug Tracker" = "https://github.com/kirbyju/tcia_utils/issues"
+
+[tool.hatch.metadata]
+allow-direct-references = true
