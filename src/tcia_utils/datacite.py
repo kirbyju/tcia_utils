@@ -1,9 +1,11 @@
 import pandas as pd
 import requests
 from datetime import datetime
+import time
 import logging
 from tcia_utils.utils import searchDf
 from tcia_utils.utils import copy_df_cols
+
 
 _log = logging.getLogger(__name__)
 logging.basicConfig(
@@ -207,3 +209,99 @@ def getDerivedDois(dois, format='df'):
         return all_datasets
     else:
         _log.error(f"Invalid format specified. Use 'df', 'csv', or 'json'.")
+
+        
+def getGithubMentions(token, delay=10, resume_from=None):
+    """
+    Search GitHub for mentions of TCIA DOIs and return a DataFrame with the results.
+
+    This function creates a DataFrame containing TCIA DOIs, searches GitHub for mentions of these DOIs or their Titles,
+    and returns a DataFrame with the search results. It supports resuming from a specific DOI and includes a delay
+    between API requests to avoid rate limiting.
+
+    Parameters:
+    token (str): Personal access token for GitHub API authentication.
+    delay (int, optional): Delay in seconds between API requests to avoid rate limiting. Default is 1 second.
+    resume_from (str, optional): DOI to resume the search from. Default is None.
+
+    Returns:
+    pd.DataFrame: DataFrame containing the search results with an additional 'DOI' column.
+    """
+    # get current TCIA DOIs
+    datacite_df = getDoi()
+    
+    # Extract unique DOIs from both columns
+    unique_dois = pd.unique(datacite_df[['Identifier', 'DOI']].values.ravel('K'))
+    
+    # Initialize an empty DataFrame for the results
+    tcia_mentions = pd.DataFrame()
+    
+    # Determine the starting index if resuming
+    start_index = 0
+    if resume_from:
+        start_index = unique_dois.tolist().index(resume_from)
+    
+    # Iterate over each unique DOI starting from the resume point
+    while start_index < len(unique_dois):
+        doi = unique_dois[start_index]
+        _log.info(f'Starting search for DOI: {doi}')  
+        
+        # Construct the search query
+        query = f'"{doi}" in:file'
+        url = f'https://api.github.com/search/code?q={query}'
+        
+        # Set up the headers with your personal token for authentication
+        headers = {
+            'Authorization': f'token {token}'
+        }
+        
+        try:
+            # Make the request to the GitHub API
+            response = requests.get(url, headers=headers)
+            
+            # Check if the request was successful
+            if response.status_code == 200:
+                # Parse the response JSON
+                search_results = response.json()
+                # Convert the items key to a DataFrame
+                df = pd.DataFrame(search_results['items'])
+                # Add a column for the DOI
+                df['DOI'] = doi
+                # Concatenate the results to the tcia_mentions DataFrame
+                tcia_mentions = pd.concat([tcia_mentions, df], ignore_index=True)
+                # Move to the next DOI
+                start_index += 1
+            else:
+                _log.warning(f'Failed to fetch data for DOI {doi}: {response.status_code}')
+            
+            time.sleep(delay)  # Delay the next request by the specified number of seconds
+        except Exception as e:
+            _log.error(f'An error occurred: {e}')
+            # Do not increment start_index, retry the same DOI
+    
+    # Define a function to extract nested information of interest in certain fields
+    def extract_info(record):
+        full_name = record.get('full_name', '')
+        login = record['owner'].get('login', '') if 'owner' in record else ''
+        description = record.get('description', '')
+        return full_name, login, description
+
+    # Apply the function to the 'repository' column and create new columns
+    tcia_mentions[['full_name', 'login', 'description']] = tcia_mentions['repository'].apply(
+        lambda record: pd.Series(extract_info(record))
+    )
+
+    # Drop unnecessary columns
+    columns_to_drop = ['name', 'repository', 'sha', 'url', 'git_url', 'score']
+    tcia_mentions = tcia_mentions.drop(columns_to_drop, axis = 1)
+    
+    # Reorder the columns
+    columns_order = ['DOI', 'login', 'full_name', 'path', 'html_url', 'description']
+    tcia_mentions = tcia_mentions[columns_order]
+    
+    # Save the DataFrame to an Excel file
+    date_str = datetime.now().strftime('%Y-%m-%d')
+    file_name = f'tcia_github_mentions_{date_str}.xlsx'
+    tcia_mentions.to_excel(file_name, index=False)
+    
+    return tcia_mentions
