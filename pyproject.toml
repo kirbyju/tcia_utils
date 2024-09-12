@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tcia_utils"
-version = "2.2.0"
+version = "2.2.1"
 authors = [
   { name="Justin Kirby", email="justin.kirby@nih.gov" },
 ]
@@ -18,7 +18,7 @@ classifiers = [
 ]
 
 dependencies = [
-  "pydicom",
+  "pydicom>=1.4.2,<2.4.4",
   "unidecode",
   "bs4",
   "requests",
