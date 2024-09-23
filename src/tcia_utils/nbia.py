@@ -998,15 +998,34 @@ def getSeriesListData(uids, api_url):
     """
     Ingests input from getSeriesList().
     Not intended to be used directly.
+    Note: API returns a CSV (not JSON) which this converts to df.
     """
     uidList = ",".join(uids)
     param = {'list': uidList}
     endpoint = "getSeriesMetadata2"
 
-    data = queryData(endpoint=endpoint, options = None, api_url=api_url, format="df", method="POST", param=param)
+    base_url = setApiUrl(endpoint, api_url)
+    url = f"{base_url}{endpoint}"
+    response = None
+    
+    try:
+        headers = nlst_api_call_headers if api_url == "nlst" else api_call_headers
+        _log.info(f'Calling {endpoint} with parameters {param}')
+        response = requests.post(url, headers=headers, data=param)
+        response.raise_for_status()
 
-    return data
-
+        if response and not response.content.strip():
+            _log.info(f"No results found.")
+            return None
+    
+    except requests.exceptions.RequestException as err:
+        log_request_exception(err)
+        return None
+    
+    else:
+        df = pd.read_csv(io.StringIO(response.text), sep=',')
+        return df
+        
         
 def getDicomTags(seriesUid,
                  api_url = "",
@@ -1347,84 +1366,72 @@ def formatSeriesInput(series_data, input_type, api_url):
     the fields from getSeries() in order to be ingested by other functions.
     Missing fields are set to None.
     
-    series_data can be provided as JSON, df, TCIA manifest file or python list.
+    series_data can be provided as JSON (default), df, TCIA manifest file or python list.
     input_type informs the function which of those types are being used.
     If input_type = "manifest" the series_data should be the path to the manifest file.
     """
-
     # if input_type is manifest convert it to a list
     if input_type == "manifest":
         series_data = manifestToList(series_data)
 
-    # if input_type is a list or manifest, download relevant metadata
+    # download relevant metadata for lists and manifests converted to lists
     if input_type == "list" or input_type == "manifest":
         df = getSeriesList(series_data, api_url = api_url)
-        # Rename the headers
-        if df is None or df.empty:
-            raise StopExecution
-        else:
-            df = df.rename(columns={'Subject ID': 'PatientID',
-                                    'Study UID': 'StudyInstanceUID',
-                                    'Series ID': 'SeriesInstanceUID',
-                                    'Number of images': 'ImageCount',
-                                    'Collection Name': 'Collection',
-                                    'File Size (Bytes)': 'FileSize',
-                                    'Data Description URI': 'CollectionURI',
-                                    'License Name': 'LicenseName',
-                                    'Series Number': 'SeriesNumber',
-                                    'License URL': 'LicenseURI'})
-            """ 
-            Draft attempt at updating this to reflect new return values, but needs more testing
-            column_mapping = {
+    # pass the dataframe through if one was provided
+    elif input_type == "df":
+        df = series_data
+    # create a dataframe if json was provided
+    else:
+        # Create a DataFrame from the series_data
+        df = pd.DataFrame(series_data)
+        
+    # Rename the headers
+    if df is None or df.empty:
+        _log.warning(f"No data was provided for reformatting.")
+        raise StopExecution
+    else:
+        column_mapping = {
+                'Collection Name': 'Collection',
+                'Data Description URI': 'CollectionURI',
+                # Modality is the same
+                # Manufacturer is the same
+                'Body Part Examined': 'BodyPartExamined',
                 'Subject ID': 'PatientID',
                 'Study UID': 'StudyInstanceUID',
                 'Study Description': 'StudyDesc',
                 'Study Date': 'StudyDate',
                 'Series ID': 'SeriesInstanceUID',
                 'Series Description': 'SeriesDescription',
+                'Series Number': 'SeriesNumber',
+                'Protocol Name': 'ProtocolName',
+                'Series Date': 'SeriesDate',
                 'Number of images': 'ImageCount',
                 'File Size (Bytes)': 'FileSize',
-                'Collection Name': 'Collection',
+                #TimeStamp is the same
+                'Date Released': 'DateReleased',
                 '3rd Party Analysis': 'ThirdPartyAnalysis',
-                'Data Description URI': 'CollectionURI',
-                'Series Number': 'SeriesNumber',
+                'Manufacturer Model Name': 'ManufacturerModelName',
+                'Software Versions': 'SoftwareVersions',
                 'License Name': 'LicenseName',
                 'License URL': 'LicenseURI',
-                'Date Released': 'DateReleased',
-                'Series Date': 'SeriesDate',
-                'Protocol Name': 'ProtocolName',
-                'Body Part Examined': 'BodyPartExamined',
-                'Annotations Flag': 'AnnotationsFlag',
-                'Manufacturer Model Name': 'ManufacturerModelName',
-                'Software Versions': 'SoftwareVersions'
+                'Annotations Flag': 'AnnotationsFlag'
             }
 
-            # Renaming the columns in the DataFrame
-            df.rename(columns=column_mapping, inplace=True)
-            """
+        # Renaming the columns in the DataFrame
+        df.rename(columns=column_mapping, inplace=True)
 
-    elif input_type == "df":
-        df = series_data
-    else:
-        # Create a DataFrame from the series_data
-        df = pd.DataFrame(series_data)
-        
-    # Ensure the DataFrame contains the necessary columns even if they are missing
-    required_columns = ['Collection', 'CollectionURI', 'Modality', 'LicenseName',
-                        'Manufacturer', 'BodyPartExamined', 'PatientID', 'StudyInstanceUID',
-                        'SeriesInstanceUID', 'SeriesDescription', 'SeriesNumber',
-                        'ProtocolName', 'SeriesDate', 'ImageCount', 'FileSize', 'TimeStamp',
-                        'ManufacturerModelName', 'SoftwareVersions', 'LicenseURI']
-    
-    for col in required_columns:
-            if col not in df.columns:
-                df[col] = None
-                
-    # Make all URLs lower case
-    df['CollectionURI'] = df['CollectionURI'].str.lower()
-    df['LicenseURI'] = df['LicenseURI'].str.lower()
-    
-    return df
+        # Verify all columns exist that should be there
+        required_columns = list(column_mapping.values()) + ['Modality', 'Manufacturer', 'TimeStamp']
+
+        for col in required_columns:
+                if col not in df.columns:
+                    df[col] = None
+
+        # Make all URLs lower case
+        df['CollectionURI'] = df['CollectionURI'].str.lower()
+        df['LicenseURI'] = df['LicenseURI'].str.lower()
+
+        return df
 
 
 def reportDoiSummary(series_data, input_type="", api_url = "", format=""):
