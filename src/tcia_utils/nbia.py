@@ -1,5 +1,5 @@
 ####### setup
-from typing import Union, List
+from typing import Union, List, Optional
 import logging
 import requests
 import pandas as pd
@@ -23,6 +23,7 @@ from tcia_utils.utils import copy_df_cols
 from tcia_utils.utils import format_disk_space
 from tcia_utils.utils import remove_html_tags
 from tcia_utils.datacite import getDoi
+
 try:
     import tkinter
     from tkinter import filedialog
@@ -41,8 +42,17 @@ logging.basicConfig(
     , level=logging.INFO
 )
 
-# set token creation URL for getToken and refreshToken
-token_url = "https://keycloak-stg.dbmi.cloud/auth/realms/TCIA/protocol/openid-connect/token"
+
+def log_request_exception(err: requests.exceptions.RequestException) -> None:
+    if isinstance(err, requests.exceptions.HTTPError):
+        _log.error(f"HTTP Error: {err}")
+    elif isinstance(err, requests.exceptions.ConnectionError):
+        _log.error(f"Connection Error: {err}")
+    elif isinstance(err, requests.exceptions.Timeout):
+        _log.error(f"Timeout Error: {err}")
+    else:
+        _log.error(f"Request Exception: {err}")
+
 
 # Used by functions that accept parameters used in GUI Simple Search
 # e.g. getSimpleSearchWithModalityAndBodyPartPaged()
@@ -90,7 +100,7 @@ def setApiUrl(endpoint, api_url):
                          "getDicomTags", "getSeriesMetadata2", "getCollectionOrSeriesForDOI",
                          "getCollectionValuesAndCounts", "getCollectionDescriptions",
                          "getSimpleSearchWithModalityAndBodyPartPaged", "getManufacturerValuesAndCounts",
-                         "getAdvancedQCSearch"]
+                         "getAdvancedQCSearch", "createSharedList"]
 
     if endpoint not in searchEndpoints and endpoint not in advancedEndpoints:
         _log.error(
@@ -101,19 +111,22 @@ def setApiUrl(endpoint, api_url):
         raise StopExecution
 
     # ensure a token exists
-    if 'token_exp_time' not in globals():
-        getToken(user="nbia_guest")
-        _log.info("Accessing public data anonymously. To access restricted data use nbia.getToken() with your credentials.")
-    if 'token_exp_time' in globals() and datetime.now() > token_exp_time:
-        refreshToken()
+    if api_url == "nlst":
+        if 'nlst_token_exp_time' not in globals():
+            getToken(user="nbia_guest", api_url="nlst")
+        if 'nlst_token_exp_time' in globals() and datetime.now() > nlst_token_exp_time:
+            refreshToken(api_url = "nlst")
+    else:
+        if 'token_exp_time' not in globals():
+            getToken(user="nbia_guest")
+            _log.info("Accessing public data anonymously. To access restricted data use nbia.getToken() with your credentials.")
+        if 'token_exp_time' in globals() and datetime.now() > token_exp_time:
+            refreshToken()
 
     if api_url in ["", "restricted"]:
         base_url = "https://services.cancerimagingarchive.net/nbia-api/services/v2/" if endpoint in searchEndpoints else "https://services.cancerimagingarchive.net/nbia-api/services/"
     elif api_url == "nlst":
-        if endpoint in searchEndpoints:
-            base_url = "https://nlst.cancerimagingarchive.net/nbia-api/services/v1/"
-        else:
-            base_url = "https://nlst.cancerimagingarchive.net/nbia-api/services/"
+        base_url = "https://nlst.cancerimagingarchive.net/nbia-api/services/v2/" if endpoint in searchEndpoints else "https://nlst.cancerimagingarchive.net/nbia-api/services/"
     else:
         _log.error(
             f'"{api_url}" is an invalid api_url for the {"Search" if endpoint in searchEndpoints else "Advanced"} API endpoint: {endpoint}'
@@ -123,18 +136,18 @@ def setApiUrl(endpoint, api_url):
     return base_url
 
 
-def getToken(user="", pw=""):
+def getToken(user="", pw="", api_url=""):
     """
     getToken() accepts user and pw parameters to create a token to access APIs that require authorization.
     Access tokens can be refreshed with refreshToken().
     Set user = "nbia_guest" for anonymous access to Advanced API functions
     Interactive prompts are provided for user/pw if they're not specified as parameters.
     "Advanced APIs" can be accessed anonymously using the nbia_guest account with the default guest password.
+    Set api_url to "nlst" for accessing the NLST server.
     """
-    global token_exp_time, api_call_headers, access_token, refresh_token, id_token
+    global token_exp_time, api_call_headers, access_token, refresh_token, id_token, nlst_token_exp_time, nlst_api_call_headers, nlst_access_token, nlst_refresh_token, nlst_id_token
 
     # specify user/pw unless nbia_guest is being used for accessing Advanced API anonymously
-
     if user != "":
         userName = user
     else:
@@ -144,7 +157,7 @@ def getToken(user="", pw=""):
     if userName == "nbia_guest":
         passWord = "ItsBetweenUAndMe" # this guest account password is documented in the public API guide
     elif pw == "":
-        passWord = getpass.getpass(prompt = 'Enter Password: ')
+        passWord = getpass.getpass(prompt='Enter Password: ')
     else:
         passWord = pw
 
@@ -157,25 +170,44 @@ def getToken(user="", pw=""):
                   'password': passWord
                  }
 
-        data = requests.post(token_url, data = params)
+        if api_url == "nlst":
+            token_url = "https://keycloak.dbmi.cloud/auth/realms/TCIA/protocol/openid-connect/token"
+        else:
+            token_url = "https://keycloak-stg.dbmi.cloud/auth/realms/TCIA/protocol/openid-connect/token"
+        data = requests.post(token_url, data=params)
         data.raise_for_status()
-        access_token = data.json()["access_token"]
+        tmp_access_token = data.json()["access_token"]
         expires_in = data.json()["expires_in"]
-        id_token = data.json()["id_token"]
+        tmp_id_token = data.json()["id_token"]
         # track expiration status/time
         current_time = datetime.now()
-        token_exp_time = current_time + timedelta(seconds=expires_in)
-        api_call_headers = {'Authorization': 'Bearer ' + access_token}
-        refresh_token = data.json()["refresh_token"]
-        _log.info(f'Success - Token saved to api_call_headers variable and expires at {token_exp_time}')
+        tmp_token_exp_time = current_time + timedelta(seconds=expires_in)
+        tmp_api_call_headers = {'Authorization': 'Bearer ' + tmp_access_token}
+        tmp_refresh_token = data.json()["refresh_token"]
+        
+        # Store tokens separately for each server
+        if api_url == "nlst":
+            nlst_access_token = tmp_access_token
+            nlst_token_exp_time = tmp_token_exp_time
+            nlst_api_call_headers = tmp_api_call_headers
+            nlst_refresh_token = tmp_refresh_token
+            nlst_id_token = tmp_id_token
+            _log.info(f'Success - Token saved to nlst_api_call_headers variable and expires at {nlst_token_exp_time}')
+        else:
+            access_token = tmp_access_token
+            token_exp_time = tmp_token_exp_time
+            api_call_headers = tmp_api_call_headers
+            refresh_token = tmp_refresh_token
+            id_token = tmp_id_token
+            _log.info(f'Success - Token saved to api_call_headers variable and expires at {token_exp_time}')
 
     # handle errors
     except requests.exceptions.RequestException as err:
-        _log.error(f"Request Error: {err}")
+        log_request_exception(err)
         raise StopExecution
 
 
-def refreshToken():
+def refreshToken(api_url="primary"):
     """
     refreshToken() refreshes security tokens to extend access time for APIs
     that require authorization. It attempts to verify that a refresh token
@@ -184,42 +216,66 @@ def refreshToken():
     something that needs to be called directly in your code.
     """
     global token_exp_time, api_call_headers, access_token, refresh_token, id_token
+    global nlst_token_exp_time, nlst_api_call_headers, nlst_access_token, nlst_refresh_token, nlst_id_token
 
+    # copy the relevant token to refresh (nlst vs primary server) into tmp_token
     try:
-        token = refresh_token
+        if api_url == "nlst":
+            tmp_token = nlst_refresh_token
+        else:
+            tmp_token = refresh_token
     except NameError:
         _log.error("No token found. Create one using getToken().")
         raise StopExecution
-
+        
     # refresh token request
     try:
         params = {
             'client_id': 'nbia',
             'grant_type': 'refresh_token',
-            'refresh_token': token
+            'refresh_token': tmp_token
         }
         
-        # obtain new access token
+        if api_url == "nlst":
+            token_url = "https://keycloak.dbmi.cloud/auth/realms/TCIA/protocol/openid-connect/token"
+        else:
+            token_url = "https://keycloak-stg.dbmi.cloud/auth/realms/TCIA/protocol/openid-connect/token"
         response = requests.post(token_url, data=params)
         response.raise_for_status()
         data = response.json()
-        access_token = data.get("access_token")
+        tmp_access_token = data.get("access_token")
         expires_in = data.get("expires_in")
+        tmp_id_token = data.get("id_token")
 
-        if not access_token or not expires_in:
-            _log.warning("Failed to refresh access token.")
-            getToken(user="nbia_guest")
-            _log.info("Accessing API anonymously. To access restricted data use nbia.getToken() with your credentials.")
+        if not tmp_access_token or not expires_in:
+            _log.error("Failed to refresh access token.")
                 
         # track expiration status/time 
         current_time = datetime.now()
-        token_exp_time = current_time + timedelta(seconds=expires_in)
-        api_call_headers = {'Authorization': 'Bearer ' + access_token}
-        _log.info(f'Success - Token refreshed to api_call_headers variable and expires at {token_exp_time}')
+        tmp_token_exp_time = current_time + timedelta(seconds=expires_in)
+        tmp_api_call_headers = {'Authorization': 'Bearer ' + tmp_access_token}
+        tmp_refresh_token = data.get("refresh_token")
 
+        # Store tokens separately for each server
+        if api_url == "nlst":
+            nlst_access_token = tmp_access_token
+            nlst_token_exp_time = tmp_token_exp_time
+            nlst_api_call_headers = tmp_api_call_headers
+            nlst_refresh_token = tmp_refresh_token
+            nlst_id_token = tmp_id_token
+            _log.info(f'Success - Token refreshed for nlst_api_call_headers variable and expires at {nlst_token_exp_time}')
+        else:
+            access_token = tmp_access_token
+            token_exp_time = tmp_token_exp_time
+            api_call_headers = tmp_api_call_headers
+            refresh_token = tmp_refresh_token
+            id_token = tmp_id_token
+            _log.info(f'Success - Token refreshed for api_call_headers variable and expires at {token_exp_time}')
+        
+        
     # handle errors
     except requests.exceptions.RequestException as err:
-        _log.error(f"Request Error: {err}")
+        log_request_exception(err)
         raise StopExecution
 
 
@@ -253,80 +309,56 @@ def makeCredentialFile(user = "", pw = ""):
     _log.info("Credential file for NBIA Data Retriever saved: credentials.txt")
 
     
-def queryData(endpoint, options, api_url, format):
+def queryData(endpoint, options, api_url, format, method="GET", param=None):
     """
     queryData() is called by many other query functions and is generally
     not something that needs to be called directly in your code.
     It uses setApiURL() to set a base URL and handles errors
-     for HTTP status and empty search results.
+    for HTTP status and empty search results.
     Formats output as JSON by default with options for "df" (dataframe) and "csv".
     """
-
-    def getData(url, options):
-        try:
-            _log.info(f'Calling... {url} with parameters {options}')
-            response = requests.get(url, params=options, headers=api_call_headers)
-            response.raise_for_status()
-
-            if not response.content.strip():
-                return None
-
-            return response.json()
-
-        except requests.exceptions.RequestException as err:
-            _log.error(f"Request Error: {err}")
-            raise
-        except ValueError as json_err:
-            _log.error(f"JSON Decode Error: {json_err} - Response text: {response.text}")
-            raise
-
-    # Only query NLST if api_url is specified for that,
-    # otherwise query both servers.
-    nlst_data = None
-    main_data = None
+    base_url = setApiUrl(endpoint, api_url)
+    url = f"{base_url}{endpoint}"
+    response = None
     
-    if api_url == "nlst":
-        base_url = setApiUrl(endpoint, api_url)
-        url = f"{base_url}{endpoint}"
-        nlst_data = getData(url, options)
-    else:
-        base_url = setApiUrl(endpoint, "nlst")
-        url = f"{base_url}{endpoint}"
-        nlst_data = getData(url, options)
+    try:
+        headers = nlst_api_call_headers if api_url == "nlst" else api_call_headers
         
-        base_url = setApiUrl(endpoint, api_url)
-        url = f"{base_url}{endpoint}"
-        main_data = getData(url, options)
+        if method.upper() == "POST":
+            _log.info(f'Calling {endpoint} with parameters {param}')
+            response = requests.post(url, headers=headers, data=param)
+        else:
+            _log.info(f'Calling {endpoint} with parameters {options}')
+            response = requests.get(url, params=options, headers=headers)
+        
+        response.raise_for_status()
+
+        if response and not response.content.strip():
+            _log.info(f"No results found.")
+            return None
     
-    # Combine the data
-    if nlst_data is None and main_data is None:
-        _log.info("No data match your query.")
+    except requests.exceptions.RequestException as err:
+        log_request_exception(err)
         return None
-
-    if nlst_data is None:
-        data = main_data
-    elif main_data is None:
-        data = nlst_data
-    elif isinstance(nlst_data, list) and isinstance(main_data, list):
-        data = nlst_data + main_data
-    elif isinstance(nlst_data, dict) and isinstance(main_data, dict):
-        data = {**nlst_data, **main_data}
+    except ValueError as json_err:
+        _log.error(f"JSON Decode Error: {json_err} - Response text: {response.text if response else 'No response'}")
+        return None
+    
     else:
-        raise TypeError("Incompatible data types for merging results from NLST and main servers.")
-
-    if format == "df":
-        df = pd.DataFrame(data)
-        return df
-    elif format == "csv":
-        df = pd.DataFrame(data)
-        csv_filename = f"{endpoint}_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.csv"
-        df.to_csv(csv_filename)
-        _log.info(f"CSV saved to: {csv_filename}")
-        return df
-    else:
-        return data
-
-
+        data = response.json()
+        # format the output
+        if format == "df":
+            df = pd.DataFrame(data)
+            return df
+        elif format == "csv":
+            df = pd.DataFrame(data)
+            csv_filename = f"{endpoint}_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.csv"
+            df.to_csv(csv_filename)
+            _log.info(f"CSV saved to: {csv_filename}")
+            return df
+        else:
+            return data
+    
 
 def getCollections(api_url = "",
                    format = ""):
@@ -578,6 +610,9 @@ def getSeriesSize(seriesUid,
     """
     Optional: api_url, format
     Gets the file count and disk size of a series/scan
+    
+    Note: This API endpoint is extremely slow to run and size info is a return value
+          in getSeries() so there isn't much reason to use this.
     """
     endpoint = "getSeriesSize"
 
@@ -587,6 +622,7 @@ def getSeriesSize(seriesUid,
 
     data = queryData(endpoint, options, api_url, format)
     return data
+
 
 def getSopInstanceUids(seriesUid,
                        api_url = "",
@@ -708,20 +744,21 @@ def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
     try:
         for seriesUID in series_data:
             pathTmp = os.path.join(path, seriesUID) if path else os.path.join("tciaDownload", seriesUID)
+            base_url = setApiUrl(endpoint, api_url)
+            headers = nlst_api_call_headers if api_url == "nlst" else api_call_headers
+            metadata_url = base_url + "getSeriesMetaData?SeriesInstanceUID=" + seriesUID
 
             # Check for previously downloaded data
             if not os.path.isdir(pathTmp):
-                base_url = setApiUrl(endpoint, api_url="nlst" if '1.2.840.113654.2.55' in seriesUID else api_url)
                 data_url = base_url + downloadOptions + seriesUID
-                metadata_url = base_url + "getSeriesMetaData?SeriesInstanceUID=" + seriesUID
 
                 # Download data
                 _log.info(f"Downloading... {data_url}")
-                data = requests.get(data_url, headers=api_call_headers)
+                data = requests.get(data_url, headers=headers)
                 if data.status_code == 200:
                     # Get metadata if desired
                     if manifestDF is not None:
-                        metadata = requests.get(metadata_url, headers=api_call_headers if api_url in ["restricted", ""] else {}).json()
+                        metadata = requests.get(metadata_url, headers=headers).json()
                         manifestDF = pd.concat([manifestDF, pd.DataFrame(metadata)], ignore_index=True)
                     # Unzip file
                     with zipfile.ZipFile(io.BytesIO(data.content)) as file:
@@ -747,8 +784,7 @@ def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
         )
 
     except requests.exceptions.RequestException as err:
-        _log.error(f"Request Error: {err}")
-        raise
+        log_request_exception(err)
 
     # Return metadata dataframe and/or save to CSV file if requested
     if manifestDF is not None:
@@ -759,40 +795,46 @@ def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
             dt_string = datetime.now().strftime("%Y-%m-%d_%H%M")
             manifestDF.to_csv(f'downloadSeries_metadata_{dt_string}.csv')
             _log.info(f"Series metadata saved as downloadSeries_metadata_{dt_string}.csv")
-        return manifestDF if format == "df" else None
+        return manifestDF if format == "df" or format == "csv" else None
 
 
-def downloadImage(seriesUID,
-                  sopUID,
-                  path = "",
-                  api_url = ""):
-    """Ingests a seriesUids and SopInstanceUid and downloads the image"""
+def downloadImage(seriesUID: str, sopUID: str, path: Optional[str] = "", api_url: Optional[str] = "") -> None:
+    """
+    Downloads a DICOM image from a specified API using the provided SeriesInstanceUID and SOPInstanceUID.
+
+    Args:
+        seriesUid (str): The SeriesInstanceUID of the DICOM series.
+        sopUid (str): The SOPInstanceUID of the DICOM image.
+        path (Optional[str]): The directory path where the image will be saved. Defaults to "tciaDownload".
+        api_url (Optional[str]): The base URL of the API. If not provided, a default URL will be used.
+
+    Raises:
+        requests.exceptions.RequestException: If there is an error during the HTTP request.
+
+    Example:
+        downloadImage("1.2.840.113619.2.55.3.604688.1234.5678.91011", "1.2.840.113619.2.55.3.604688.1234.5678.91012")
+    """
     endpoint = "getSingleImage"
-    success = 0
-    failed = 0
-    previous = 0
 
     # get base URL
     base_url = setApiUrl(endpoint, api_url)
 
     try:
-        if path != "":
-            pathTmp = path + "/" + seriesUID
-        else:
-            pathTmp = "tciaDownload/" + seriesUID
-        file = sopUID + ".dcm"
-        if not os.path.isfile(pathTmp + "/" + file):
-            data_url = base_url + 'getSingleImage?SeriesInstanceUID=' + seriesUID + '&SOPInstanceUID=' + sopUID
+        path_tmp = os.path.join(path or "tciaDownload", seriesUID)
+        file = f"{sopUID}.dcm"
+        file_path = os.path.join(path_tmp, file)
+
+        if not os.path.isfile(file_path):
+            data_url = f"{base_url}getSingleImage?SeriesInstanceUID={seriesUID}&SOPInstanceUID={sopUID}"
             _log.info(f"Downloading... {data_url}")
-            # removing If statement since everything requires headers now!!!
-            #if api_url == "restricted":
-            data = requests.get(data_url, headers = api_call_headers)
+            headers = nlst_api_call_headers if api_url == "nlst" else api_call_headers
+            data = requests.get(data_url, headers=headers)
+            
             if data.status_code == 200:
-                if not os.path.exists(pathTmp):
-                    os.makedirs(pathTmp)
-                with open(pathTmp + "/" + file, 'wb') as f:
+                os.makedirs(path_tmp, exist_ok=True)
+                with open(file_path, 'wb') as f:
                     f.write(data.content)
-                _log.info(f"Saved to {pathTmp}/{file}")
+                _log.info(f"Saved to {file_path}")
             else:
                 _log.error(
                     f"Error: {data.status_code} -- double check your permissions and Series/SOP UIDs.\n"
@@ -800,16 +842,11 @@ def downloadImage(seriesUID,
                     f"SOP UID: {sopUID}"
                 )
         else:
-            _log.warning(f"Image {sopUID} already downloaded to:\n{pathTmp}")
+            _log.warning(f"Image {sopUID} already downloaded to:\n{path_tmp}")
 
-    except requests.exceptions.HTTPError as errh:
-        _log.error(errh)
-    except requests.exceptions.ConnectionError as errc:
-        _log.error(errc)
-    except requests.exceptions.Timeout as errt:
-        _log.error(errt)
     except requests.exceptions.RequestException as err:
-        _log.error(err)
+        log_request_exception(err)
+
 
 ##########################
 ##########################
@@ -956,45 +993,21 @@ def getSeriesList(uids, api_url = "", csv_filename = "", format = ""):
     else:
         return df
 
-def getSeriesListData(list, api_url):
+    
+def getSeriesListData(uids, api_url):
     """
     Ingests input from getSeriesList().
     Not intended to be used directly.
     """
-    
-    uids = ",".join(list)
-    param = {'list': uids}
+    uidList = ",".join(uids)
+    param = {'list': uidList}
     endpoint = "getSeriesMetadata2"
 
-    # set base_url
-    base_url = setApiUrl(endpoint, api_url)
+    data = queryData(endpoint=endpoint, options = None, api_url=api_url, format="df", method="POST", param=param)
 
-    # full url
-    url = base_url + endpoint
-    _log.info(f'Calling... {url}')
+    return data
 
-    # get data & handle any request.post() errors
-    try:
-        metadata = requests.post(url, headers = api_call_headers, data = param)
-        metadata.raise_for_status()
-
-        # check for empty results and format output
-        if metadata.text != "":
-            df = pd.read_csv(io.StringIO(metadata.text), sep=',')
-            return df
-        else:
-            _log.info("No results found.")
-
-    except requests.exceptions.HTTPError as errh:
-        _log.error(errh)
-    except requests.exceptions.ConnectionError as errc:
-        _log.error(errc)
-    except requests.exceptions.Timeout as errt:
-        _log.error(errt)
-    except requests.exceptions.RequestException as err:
-        _log.error(err)
-
-
+        
 def getDicomTags(seriesUid,
                  api_url = "",
                  format = ""):
@@ -1072,64 +1085,22 @@ def getSegRefSeries(uid):
         refSeriesUid = "N/A"
         return refSeriesUid
 
-
-
-####### getDoiMetadata function
-# Gets a list of Collections or Series associated with a DOI
-# Requires a DOI URL and specification of Collection or Series UID output
-# Result includes whether the data are 3rd party analyses or not
-# Formats output as JSON by default with options for "df" (dataframe) and "csv"
-
-def getDoiMetadata(doi, output = "", api_url = "", format = ""):
+    
+def getDoiMetadata(doi, output="", api_url="", format=""):
     """
     Optional: output, api_url, format
     Gets a list of Collections if output = "", or Series UIDs if output = "series", associated with a DOI.
     The result includes whether the data are 3rd party analyses or not.
     """
-    param = {'DOI': doi,
-             'CollectionOrSeries': output}
-
+    param = {'DOI': doi, 'CollectionOrSeries': output}
     endpoint = "getCollectionOrSeriesForDOI"
 
-    # set base_url
-    base_url = setApiUrl(endpoint, api_url)
+    # Use queryData to make the POST request
+    data = queryData(endpoint=endpoint, options = None, api_url=api_url, format=format, method="POST", param=param)
 
-    # full url
-    url = base_url + endpoint
-    _log.info(f'Calling... {url}')
+    return data
 
-    # get data & handle any request.post() errors
-    try:
-        metadata = requests.post(url, headers = api_call_headers, data = param)
-        metadata.raise_for_status()
-
-        # check for empty results and format output
-        if metadata.text != "[]":
-            metadata = metadata.json()
-            # format the output (optional)
-            if format == "df":
-                df = pd.DataFrame(metadata)
-                return df
-            elif format == "csv":
-                df = pd.DataFrame(metadata)
-                df.to_csv(endpoint + ".csv")
-                _log.info(f"CSV saved to: {endpoint}.csv")
-                return df
-            else:
-                return metadata
-        else:
-            _log.info("No results found.")
-
-    except requests.exceptions.HTTPError as errh:
-        _log.error(errh)
-    except requests.exceptions.ConnectionError as errc:
-        _log.error(errc)
-    except requests.exceptions.Timeout as errt:
-        _log.error(errt)
-    except requests.exceptions.RequestException as err:
-        _log.error(err)
-
-
+    
 def getSimpleSearchWithModalityAndBodyPartPaged(
     collections = [],
     species = [],
@@ -1275,14 +1246,8 @@ def getSimpleSearchWithModalityAndBodyPartPaged(
         else:
             _log.info("No results found.")
 
-    except requests.exceptions.HTTPError as errh:
-        _log.error(errh)
-    except requests.exceptions.ConnectionError as errc:
-        _log.error(errc)
-    except requests.exceptions.Timeout as errt:
-        _log.error(errt)
     except requests.exceptions.RequestException as err:
-        _log.error(err)
+        log_request_exception(err)
 
 
 def getAdvancedQCSearch(criteria_values, api_url = "", format = "", input_type = {}):
@@ -1352,49 +1317,23 @@ def getAdvancedQCSearch(criteria_values, api_url = "", format = "", input_type =
     
     endpoint = "getAdvancedQCSearch"
 
-    # set base_url and headers
-    base_url = setApiUrl(endpoint, api_url)
-
-    params = {}
+    param = {}
     for i, (criteria, value) in enumerate(criteria_values):
-        params[f"criteriaType{i}"] = criteria
+        param[f"criteriaType{i}"] = criteria
         # Check if the criteria has an override input type
         if criteria in input_type:
-            params[f"inputType{i}"] = input_type[criteria]
+            param[f"inputType{i}"] = input_type[criteria]
         else:
-            params[f"inputType{i}"] = input_type_map[criteria]
-        params[f"boolean{i}"] = "AND"
-        params[f"value{i}"] = value
-    
-    # full url
-    url = base_url + endpoint
-    _log.info(f'Calling... {url}')
-    data = requests.post(url, headers=api_call_headers, data=params)
+            param[f"inputType{i}"] = input_type_map[criteria]
+        param[f"boolean{i}"] = "AND"
+        param[f"value{i}"] = value
 
-    if data.status_code == 200:
-        # check for empty results and format output
-        if data.text != "":
-            data = data.json()
-            # format the output (optional)
-            if format == "df":
-                df = pd.DataFrame(data)
-                return df
-            elif format == "csv":
-                df = pd.DataFrame(data)
-                df.to_csv(endpoint + ".csv")
-                df.to_csv(f"{endpoint}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}.csv")
-                _log.info(f"CSV saved to: {endpoint}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}.csv")
-                return df
-            else:
-                return data
-        else:
-            _log.info("No results found.")
-    else:
-        _log.error(f"Request failed with status code {data.status_code}")
-        raise Exception(f"Request failed with status code {data.status_code}")
+    # Use queryData to make the POST request
+    data = queryData(endpoint=endpoint, options = None, api_url=api_url, format=format, method="POST", param=param)
+
+    return data
 
 
-        
 ##########################
 ##########################
 # Reports
@@ -1828,6 +1767,47 @@ def reportSeriesReleaseDate(series_data, chart_width = 1024, chart_height = 768)
     # display figure
     fig.show()    
 
+    
+def makeSharedCart(uids, name, description, description_url, api_url=""):
+    """
+    Create a shared cart from a list of series UIDs.
+    """
+    
+    # Construct the query string manually
+    uid_query = "&".join([f"list={uid}" for uid in uids])
+    param = f"{uid_query}&name={name}&description={description}&url={description_url}"
+    endpoint = "createSharedList"
+
+    # require user to log in prior to creating cart -- no guest access
+    getToken(user="", pw="", api_url=api_url)
+    
+    # set base_url
+    base_url = setApiUrl(endpoint, api_url)
+
+    # full url
+    url = base_url + endpoint
+    _log.info(f'Calling... {url}')
+
+    # get data & handle any request.post() errors
+    try:
+        headers = nlst_api_call_headers if api_url == "nlst" else api_call_headers
+        # Create a copy of headers and add the new header
+        headers_with_content_type = headers.copy()
+        headers_with_content_type['Content-Type'] = 'application/x-www-form-urlencoded'
+        
+        metadata = requests.post(url, headers=headers_with_content_type, data=param)
+        metadata.raise_for_status()
+
+        # check for empty results and format output
+        if metadata.text != "":
+            _log.info(metadata.text)
+        else:
+            _log.error("Shared Cart creation failed.")
+
+    except requests.exceptions.RequestException as err:
+        log_request_exception(err)
+
+
 def makeSeriesReport(series_data, input_type = "", format = "", filename = None, api_url = ""):
     """
     Ingests JSON output from any function that returns series-level data
@@ -1940,40 +1920,46 @@ def reportDicomTags(series_uids, elements=None):
         # Call nbia.getDicomTags to get tags for each uid
         tags = getDicomTags(uid, format="df")
 
-        # Create a dictionary to store the extracted information with concatenated column headers
-        extracted_info = {}
-        
-        # Add the 'Series Instance UID' column
-        extracted_info['Series Instance UID (0020,000E)'] = uid
-
-        # Extract the relevant information from tags based on elements
-        if not elements:
-            # Extract all elements
-            for index, row in tags.iterrows():
-                name = row['name']
-                element = row['element']
-                if name != 'Series Instance UID':
-                    extracted_info[f'{name} {element}'] = row['data']
+        if tags is None:
+            _log.info(f"No tags found for: {uid}")
         else:
-            # Extract specific elements
-            for element in elements:
-                matching_rows = tags[tags['element'] == element]
-                if not matching_rows.empty:
-                    # Use the 'name' and 'data' columns with concatenated column headers
-                    name = matching_rows['name'].values[0]
-                    element = matching_rows['element'].values[0]
-                    extracted_info[f'{name} {element}'] = matching_rows['data'].values[0]
+            # Create a dictionary to store the extracted information with concatenated column headers
+            extracted_info = {}
 
-        # Create a DataFrame for the current uid and extracted information
-        tag_summary_df = pd.DataFrame(extracted_info, index=[0])
+            # Add the 'Series Instance UID' column
+            extracted_info['Series Instance UID (0020,000E)'] = uid
 
-        # Append the DataFrame to the list
-        tag_summary_list.append(tag_summary_df)
+            # Extract the relevant information from tags based on elements
+            if not elements:
+                # Extract all elements
+                for index, row in tags.iterrows():
+                    name = row['name']
+                    element = row['element']
+                    if name != 'Series Instance UID':
+                        extracted_info[f'{name} {element}'] = row['data']
+            else:
+                # Extract specific elements
+                for element in elements:
+                    matching_rows = tags[tags['element'] == element]
+                    if not matching_rows.empty:
+                        # Use the 'name' and 'data' columns with concatenated column headers
+                        name = matching_rows['name'].values[0]
+                        element = matching_rows['element'].values[0]
+                        extracted_info[f'{name} {element}'] = matching_rows['data'].values[0]
 
-    # Concatenate all DataFrames in the list to create tagSummary
-    tagSummary = pd.concat(tag_summary_list, ignore_index=True)
+            # Create a DataFrame for the current uid and extracted information
+            tag_summary_df = pd.DataFrame(extracted_info, index=[0])
 
-    return tagSummary
+            # Append the DataFrame to the list
+            tag_summary_list.append(tag_summary_df)
+
+    # Check if tag_summary_list is empty
+    if not tag_summary_list:
+        _log.info(f"No results were returned.")
+        return None
+    else:
+        tagSummary = pd.concat(tag_summary_list, ignore_index=True)
+        return tagSummary
     
 
 ##########################
