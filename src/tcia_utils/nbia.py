@@ -1431,6 +1431,10 @@ def formatSeriesInput(series_data, input_type, api_url):
         df['CollectionURI'] = df['CollectionURI'].str.lower()
         df['LicenseURI'] = df['LicenseURI'].str.lower()
 
+        # Format date-related columns to datetime
+        df['DateReleased'] = pd.to_datetime(df['DateReleased'])
+        df['TimeStamp'] = pd.to_datetime(df['TimeStamp'])
+        
         return df
 
 
@@ -1481,7 +1485,7 @@ def reportCollectionSummary(series_data, input_type="", api_url = "", format="")
     See reportDataSummary() for more details.
     """
     
-    df = reportDataSummary(series_data, input_type, report_type = "", api_url = api_url, format = format)
+    df = reportDataSummary(series_data, input_type, report_type = "collection", api_url = api_url, format = format)
     return df
 
 
@@ -1500,9 +1504,9 @@ def reportDataSummary(series_data, input_type="", report_type = "", api_url = ""
     - Series: Number of series
     - Images: Number of images
     - Disk Space: Formatted as KB/MB/GB/TB/PB
-    - TimeStamp Min: Earliest TimeStamp date
-    - TimeStamp Max: Latest TimeStamp date
-    - UniqueTimestamps: List of dates on which new series were published
+    - DateReleased Min: Earliest data publication date
+    - DateReleased Max: Latest publication date
+    - UniqueDatesReleased: List of dates on which new series were published
 
     Parameters:
     series_data: The input data to be summarized (expects JSON by default).
@@ -1545,13 +1549,13 @@ def reportDataSummary(series_data, input_type="", report_type = "", api_url = ""
         'SeriesInstanceUID': 'nunique',
         'ImageCount': 'sum',
         'FileSize': 'sum',
-        'TimeStamp': ['min', 'max']
+        'DateReleased': ['min', 'max']
     }).reset_index()
 
-    # Flatten the multi-level TimeStamp column and rename columns
+    # Flatten the multi-level DateReleased column and rename columns
     grouped.columns = [' '.join(col).strip() for col in grouped.columns.values]
-    grouped.rename(columns={'TimeStamp min': 'Min TimeStamp',
-                            'TimeStamp max': 'Max TimeStamp',
+    grouped.rename(columns={'DateReleased min': 'Min DateReleased',
+                            'DateReleased max': 'Max DateReleased',
                             'PatientID nunique': 'Subjects',
                             'StudyInstanceUID nunique': 'Studies',
                             'SeriesInstanceUID nunique': 'Series',
@@ -1564,15 +1568,15 @@ def reportDataSummary(series_data, input_type="", report_type = "", api_url = ""
     
     try:
         # Extract unique submission dates per Collection
-        df['TimeStamp'] = pd.to_datetime(df['TimeStamp'])
-        unique_dates_df = df.groupby(group)['TimeStamp'].apply(lambda x: x.dt.date.unique()).reset_index()
+        df['DateReleased'] = pd.to_datetime(df['DateReleased'])
+        unique_dates_df = df.groupby(group)['DateReleased'].apply(lambda x: x.dt.date.unique()).reset_index()
 
     except:
-        # if timestamps weren't provided in series_data, condense None values to unique string
-        unique_dates_df = df.groupby(group)['TimeStamp'].apply(lambda x: x.unique()).reset_index()
+        # if DateReleased wasn't provided in series_data, condense None values to unique string
+        unique_dates_df = df.groupby(group)['DateReleased'].apply(lambda x: x.unique()).reset_index()
 
     # rename columns
-    unique_dates_df.columns = [group, 'UniqueTimeStamps']
+    unique_dates_df.columns = [group, 'UniqueDateReleased']
 
     # Merge the unique_dates_df with the grouped DataFrame
     grouped = grouped.merge(unique_dates_df, on=group, how='left')
@@ -1583,10 +1587,9 @@ def reportDataSummary(series_data, input_type="", report_type = "", api_url = ""
     grouped['Licenses'] = grouped['LicenseName unique'].apply(lambda x: ', '.join(['Not Specified' if pd.isnull(val) or val == '' else val for val in x]))
     grouped['Manufacturers'] = grouped['Manufacturer unique'].apply(lambda x: ', '.join(['Not Specified' if pd.isnull(val) or val == '' else val for val in x]))
     grouped['Body Parts'] = grouped['BodyPartExamined unique'].apply(lambda x: ', '.join(['Not Specified' if pd.isnull(val) or val == '' else val for val in x]))
-    grouped['Min TimeStamp'] = grouped['Min TimeStamp'].apply(lambda x: 'Not Specified' if pd.isnull(x) or x == '' else x)
-    grouped['Max TimeStamp'] = grouped['Max TimeStamp'].apply(lambda x: 'Not Specified' if pd.isnull(x) or x == '' else x)
-    grouped['UniqueTimeStamps'] = grouped['UniqueTimeStamps'].apply(lambda x: ', '.join(['Not Specified' if pd.isnull(val) or val == '' else val.strftime('%Y-%m-%d') for val in x]))
-
+    grouped['Min DateReleased'] = grouped['Min DateReleased'].apply(lambda x: 'Not Specified' if pd.isnull(x) or x == '' else x)
+    grouped['Max DateReleased'] = grouped['Max DateReleased'].apply(lambda x: 'Not Specified' if pd.isnull(x) or x == '' else x)
+    grouped['UniqueDateReleased'] = grouped['UniqueDateReleased'].apply(lambda x: ', '.join(sorted(['Not Specified' if pd.isnull(val) or val == '' else val.strftime('%Y-%m-%d') for val in x])) if len(x) > 1 else (x[0].strftime('%Y-%m-%d') if len(x) == 1 and not pd.isnull(x[0]) else 'Not Specified'))
     
     # Remove unnecessary columns
     grouped.drop(columns=[column + ' unique', 'Modality unique', 'LicenseName unique',
@@ -1594,7 +1597,7 @@ def reportDataSummary(series_data, input_type="", report_type = "", api_url = ""
 
     # Reorder the columns
     grouped = grouped[[group, columnGrouped, 'Licenses', 'Subjects', 'Studies', 'Series', 'Images', 'File Size', 'Disk Space',
-            'Body Parts', 'Modalities',  'Manufacturers', 'Min TimeStamp', 'Max TimeStamp', 'UniqueTimeStamps']]
+            'Body Parts', 'Modalities',  'Manufacturers', 'Min DateReleased', 'Max DateReleased', 'UniqueDateReleased']]
     
     if report_type == "doi":
         # look up DOI info from datacite and create dataframe
@@ -1654,7 +1657,7 @@ def reportDataSummary(series_data, input_type="", report_type = "", api_url = ""
 
     if format == 'csv':
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f'collection_report_{timestamp}.csv'
+        filename = f'tcia_{report_type}_report_{timestamp}.csv'
         grouped.to_csv(filename, index=False)
         _log.info(f"Collection summary report saved as '{filename}'")
     
