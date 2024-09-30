@@ -79,7 +79,7 @@ NPEXSpecies = {
 def setApiUrl(endpoint, api_url):
     """
     setApiUrl() is used by most other functions to select the correct base URL
-    and is generally not something that needs to be called directly in your code.  
+    and is generally not something that needs to be called directly in your code.
 
     It assists with:
         1. verifying you are calling a supported endpoint
@@ -184,7 +184,7 @@ def getToken(user="", pw="", api_url=""):
         tmp_token_exp_time = current_time + timedelta(seconds=expires_in)
         tmp_api_call_headers = {'Authorization': 'Bearer ' + tmp_access_token}
         tmp_refresh_token = data.json()["refresh_token"]
-        
+
         # Store tokens separately for each server
         if api_url == "nlst":
             nlst_access_token = tmp_access_token
@@ -212,7 +212,7 @@ def refreshToken(api_url="primary"):
     refreshToken() refreshes security tokens to extend access time for APIs
     that require authorization. It attempts to verify that a refresh token
     exists and recommends using getToken() to create a new token if needed.
-    This function is called as needed by setApiUrl() and is generally not 
+    This function is called as needed by setApiUrl() and is generally not
     something that needs to be called directly in your code.
     """
     global token_exp_time, api_call_headers, access_token, refresh_token, id_token
@@ -227,7 +227,7 @@ def refreshToken(api_url="primary"):
     except NameError:
         _log.error("No token found. Create one using getToken().")
         raise StopExecution
-        
+
     # refresh token request
     try:
         params = {
@@ -235,7 +235,7 @@ def refreshToken(api_url="primary"):
             'grant_type': 'refresh_token',
             'refresh_token': tmp_token
         }
-        
+
         if api_url == "nlst":
             token_url = "https://keycloak.dbmi.cloud/auth/realms/TCIA/protocol/openid-connect/token"
         else:
@@ -249,8 +249,8 @@ def refreshToken(api_url="primary"):
 
         if not tmp_access_token or not expires_in:
             _log.error("Failed to refresh access token.")
-                
-        # track expiration status/time 
+
+        # track expiration status/time
         current_time = datetime.now()
         tmp_token_exp_time = current_time + timedelta(seconds=expires_in)
         tmp_api_call_headers = {'Authorization': 'Bearer ' + tmp_access_token}
@@ -271,8 +271,8 @@ def refreshToken(api_url="primary"):
             refresh_token = tmp_refresh_token
             id_token = tmp_id_token
             _log.info(f'Success - Token refreshed for api_call_headers variable and expires at {token_exp_time}')
-        
-        
+
+
     # handle errors
     except requests.exceptions.RequestException as err:
         log_request_exception(err)
@@ -281,14 +281,14 @@ def refreshToken(api_url="primary"):
 
 def makeCredentialFile(user = "", pw = ""):
     """
-    Creates a credential file to use with NBIA Data Retriever. 
+    Creates a credential file to use with NBIA Data Retriever.
     Interactive prompts are provided for user/pw if they're not specified as parameters.
     The credential file is a text file that passes the user's credentials in the following format:
         userName = YourUserName
         passWord = YourPassword
         Both parameters are case-sensitive.
     Additional documentation:
-        https://wiki.cancerimagingarchive.net/x/2QKPBQ 
+        https://wiki.cancerimagingarchive.net/x/2QKPBQ
         https://github.com/kirbyju/TCIA_Notebooks/blob/main/TCIA_Linux_Data_Retriever_App.ipynb
     """
     # set user name and password
@@ -308,7 +308,7 @@ def makeCredentialFile(user = "", pw = ""):
         f.write('\n'.join(lines))
     _log.info("Credential file for NBIA Data Retriever saved: credentials.txt")
 
-    
+
 def queryData(endpoint, options, api_url, format, method="GET", param=None):
     """
     queryData() is called by many other query functions and is generally
@@ -320,30 +320,30 @@ def queryData(endpoint, options, api_url, format, method="GET", param=None):
     base_url = setApiUrl(endpoint, api_url)
     url = f"{base_url}{endpoint}"
     response = None
-    
+
     try:
         headers = nlst_api_call_headers if api_url == "nlst" else api_call_headers
-        
+
         if method.upper() == "POST":
             _log.info(f'Calling {endpoint} with parameters {param}')
             response = requests.post(url, headers=headers, data=param)
         else:
             _log.info(f'Calling {endpoint} with parameters {options}')
             response = requests.get(url, params=options, headers=headers)
-        
+
         response.raise_for_status()
 
         if response and not response.content.strip():
             _log.info(f"No results found.")
             return None
-    
+
     except requests.exceptions.RequestException as err:
         log_request_exception(err)
         return None
     except ValueError as json_err:
         _log.error(f"JSON Decode Error: {json_err} - Response text: {response.text if response else 'No response'}")
         return None
-    
+
     else:
         data = response.json()
         # format the output
@@ -358,7 +358,7 @@ def queryData(endpoint, options, api_url, format, method="GET", param=None):
             return df
         else:
             return data
-    
+
 
 def getCollections(api_url = "",
                    format = ""):
@@ -568,13 +568,13 @@ def getUpdatedSeries(date,
     """
     Gets "new" series metadata from a specified api_url.
     The date format is YYYY/MM/DD.
-    NOTE: Unlike other API endpoints, this one expects DD/MM/YYYY, 
+    NOTE: Unlike other API endpoints, this one expects DD/MM/YYYY,
       but we convert to YYYY/MM/DD so tcia-utils date inputs are consistent.
     """
     endpoint = "getUpdatedSeries"
 
     # convert to NBIA's expected date format
-    # It appears there is likely a bug in the API here.  
+    # It appears there is likely a bug in the API here.
     # Date format for the API is currently DD/MM/YYYY so we'll convert it.
     nbiaDate = datetime.strptime(date, "%Y/%m/%d").strftime("%d/%m/%Y")
 
@@ -610,7 +610,7 @@ def getSeriesSize(seriesUid,
     """
     Optional: api_url, format
     Gets the file count and disk size of a series/scan
-    
+
     Note: This API endpoint is extremely slow to run and size info is a return value
           in getSeries() so there isn't much reason to use this.
     """
@@ -673,10 +673,10 @@ def getSharedCart(name,
     """
     Optional: api_url, format
     Gets "Shared Cart" metadata from a specified api_url.
-    First use https://nbia.cancerimagingarchive.net/nbia-search/ in a browser, 
+    First use https://nbia.cancerimagingarchive.net/nbia-search/ in a browser,
     then add data to your cart and click "Share" > "Share my cart".
     This creates a shared cart with a URL like,
-    https://nbia.cancerimagingarchive.net/nbia-search/?saved-cart=nbia-49121659384603347 
+    https://nbia.cancerimagingarchive.net/nbia-search/?saved-cart=nbia-49121659384603347
     You can then use this with a getSharedCart "name" of "nbia-49121659384603347".
     """
     endpoint = "getContentsByName"
@@ -829,7 +829,7 @@ def downloadImage(seriesUID: str, sopUID: str, path: Optional[str] = "", api_url
             _log.info(f"Downloading... {data_url}")
             headers = nlst_api_call_headers if api_url == "nlst" else api_call_headers
             data = requests.get(data_url, headers=headers)
-            
+
             if data.status_code == 200:
                 os.makedirs(path_tmp, exist_ok=True)
                 with open(file_path, 'wb') as f:
@@ -952,9 +952,9 @@ def getSeriesList(uids, api_url = "", csv_filename = "", format = ""):
     """
     Get metadata for a list of series from Advanced API.
     Returns result as dataframe (default) or as CSV if format = 'csv'.
-    Use csv_filename to set a custom filename. 
+    Use csv_filename to set a custom filename.
     """
-    
+
     # break up the list into smaller chunks if > 10,000 series
     chunk_size = 10000
     if len(uids) > chunk_size:
@@ -967,7 +967,7 @@ def getSeriesList(uids, api_url = "", csv_filename = "", format = ""):
     else:
         chunk_count = 0
 
-    
+
     if chunk_count == 0:
         df = getSeriesListData(uids, api_url)
     else:
@@ -981,7 +981,7 @@ def getSeriesList(uids, api_url = "", csv_filename = "", format = ""):
 
         # concatenate all the DataFrames in the list into a single DataFrame
         df = pd.concat(dfs, ignore_index=True)
-    
+
     if format == "csv" and csv_filename != "":
         df.to_csv(csv_filename + '.csv')
         _log.info(f"Report saved as {csv_filename}.csv")
@@ -993,7 +993,7 @@ def getSeriesList(uids, api_url = "", csv_filename = "", format = ""):
     else:
         return df
 
-    
+
 def getSeriesListData(uids, api_url):
     """
     Ingests input from getSeriesList().
@@ -1007,7 +1007,7 @@ def getSeriesListData(uids, api_url):
     base_url = setApiUrl(endpoint, api_url)
     url = f"{base_url}{endpoint}"
     response = None
-    
+
     try:
         headers = nlst_api_call_headers if api_url == "nlst" else api_call_headers
         _log.info(f'Calling {endpoint} with parameters {param}')
@@ -1017,16 +1017,16 @@ def getSeriesListData(uids, api_url):
         if response and not response.content.strip():
             _log.info(f"No results found.")
             return None
-    
+
     except requests.exceptions.RequestException as err:
         log_request_exception(err)
         return None
-    
+
     else:
         df = pd.read_csv(io.StringIO(response.text), sep=',')
         return df
-        
-        
+
+
 def getDicomTags(seriesUid,
                  api_url = "",
                  format = ""):
@@ -1047,7 +1047,7 @@ def getSegRefSeries(uid):
     """
     Gets DICOM tag metadata for a given SEG/RTSTRUCT series UID (scan)
     and looks up the corresponding original/reference series UID
-    
+
     Note: Since there are no SEG/RTSTRUCT series in the NLST server it is not queried.
     """
     # get dicom tags for the series as a dataframe
@@ -1104,7 +1104,7 @@ def getSegRefSeries(uid):
         refSeriesUid = "N/A"
         return refSeriesUid
 
-    
+
 def getDoiMetadata(doi, output="", api_url="", format=""):
     """
     Optional: output, api_url, format
@@ -1119,7 +1119,7 @@ def getDoiMetadata(doi, output="", api_url="", format=""):
 
     return data
 
-    
+
 def getSimpleSearchWithModalityAndBodyPartPaged(
     collections = [],
     species = [],
@@ -1271,7 +1271,7 @@ def getSimpleSearchWithModalityAndBodyPartPaged(
 
 def getAdvancedQCSearch(criteria_values, api_url = "", format = "", input_type = {}):
     """
-    This function allows TCIA data curators to perform an advanced QC search.  
+    This function allows TCIA data curators to perform an advanced QC search.
     This function will not work for end users of TCIA.
 
     Parameters:
@@ -1286,25 +1286,25 @@ def getAdvancedQCSearch(criteria_values, api_url = "", format = "", input_type =
 
     Returns:
     - data: The response from the API call.
-    
+
     Examples:
-    
-    1. Searching for all patient IDs that contain “LIDC”, have a modality of “CR” or “DX”, 
+
+    1. Searching for all patient IDs that contain “LIDC”, have a modality of “CR” or “DX”,
     and a submission date between Feb 25, 2020 and Jan 1, 2023. Uses input_type to override
     the default for patientID (comma separated list) to return anything that contains "LIDC".
-    
+
         criteria_values = [("patientID", "LIDC"),
-                            ("modality", "CR,DX"), 
-                            ("submissiondate", "2/25/2020"), 
+                            ("modality", "CR,DX"),
+                            ("submissiondate", "2/25/2020"),
                             ("submissiondate", "1/1/2023")]
 
         input_type = {"patientID": "contains"}
 
         getAdvancedQCSearch(criteria_values, input_type=input_type)
 
-    2. Searching for all data with collection “APOLLO-5-KIRP//UVA-Limited” or “APOLLO-5-LIHC//UVA-Limited” 
+    2. Searching for all data with collection “APOLLO-5-KIRP//UVA-Limited” or “APOLLO-5-LIHC//UVA-Limited”
     and qcstatus is either “Not Visible” or “Visible” with results formatted as a dataframe.
-    
+
         criteria_values = [("collection", "APOLLO-5-KIRP//UVA-Limited"),
                             ("collection", "APOLLO-5-LIHC//UVA-Limited"),
                             ("qcstatus", "Not Visible"),
@@ -1313,7 +1313,7 @@ def getAdvancedQCSearch(criteria_values, api_url = "", format = "", input_type =
         getAdvancedQCSearch(criteria_values, format = "df")
 
     3. Searching for a list of UIDs with results formatted as a dataframe and saved to a CSV file.
-    
+
         criteria_values = [("seriesUID", "1.3.6.1.4.1.14519.5.2.1.6279.6001.709632090821449989953075380984,1.3.6.1.4.1.14519.5.2.1.6279.6001.109097931021726413867023009234")]
 
         getAdvancedQCSearch(criteria_values, format = "csv")
@@ -1333,7 +1333,7 @@ def getAdvancedQCSearch(criteria_values, api_url = "", format = "", input_type =
         "modality": "list",
         "manufacturer": "list"
     }
-    
+
     endpoint = "getAdvancedQCSearch"
 
     param = {}
@@ -1360,12 +1360,12 @@ def getAdvancedQCSearch(criteria_values, api_url = "", format = "", input_type =
 
 def formatSeriesInput(series_data, input_type, api_url):
     """
-    Helper function to convert the various types of series metadata 
-    inputs and to standardize the data elements that come from those 
+    Helper function to convert the various types of series metadata
+    inputs and to standardize the data elements that come from those
     inputs into a uniform dataframe output that is harmonized to
     the fields from getSeries() in order to be ingested by other functions.
     Missing fields are set to None.
-    
+
     series_data can be provided as JSON (default), df, TCIA manifest file or python list.
     input_type informs the function which of those types are being used.
     If input_type = "manifest" the series_data should be the path to the manifest file.
@@ -1384,7 +1384,7 @@ def formatSeriesInput(series_data, input_type, api_url):
     else:
         # Create a DataFrame from the series_data
         df = pd.DataFrame(series_data)
-        
+
     # Rename the headers
     if df is None or df.empty:
         _log.warning(f"No data was provided for reformatting.")
@@ -1434,7 +1434,7 @@ def formatSeriesInput(series_data, input_type, api_url):
         # Format date-related columns to datetime
         df['DateReleased'] = pd.to_datetime(df['DateReleased'])
         df['TimeStamp'] = pd.to_datetime(df['TimeStamp'])
-        
+
         return df
 
 
@@ -1442,11 +1442,11 @@ def reportDoiSummary(series_data, input_type="", api_url = "", format=""):
     """
     Generate a summary report about DOIs from series metadata created by the
     output of getSeries(), getSeriesList(), a python list of Series UIDs, or
-    from a TCIA manifest.  
-    
+    from a TCIA manifest.
+
     Parameters:
     series_data: The input data to be summarized (expects JSON by default).
-    input_type: Set to 'df' for dataframe.  
+    input_type: Set to 'df' for dataframe.
                 Set to 'list' for python list, or 'manifest' for *.TCIA manifest file.
                 If manifest is used, series_data should be the path to the TCIA manifest file.
     format: Output format (default is dataframe, 'csv' for CSV file, 'chart' for charts).
@@ -1454,12 +1454,12 @@ def reportDoiSummary(series_data, input_type="", api_url = "", format=""):
                 Helper functions reportCollectionSummary() and reportDoiSummary() are
                 the expected way to deal with this, which pass this parameter accordingly.
     api_url: Only necessary if input_type = list or manifest.
-            Set to 'restricted' for limited-access collections or 
+            Set to 'restricted' for limited-access collections or
             'nlst' for National Lung Screening trial.
-            
+
     See reportDataSummary() for more details.
-    """    
-    df = reportDataSummary(series_data, input_type, report_type = "doi", api_url = api_url, format = format)   
+    """
+    df = reportDataSummary(series_data, input_type, report_type = "doi", api_url = api_url, format = format)
     return df
 
 
@@ -1467,11 +1467,11 @@ def reportCollectionSummary(series_data, input_type="", api_url = "", format="")
     """
     Generate a summary report about Collections from series metadata created by the
     output of getSeries(), getSeriesList(), getSharedcart(), getUpdatedSeries(),
-    a python list of Series UIDs, or from a TCIA manifest. 
-    
+    a python list of Series UIDs, or from a TCIA manifest.
+
     Parameters:
     series_data: The input data to be summarized (expects JSON by default).
-    input_type: Set to 'df' for dataframe.  
+    input_type: Set to 'df' for dataframe.
                 Set to 'list' for python list, or 'manifest' for *.TCIA manifest file.
                 If manifest is used, series_data should be the path to the TCIA manifest file.
     format: Output format (default is dataframe, 'csv' for CSV file, 'chart' for charts).
@@ -1479,12 +1479,12 @@ def reportCollectionSummary(series_data, input_type="", api_url = "", format="")
                 Helper functions reportCollectionSummary() and reportDoiSummary() are
                 the expected way to deal with this, which pass this parameter accordingly.
     api_url: Only necessary if input_type = list or manifest.
-            Set to 'restricted' for limited-access collections or 
+            Set to 'restricted' for limited-access collections or
             'nlst' for National Lung Screening trial.
-            
+
     See reportDataSummary() for more details.
     """
-    
+
     df = reportDataSummary(series_data, input_type, report_type = "collection", api_url = api_url, format = format)
     return df
 
@@ -1510,7 +1510,7 @@ def reportDataSummary(series_data, input_type="", report_type = "", api_url = ""
 
     Parameters:
     series_data: The input data to be summarized (expects JSON by default).
-    input_type: Set to 'df' for dataframe.  
+    input_type: Set to 'df' for dataframe.
                 Set to 'list' for python list, or 'manifest' for *.TCIA manifest file.
                 If manifest is used, series_data should be the path to the TCIA manifest file.
     format: Output format (default is dataframe, 'csv' for CSV file, 'chart' for charts).
@@ -1518,12 +1518,12 @@ def reportDataSummary(series_data, input_type="", report_type = "", api_url = ""
                 Helper functions reportCollectionSummary() and reportDoiSummary() are
                 the expected way to deal with this, which pass this parameter accordingly.
     api_url: Only necessary if input_type = list or manifest.
-            Set to 'restricted' for limited-access collections or 
+            Set to 'restricted' for limited-access collections or
             'nlst' for National Lung Screening trial.
     """
     # format series_data into df depending on input_type
     df = formatSeriesInput(series_data, input_type, api_url)
-    
+
     # choose between collection report or DOI report
     # these are used later when renaming and formatting the columns/charts
     if report_type == "doi":
@@ -1536,7 +1536,7 @@ def reportDataSummary(series_data, input_type="", report_type = "", api_url = ""
         column = "CollectionURI"
         columnGrouped = "DOIs"
         chartLabel = "Collection"
-    
+
     # Group by Collection and calculate aggregated statistics
     grouped = df.groupby(group).agg({
         column: 'unique',
@@ -1562,10 +1562,10 @@ def reportDataSummary(series_data, input_type="", report_type = "", api_url = ""
                             'ImageCount sum': 'Images',
                             'FileSize sum': 'File Size'}
                             , inplace=True)
-    
+
     # Create Disk Space column and convert bytes to MB/GB/TB/PB
     grouped['Disk Space'] = grouped['File Size'].apply(format_disk_space)
-    
+
     try:
         # Extract unique submission dates per Collection
         df['DateReleased'] = pd.to_datetime(df['DateReleased'])
@@ -1580,7 +1580,7 @@ def reportDataSummary(series_data, input_type="", report_type = "", api_url = ""
 
     # Merge the unique_dates_df with the grouped DataFrame
     grouped = grouped.merge(unique_dates_df, on=group, how='left')
-    
+
     # Convert aggregated lists to strings & insert 'Not Specified' for null values
     grouped[columnGrouped] = grouped[column + ' unique'].apply(lambda x: ', '.join(['Not Specified' if pd.isnull(val) or val == '' else val for val in x]))
     grouped['Modalities'] = grouped['Modality unique'].apply(lambda x: ', '.join(['Not Specified' if pd.isnull(val) or val == '' else val for val in x]))
@@ -1590,7 +1590,7 @@ def reportDataSummary(series_data, input_type="", report_type = "", api_url = ""
     grouped['Min DateReleased'] = grouped['Min DateReleased'].apply(lambda x: 'Not Specified' if pd.isnull(x) or x == '' else x)
     grouped['Max DateReleased'] = grouped['Max DateReleased'].apply(lambda x: 'Not Specified' if pd.isnull(x) or x == '' else x)
     grouped['UniqueDateReleased'] = grouped['UniqueDateReleased'].apply(lambda x: ', '.join(sorted(['Not Specified' if pd.isnull(val) or val == '' else val.strftime('%Y-%m-%d') for val in x])) if len(x) > 1 else (x[0].strftime('%Y-%m-%d') if len(x) == 1 and not pd.isnull(x[0]) else 'Not Specified'))
-    
+
     # Remove unnecessary columns
     grouped.drop(columns=[column + ' unique', 'Modality unique', 'LicenseName unique',
                         'Manufacturer unique', 'BodyPartExamined unique'], inplace=True)
@@ -1598,17 +1598,17 @@ def reportDataSummary(series_data, input_type="", report_type = "", api_url = ""
     # Reorder the columns
     grouped = grouped[[group, columnGrouped, 'Licenses', 'Subjects', 'Studies', 'Series', 'Images', 'File Size', 'Disk Space',
             'Body Parts', 'Modalities',  'Manufacturers', 'Min DateReleased', 'Max DateReleased', 'UniqueDateReleased']]
-    
+
     if report_type == "doi":
         # look up DOI info from datacite and create dataframe
         datacite = getDoi(format = "df")
-        
+
         # drop unnecessary columns in datacite df
         datacite = datacite[["DOI", "Identifier"]]
-            
+
         # Extract DOI from the end of CollectionURI and store it in "DOI" column
         grouped["DOI"] = grouped["CollectionURI"].str.extract(r'doi.org/(\S+)$')
-        
+
         # format the DOI values consistently
         grouped['DOI'] = grouped['DOI'].str.strip()
         grouped['DOI'] = grouped['DOI'].str.lower()
@@ -1617,7 +1617,7 @@ def reportDataSummary(series_data, input_type="", report_type = "", api_url = ""
 
         # Merge datacite with the df DataFrame
         grouped = grouped.merge(datacite, on='DOI', how='left')
-        
+
         # drop DOI column
         grouped.drop(columns=['DOI'], inplace=True)
 
@@ -1625,30 +1625,30 @@ def reportDataSummary(series_data, input_type="", report_type = "", api_url = ""
         cols = list(grouped.columns)
         cols.insert(0, cols.pop(cols.index('Identifier')))
         grouped = grouped[cols]
-    
+
     # generate charts if requested
-    if format == 'chart':        
-        
+    if format == 'chart':
+
         # define datasets
         datasets = grouped[chartLabel].tolist()
-    
-        # Calculate the metrics 
+
+        # Calculate the metrics
         subjects = grouped['Subjects'].tolist()
         studies = grouped['Studies'].tolist()
         series = grouped['Series'].tolist()
         images = grouped['Images'].tolist()
         size = grouped['File Size'].tolist()
-        
+
         # Create separate pie charts for each metric
         data_label_pairs = [(subjects, 'Subjects'),
                             (studies, 'Studies'),
                             (series, 'Series'),
                             (images, 'Images'),
                             (size, 'File Size (Bytes)')]
-        
+
         # Iterate through the pairs and call create_pie_chart if data is greater than 0
         for data, label in data_label_pairs:
-                
+
             # Check if data is not empty and contains values greater than 0
             if data and all(x > 0 for x in data):
                 create_pie_chart(data, label, datasets)
@@ -1660,7 +1660,7 @@ def reportDataSummary(series_data, input_type="", report_type = "", api_url = ""
         filename = f'tcia_{report_type}_report_{timestamp}.csv'
         grouped.to_csv(filename, index=False)
         _log.info(f"Collection summary report saved as '{filename}'")
-    
+
     return grouped
 
 
@@ -1668,7 +1668,7 @@ def create_pie_chart(data, metric_name, labels, width=800, height=600):
     """
     Helper function for reportCollections() to create pie charts with plotly.
     """
-    
+
     # Calculate the total sum of data points
     total = sum(data)
 
@@ -1683,21 +1683,21 @@ def create_pie_chart(data, metric_name, labels, width=800, height=600):
     # Show the pie chart
     fig.show()
 
-    
+
 def reportSeriesSubmissionDate(series_data, chart_width = 1024, chart_height = 768):
     """
-    Ingests the results of getSeries() as df or JSON and visualizes the 
+    Ingests the results of getSeries() as df or JSON and visualizes the
     submission timeline of the series in it by collection.
-    
+
     Currently this only supports getSeries(), but feature requests have been submitted
     to the NBIA team to make it possible to use this with the other series API endpoints.
-    
+
     Chart width and height can be customized.
     """
-    
+
     # format series_data into df depending on input_type
     df = formatSeriesInput(series_data, input_type = "", api_url = "")
-    
+
     # Convert 'TimeStamp' column to datetime
     df['TimeStamp'] = pd.to_datetime(df['TimeStamp'])
 
@@ -1730,21 +1730,21 @@ def reportSeriesSubmissionDate(series_data, chart_width = 1024, chart_height = 7
     # display figure
     fig.show()
 
-    
+
 def reportSeriesReleaseDate(series_data, chart_width = 1024, chart_height = 768):
     """
-    Ingests the results of getSeries() as df or JSON and visualizes the 
+    Ingests the results of getSeries() as df or JSON and visualizes the
     release/publication timeline of the series in it by collection.
-    
+
     Currently this only supports getSeries(), but feature requests have been submitted
     to the NBIA team to make it possible to use this with the other series API endpoints.
-    
+
     Chart width and height can be customized.
     """
-    
+
     # format series_data into df depending on input_type
     df = formatSeriesInput(series_data, input_type = "", api_url = "")
-    
+
     # Convert 'DateReleased' column to datetime
     df['DateReleased'] = pd.to_datetime(df['DateReleased'])
 
@@ -1775,28 +1775,21 @@ def reportSeriesReleaseDate(series_data, chart_width = 1024, chart_height = 768)
     fig.update_layout(width=chart_width, height=chart_height)
 
     # display figure
-    fig.show()    
+    fig.show()
 
-    
+
 def makeSharedCart(uids, name, description, description_url, api_url=""):
     """
     Create a shared cart from a list of series UIDs.
     """
-    
     # Construct the query string manually
     uid_query = "&".join([f"list={uid}" for uid in uids])
     param = f"{uid_query}&name={name}&description={description}&url={description_url}"
     endpoint = "createSharedList"
 
-    # require user to log in prior to creating cart -- no guest access
-    getToken(user="", pw="", api_url=api_url)
-    
-    # set base_url
+    # set urls
     base_url = setApiUrl(endpoint, api_url)
-
-    # full url
     url = base_url + endpoint
-    _log.info(f'Calling... {url}')
 
     # get data & handle any request.post() errors
     try:
@@ -1804,7 +1797,7 @@ def makeSharedCart(uids, name, description, description_url, api_url=""):
         # Create a copy of headers and add the new header
         headers_with_content_type = headers.copy()
         headers_with_content_type['Content-Type'] = 'application/x-www-form-urlencoded'
-        
+        _log.info(f'Calling {endpoint} with parameters {param}')
         metadata = requests.post(url, headers=headers_with_content_type, data=param)
         metadata.raise_for_status()
 
@@ -1821,17 +1814,17 @@ def makeSharedCart(uids, name, description, description_url, api_url=""):
 def makeSeriesReport(series_data, input_type = "", format = "", filename = None, api_url = ""):
     """
     Ingests JSON output from any function that returns series-level data
-    and creates summary report.  
-    If your series data is a dataframe instead of JSON you can use input_type = "df".    
+    and creates summary report.
+    If your series data is a dataframe instead of JSON you can use input_type = "df".
     Specify input_type = "manifest" to ingest a *.TCIA manifest file
     or "list" for a python list of UIDs.
-    If input_type = "manifest" or "list" and there are series UIDs 
-    that are restricted, you must call getToken() with a user ID that 
+    If input_type = "manifest" or "list" and there are series UIDs
+    that are restricted, you must call getToken() with a user ID that
     has access to all UIDs before calling this function.
     Specifying api_url is only necessary if you are using
     input_type = "manifest" or "list" with NLST data (e.g. api_url = "nlst").
     Specify format = "var" to return the report values as a dictionary.
-    Access variables example after saving function output 
+    Access variables example after saving function output
     to report_data: subjects = report_data["subjects"].
     Specify format = "file" to save the report to a file.
     Specify a filename parameter to set a filename
@@ -1839,7 +1832,7 @@ def makeSeriesReport(series_data, input_type = "", format = "", filename = None,
     """
     # format series_data into df depending on input_type
     df = formatSeriesInput(series_data, input_type, api_url)
-    
+
     # Calculate summary statistics for a given collection
 
     # Scan Inventory
@@ -1970,7 +1963,7 @@ def reportDicomTags(series_uids, elements=None):
     else:
         tagSummary = pd.concat(tag_summary_list, ignore_index=True)
         return tagSummary
-    
+
 
 ##########################
 ##########################
@@ -2044,7 +2037,7 @@ def makeVizLinks(series_data, csv_filename=""):
 def viewSeries(seriesUid = "", path = ""):
     """
     Visualizes a Series (scan) you've downloaded.
-    If neither seriesUid nor path is specified, the user will be 
+    If neither seriesUid nor path is specified, the user will be
     prompted to select a directory using a GUI.
     The function assumes "tciaDownload/<seriesUid>/" as path if
     seriesUid is provided since this is where downloadSeries() saves data.
@@ -2157,7 +2150,7 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
 
         image += np.int16(intercept)
 
-    pixel_data = np.array(image, dtype=np.int16)     
+    pixel_data = np.array(image, dtype=np.int16)
     SEG_data = pydicom.dcmread(SEGPath)
     try:
         reader = pydicom_seg.MultiClassReader()
@@ -2169,7 +2162,7 @@ def viewSeriesSEG(seriesPath = "", SEGPath = ""):
     if slices[0].SeriesInstanceUID != result.referenced_series_uid:
         raise Exception("The selected reference series and the annotation series don't match!")
 
-    colorPaleatte = ["blue", "orange", "green", "red", "cyan", "brown", "lime", "purple", "yellow", "pink", "olive"] 
+    colorPaleatte = ["blue", "orange", "green", "red", "cyan", "brown", "lime", "purple", "yellow", "pink", "olive"]
     def seg_animation(suppress_warnings, x, **kwargs):
         plt.imshow(pixel_data[x], cmap = plt.cm.gray)
         if isinstance(reader, pydicom_seg.reader.MultiClassReader):
@@ -2242,7 +2235,7 @@ def viewSeriesRT(seriesPath = "", RTPath = ""):
         image += np.int16(intercept)
 
     pixel_data = np.array(image, dtype=np.int16)
-    colorPaleatte = ["blue", "orange", "green", "red", "cyan", "brown", "lime", "purple", "yellow", "pink", "olive"] 
+    colorPaleatte = ["blue", "orange", "green", "red", "cyan", "brown", "lime", "purple", "yellow", "pink", "olive"]
     def rt_animation(suppress_warnings, x, **kwargs):
         plt.imshow(pixel_data[x], cmap = plt.cm.gray, interpolation = None)
         for i in range(len(kwargs)):

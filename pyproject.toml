@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tcia_utils"
-version = "2.3.2"
+version = "2.3.3"
 authors = [
   { name="Justin Kirby", email="justin.kirby@nih.gov" },
 ]
@@ -26,8 +26,8 @@ dependencies = [
   "matplotlib",
   "plotly",
   "numpy",
-  "ipywidgets", 
-  "pydicom-seg", 
+  "ipywidgets",
+  "pydicom-seg",
   "rt-utils"
 ]
 
