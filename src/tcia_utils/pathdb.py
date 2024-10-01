@@ -1,7 +1,7 @@
 import pandas as pd
 import requests
 from datetime import datetime
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 import numpy as np
 import logging
 from tcia_utils.utils import searchDf
@@ -109,7 +109,7 @@ def getImages(query, format=""):
             paginated_url = f"{url}&page={page}" if '?' in url else f"{url}?page={page}"
             _log.info(f'Calling... {paginated_url}')
             response = requests.get(paginated_url)
-            
+
             if response.status_code == 200:
                 data = response.json()
                 if len(data) == 0:
@@ -126,13 +126,13 @@ def getImages(query, format=""):
             page += 1
 
     ### Running this query against all collections is not currently feasible
-    ### due to performance issues. Leaving this as a placeholder in case 
+    ### due to performance issues. Leaving this as a placeholder in case
     ### it becomes feasible later.
-    
+
     #if query is None:
     #    url = base_url + 'listofimages?_format=json'
     #    getResults(url)
-    
+
     # if query was a collection ID (integer)
     if isinstance(query, int):
         url = base_url + 'listofimages/' + str(query) + '?_format=json'
@@ -157,114 +157,83 @@ def getImages(query, format=""):
         df.to_csv(filename, index=False)
     else:
         return extracted_data
-        
-        
+
+
 def reportCollections(df, yearCreated=None, yearChanged=None, format=None):
-    """
-    Generate a Collection summary report from the result of getImages(query, format = "df).
-
-    This function calculates the number of subjects and images for each collection.
-    It returns the result as a dataframe if no format is specified.
-    It can optionally format the summary as a bar chart or save it as a CSV file.
-
-    Parameters:
-    df (DataFrame): The input DataFrame containing collection data.
-    yearCreated (int): Filter the data by the year created (optional).
-    yearChanged (int): Filter the data by the year changed (optional).
-    format (str): Output format ('chart' for bar chart, 'csv' for CSV file, default is None).
-    """
     if yearCreated:
         df['yearCreated'] = pd.to_datetime(df['created']).dt.year
         df = df[df['yearCreated'] == yearCreated]
     if yearChanged:
         df['yearChanged'] = pd.to_datetime(df['changed']).dt.year
         df = df[df['yearChanged'] == yearChanged]
-    
+
     summary = df.groupby('collectionName').agg(
         subjectCount=pd.NamedAgg(column='subjectId', aggfunc='nunique'),
         imageCount=pd.NamedAgg(column='imageId', aggfunc='nunique'),
         lastCreated=pd.NamedAgg(column='created', aggfunc='max'),
         lastChanged=pd.NamedAgg(column='changed', aggfunc='max')
     ).reset_index()
-    
+
     if format == 'chart':
-        plt.figure(figsize=(10, 6))
+        fig = go.Figure(data=[
+            go.Bar(name='Subject Count', x=summary['collectionName'], y=summary['subjectCount'], marker_color='blue'),
+            go.Bar(name='Image Count', x=summary['collectionName'], y=summary['imageCount'], marker_color='green')
+        ])
 
-        bar_width = 0.35
-        index = np.arange(len(summary['collectionName']))
+        fig.update_layout(
+            title='Subject and Image Counts by Collection',
+            xaxis_title='Collection Name',
+            yaxis_title='Counts',
+            barmode='group'
+        )
 
-        plt.bar(index, summary['subjectCount'], bar_width, label='Subject Count', color='blue')
-        plt.bar(index + bar_width, summary['imageCount'], bar_width, label='Image Count', color='green')
+        fig.show()
 
-        plt.xlabel('Collection Name')
-        plt.ylabel('Counts')
-        plt.title('Subject and Image Counts by Collection')
-        plt.xticks(index + bar_width / 2, summary['collectionName'], rotation=45, ha='right')
-        plt.legend()
-
-        plt.tight_layout()
-        plt.show()
-        
     elif format == 'csv':
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f'pathdb_report_{timestamp}.csv'
         summary.to_csv(filename, index=False)
         print(f"Summary report saved as '{filename}'")
-        
+
     return summary
-    
+
 
 def reportSubmissions(df, useCreated=False, format=None):
-    """
-    Generate a Submissions summary report from a DataFrame containing submission data.
-
-    This function calculates the number of collections, subjects, and images for each year.
-    It returns the result as a DataFrame if no format is specified.
-    It can optionally format the summary as a bar chart or save it as a CSV file.
-
-    Parameters:
-    df (DataFrame): The input DataFrame containing submission data.
-    useCreated (bool): If True, use 'created' column for calculations; otherwise, use 'changed' (default).
-    format (str): Output format ('chart' for bar chart, 'csv' for CSV file, default is None).
-    """
     if useCreated:
         time_column = 'created'
     else:
         time_column = 'changed'
-    
+
     df[time_column] = pd.to_datetime(df[time_column])
     df['year'] = df[time_column].dt.year
-    
+
     summary = df.groupby('year').agg(
         collectionCount=pd.NamedAgg(column='collectionName', aggfunc='nunique'),
         subjectCount=pd.NamedAgg(column='subjectId', aggfunc='nunique'),
         imageCount=pd.NamedAgg(column='imageId', aggfunc='nunique')
     ).reset_index()
-    
+
     if format == 'chart':
-        plt.figure(figsize=(10, 6))
+        fig = go.Figure(data=[
+            go.Bar(name='Collection Count', x=summary['year'], y=summary['collectionCount'], marker_color='blue'),
+            go.Bar(name='Subject Count', x=summary['year'], y=summary['subjectCount'], marker_color='orange'),
+            go.Bar(name='Image Count', x=summary['year'], y=summary['imageCount'], marker_color='green')
+        ])
 
-        bar_width = 0.25
-        index = np.arange(len(summary['year']))
+        fig.update_layout(
+            title='Submissions Counts by Year',
+            xaxis_title='Year',
+            yaxis_title='Counts',
+            barmode='group'
+        )
 
-        plt.bar(index, summary['collectionCount'], bar_width, label='Collection Count', color='blue')
-        plt.bar(index + bar_width, summary['subjectCount'], bar_width, label='Subject Count', color='orange')
-        plt.bar(index + 2 * bar_width, summary['imageCount'], bar_width, label='Image Count', color='green')
+        fig.show()
 
-        plt.xlabel('Year')
-        plt.ylabel('Counts')
-        plt.title('Submissions Counts by Year')
-        plt.xticks(index + bar_width, summary['year'], rotation=45, ha='right')
-        plt.legend()
-
-        plt.tight_layout()
-        plt.show()
-        
     elif format == 'csv':
         time_type = 'created' if useCreated else 'changed'
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f'submissions_report_{time_type}_{timestamp}.csv'
         summary.to_csv(filename, index=False)
         print(f"Submissions report saved as '{filename}'")
-        
+
     return summary
