@@ -1,6 +1,7 @@
 ####### setup
 from typing import Union, List, Optional
 import logging
+import warnings
 import requests
 import pandas as pd
 import getpass
