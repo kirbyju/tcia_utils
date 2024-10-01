@@ -18,13 +18,6 @@ from tcia_utils.utils import format_disk_space
 from tcia_utils.utils import remove_html_tags
 from tcia_utils.datacite import getDoi
 
-try:
-    import tkinter
-    from tkinter import filedialog
-except ModuleNotFoundError:
-    tkinter = None
-
-
 class StopExecution(Exception):
     def _render_traceback_(self):
         pass
@@ -2048,7 +2041,7 @@ def viewSeries(*args, **kwargs):
 
     Usage in `simpleDicomViewer` has changed slightly as the `seriesUid` parameter is no longer available:
 
-        import simpleDicomViewer
+        from simpleDicomViewer import viewSeries
         viewSeries(path = "")
     """
     raise NotImplementedError("viewSeries() has been migrated to the `simpleDicomViewer` PyPI package.")
@@ -2076,7 +2069,7 @@ def viewSeriesAnnotation(*args, **kwargs):
 
     Note that annotationPath should be the path to the specific segmentation file name as opposed to a directory containing multiple segmentation files:
 
-        import simpleDicomViewer
+        from simpleDicomViewer import viewSeriesAnnotations
         viewSeriesAnnotation(seriesPath = "", annotationPath = "")
     """
     raise NotImplementedError("viewSeriesAnnotation() has been migrated to the `simpleDicomViewer` PyPI package.")
