@@ -2054,7 +2054,7 @@ def viewSeries(*args, **kwargs):
     raise NotImplementedError("viewSeries() has been migrated to the `simpleDicomViewer` PyPI package.")
 
 
-def viewSeriesAnnotations(*args, **kwargs):
+def viewSeriesAnnotation(*args, **kwargs):
     """
     This function has been removed from `tcia_utils`.
 
@@ -2077,6 +2077,6 @@ def viewSeriesAnnotations(*args, **kwargs):
     Note that annotationPath should be the path to the specific segmentation file name as opposed to a directory containing multiple segmentation files:
 
         import simpleDicomViewer
-        viewSeriesAnnotations(seriesPath = "", annotationPath = "")
+        viewSeriesAnnotation(seriesPath = "", annotationPath = "")
     """
-    raise NotImplementedError("viewSeriesAnnotations() has been migrated to the `simpleDicomViewer` PyPI package.")
+    raise NotImplementedError("viewSeriesAnnotation() has been migrated to the `simpleDicomViewer` PyPI package.")
