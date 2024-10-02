@@ -683,7 +683,8 @@ def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
                    api_url: str = "",
                    input_type: str = "",
                    format: str = "",
-                   csv_filename: str = "") -> Union[pd.DataFrame, None]:
+                   csv_filename: str = "",
+                   as_zip: bool = False) -> Union[pd.DataFrame, None]:
     """
     Ingests a set of seriesUids and downloads them.
     By default, series_data expects JSON containing "SeriesInstanceUID" elements.
@@ -693,10 +694,10 @@ def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
     Set input_type = "list" to pass a list of Series UIDs instead of JSON.
     Set input_type = "df" to pass a dataframe that contains a "SeriesInstanceUID" column.
     Set input_type = "manifest" to pass the path of a *.TCIA manifest file as series_data.
-    Format can be set to "df" or "csv" to return series metadata.
+    Format can be set to "df" or "csv" to return series metadata. The metadata
+      includes info about series that have previously been downloaded if they're part of series_data.
     Setting a csv_filename will create the csv even if format isn't specified.
-    The metadata includes info about series that have previously been
-    downloaded if they're part of series_data.
+    If `as_zip` is set to True, it skips the unzipping steps.
     """
     endpoint = "getImage"
     success = 0
@@ -731,36 +732,46 @@ def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
     try:
         for seriesUID in series_data:
             pathTmp = os.path.join(path, seriesUID) if path else os.path.join("tciaDownload", seriesUID)
+            zip_path = f"{pathTmp}.zip"
             base_url = setApiUrl(endpoint, api_url)
             headers = nlst_api_call_headers if api_url == "nlst" else api_call_headers
             metadata_url = base_url + "getSeriesMetaData?SeriesInstanceUID=" + seriesUID
 
             # Check for previously downloaded data
-            if not os.path.isdir(pathTmp):
+            if not os.path.isdir(pathTmp) and not os.path.isfile(zip_path):
                 data_url = base_url + downloadOptions + seriesUID
 
                 # Download data
                 _log.info(f"Downloading... {data_url}")
                 data = requests.get(data_url, headers=headers)
                 if data.status_code == 200:
+                    # If `as_zip` is True, save the response as a zip file and don't extract it
+                    if as_zip:
+                        with open(zip_path, "wb") as zip_file:
+                            zip_file.write(data.content)
+                        success += 1
+                    else:
+                        # Unzip file
+                        with zipfile.ZipFile(io.BytesIO(data.content)) as file:
+                            file.extractall(path=pathTmp)
+                        success += 1
                     # Get metadata if desired
                     if manifestDF is not None:
                         metadata = requests.get(metadata_url, headers=headers).json()
                         manifestDF = pd.concat([manifestDF, pd.DataFrame(metadata)], ignore_index=True)
-                    # Unzip file
-                    with zipfile.ZipFile(io.BytesIO(data.content)) as file:
-                        file.extractall(path=pathTmp)
-                    success += 1
                     if number > 0 and success == number:
                         break
                 else:
                     _log.error(f"Error: {data.status_code} Series failed: {seriesUID}")
                     failed += 1
             else:
+                if os.path.isdir(pathTmp):
+                    _log.warning(f"Series {seriesUID} already downloaded and unzipped.")
+                elif os.path.isfile(zip_path):
+                    _log.warning(f"Series {seriesUID} already downloaded as a zip file.")
                 if manifestDF is not None:
                     metadata = requests.get(metadata_url, headers=api_call_headers).json()
                     manifestDF = pd.concat([manifestDF, pd.DataFrame(metadata)], ignore_index=True)
-                _log.warning(f"Series {seriesUID} already downloaded.")
                 previous += 1
 
         # Summarize download results
