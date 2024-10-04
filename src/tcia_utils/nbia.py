@@ -32,17 +32,27 @@ logging.basicConfig(
 
 def log_request_exception(err: requests.exceptions.RequestException) -> int:
     if isinstance(err, requests.exceptions.HTTPError):
-        _log.error(f"HTTP Error: {err}")
-        return 400  # Client error
+        if err.response.status_code == 401:
+            _log.error(f"Authentication Error: {err}. Status code: 401. Unauthorized access.")
+            return 401  # Unauthorized
+        elif err.response.status_code == 403:
+            _log.error(f"Permission Error: {err}. Status code: 403. Forbidden access.")
+            return 403  # Forbidden
+        elif err.response.status_code == 404:
+            _log.error(f"Resource Not Found: {err}. Status code: 404.")
+            return 404  # Not Found
+        else:
+            _log.error(f"HTTP Error: {err}. Status code: {err.response.status_code}")
+            return 400  # Generic client error for other HTTP errors
     elif isinstance(err, requests.exceptions.ConnectionError):
-        _log.error(f"Connection Error: {err}")
-        return 500  # Server error
+        _log.error(f"Connection Error: {err}. Unable to reach the server.")
+        return 502  # Bad Gateway or service down
     elif isinstance(err, requests.exceptions.Timeout):
-        _log.error(f"Timeout Error: {err}")
+        _log.error(f"Timeout Error: {err}. The request timed out.")
         return 408  # Timeout error
     else:
-        _log.error(f"Request Exception: {err}")
-        return 500  # General request error
+        _log.error(f"Request Exception: {err}. An unknown error occurred.")
+        return 500  # General server error
 
 
 # Used by functions that accept parameters used in GUI Simple Search
@@ -194,7 +204,7 @@ def getToken(user="", pw="", api_url=""):
         return 200
     # handle errors
     except requests.exceptions.RequestException as err:
-        log_request_exception(err)
+        return log_request_exception(err)
         raise StopExecution
 
 
@@ -266,7 +276,7 @@ def refreshToken(api_url="primary"):
 
     # handle errors
     except requests.exceptions.RequestException as err:
-        log_request_exception(err)
+        return log_request_exception(err)
         raise StopExecution
 
 
@@ -329,8 +339,7 @@ def queryData(endpoint, options, api_url, format, method="GET", param=None):
             return None
 
     except requests.exceptions.RequestException as err:
-        log_request_exception(err)
-        return None
+        return log_request_exception(err)
     except ValueError as json_err:
         _log.error(f"JSON Decode Error: {json_err} - Response text: {response.text if response else 'No response'}")
         return None
@@ -786,7 +795,7 @@ def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
         )
 
     except requests.exceptions.RequestException as err:
-        log_request_exception(err)
+        return log_request_exception(err)
 
     # Return metadata dataframe and/or save to CSV file if requested
     if manifestDF is not None:
@@ -847,7 +856,7 @@ def downloadImage(seriesUID: str, sopUID: str, path: Optional[str] = "", api_url
             _log.warning(f"Image {sopUID} already downloaded to:\n{path_tmp}")
 
     except requests.exceptions.RequestException as err:
-        log_request_exception(err)
+        return log_request_exception(err)
 
 
 ##########################
@@ -1021,7 +1030,7 @@ def getSeriesListData(uids, api_url):
             return None
 
     except requests.exceptions.RequestException as err:
-        log_request_exception(err)
+        return log_request_exception(err)
         return None
 
     else:
@@ -1268,7 +1277,7 @@ def getSimpleSearchWithModalityAndBodyPartPaged(
             _log.info("No results found.")
 
     except requests.exceptions.RequestException as err:
-        log_request_exception(err)
+        return log_request_exception(err)
 
 
 def getAdvancedQCSearch(criteria_values, api_url = "", format = "", input_type = {}):
@@ -1807,7 +1816,7 @@ def makeSharedCart(uids, name, description, description_url, api_url=""):
         return 200
 
     except requests.exceptions.RequestException as err:
-        log_request_exception(err)
+        return log_request_exception(err)
 
 
 def makeSeriesReport(series_data, input_type = "", format = "", filename = None, api_url = ""):
