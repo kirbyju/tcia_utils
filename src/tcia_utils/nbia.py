@@ -30,15 +30,19 @@ logging.basicConfig(
 )
 
 
-def log_request_exception(err: requests.exceptions.RequestException) -> None:
+def log_request_exception(err: requests.exceptions.RequestException) -> int:
     if isinstance(err, requests.exceptions.HTTPError):
         _log.error(f"HTTP Error: {err}")
+        return 400  # Client error
     elif isinstance(err, requests.exceptions.ConnectionError):
         _log.error(f"Connection Error: {err}")
+        return 500  # Server error
     elif isinstance(err, requests.exceptions.Timeout):
         _log.error(f"Timeout Error: {err}")
+        return 408  # Timeout error
     else:
         _log.error(f"Request Exception: {err}")
+        return 500  # General request error
 
 
 # Used by functions that accept parameters used in GUI Simple Search
@@ -187,7 +191,7 @@ def getToken(user="", pw="", api_url=""):
             refresh_token = tmp_refresh_token
             id_token = tmp_id_token
             _log.info(f'Success - Token saved to api_call_headers variable and expires at {token_exp_time}')
-
+        return 200
     # handle errors
     except requests.exceptions.RequestException as err:
         log_request_exception(err)
@@ -258,7 +262,7 @@ def refreshToken(api_url="primary"):
             refresh_token = tmp_refresh_token
             id_token = tmp_id_token
             _log.info(f'Success - Token refreshed for api_call_headers variable and expires at {token_exp_time}')
-
+        return 200
 
     # handle errors
     except requests.exceptions.RequestException as err:
@@ -1798,12 +1802,9 @@ def makeSharedCart(uids, name, description, description_url, api_url=""):
         _log.info(f'Calling {endpoint} with parameters {param}')
         metadata = requests.post(url, headers=headers_with_content_type, data=param)
         metadata.raise_for_status()
-
-        # check for empty results and format output
-        if metadata.text != "":
-            _log.info(metadata.text)
-        else:
-            _log.error("Shared Cart creation failed.")
+        # log success and return success code
+        _log.info(metadata.text)
+        return 200
 
     except requests.exceptions.RequestException as err:
         log_request_exception(err)
