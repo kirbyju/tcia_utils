@@ -1169,6 +1169,7 @@ def getSimpleSearchWithModalityAndBodyPartPaged(
     sortField                -- 'subject', 'studies', 'series', or 'collection'. Defaults to 'subject'.
     format: str              -- Defaults to JSON. Can be set to "uids" to return a python list of
                                 Series Instance UIDs or "manifest" to save a TCIA manifest file (up to 1,000,000 series).
+                                "manifest_text" can be used to return the manifest content as text rather than saving it to disk.
 
     Example call: getSimpleSearchWithModalityAndBodyPartPaged(collections=["TCGA-UCEC", "4D-Lung"], modalities=["CT"])
     """
@@ -1278,10 +1279,12 @@ def getSimpleSearchWithModalityAndBodyPartPaged(
                 with open(filename, 'w') as file:
                     file.write(metadata.text)
                 _log.info(f"Manifest saved as {filename}")
+            elif format == "manifest_text":
+                return metadata.text
             elif format == "uids":
-                # Discard the first 6 lines
+                # Discard the first 6 lines of config in manifest
                 lines = metadata.text.split('\n')[6:]
-                # Convert the remaining lines to a list
+                # Convert the Series UIDs to a list
                 uids = [line for line in lines if line.strip()]
                 return uids
             else:
