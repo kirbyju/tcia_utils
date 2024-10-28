@@ -101,7 +101,7 @@ def setApiUrl(endpoint, api_url):
                          "getDicomTags", "getSeriesMetadata2", "getCollectionOrSeriesForDOI",
                          "getCollectionValuesAndCounts", "getCollectionDescriptions",
                          "getSimpleSearchWithModalityAndBodyPartPaged", "getManufacturerValuesAndCounts",
-                         "getAdvancedQCSearch", "createSharedList"]
+                         "getAdvancedQCSearch", "createSharedList", "getManifestForSimpleSearch"]
 
     if endpoint not in searchEndpoints and endpoint not in advancedEndpoints:
         _log.error(
@@ -1152,7 +1152,6 @@ def getSimpleSearchWithModalityAndBodyPartPaged(
     All parameters are optional.
     Takes the same parameters as the SimpleSearch GUI
     Use more parameters to narrow the number of subjects received.
-    Note: This function only supports output of JSON format, please leave the format parameter as it.
 
     collections: list[str]   -- The DICOM collections of interest to you
     species: list[str]       -- Filter collections by species. Possible values are 'human', 'mouse', and 'dog'
@@ -1168,11 +1167,19 @@ def getSimpleSearchWithModalityAndBodyPartPaged(
     size: int                -- Size of returned series page. Defaults to 10.
     sortDirection            -- 'ascending' or 'descending'. Defaults to 'ascending'.
     sortField                -- 'subject', 'studies', 'series', or 'collection'. Defaults to 'subject'.
+    format: str              -- Defaults to JSON. Can be set to "uids" to return a python list of
+                                Series Instance UIDs or "manifest" to save a TCIA manifest file (up to 1,000,000 series).
 
     Example call: getSimpleSearchWithModalityAndBodyPartPaged(collections=["TCGA-UCEC", "4D-Lung"], modalities=["CT"])
     """
-
-    endpoint = "getSimpleSearchWithModalityAndBodyPartPaged"
+    if format == "manifest":
+        endpoint = "getManifestForSimpleSearch"
+        size = 1000000
+    elif format == "uids":
+        endpoint = "getManifestForSimpleSearch"
+        size = 1000000
+    else:
+        endpoint = "getSimpleSearchWithModalityAndBodyPartPaged"
     criteriaTypeIndex = 0
     options = {}
 
@@ -1261,17 +1268,24 @@ def getSimpleSearchWithModalityAndBodyPartPaged(
 
         # check for empty results and format output
         if metadata.text and metadata.text != "[]":
-            metadata = metadata.json()
             # format the output (optional)
-            if format == "df":
-                df = pd.DataFrame(metadata)
-                return df
-            elif format == "csv":
-                df = pd.DataFrame(metadata)
-                df.to_csv(endpoint + ".csv")
-                _log.info("CSV saved to: " + endpoint + ".csv")
-                return df
+            if format == "manifest":
+                # Get the current date and time
+                now = datetime.now()
+                # Format it as 'manifest-YYYY-MM-DD_HH-MM.tcia'
+                filename = now.strftime("manifest-%Y-%m-%d_%H-%M.tcia")
+                # Save the manifest file
+                with open(filename, 'w') as file:
+                    file.write(metadata.text)
+                _log.info(f"Manifest saved as {filename}")
+            elif format == "uids":
+                # Discard the first 6 lines
+                lines = metadata.text.split('\n')[6:]
+                # Convert the remaining lines to a list
+                uids = [line for line in lines if line.strip()]
+                return uids
             else:
+                metadata = metadata.json()
                 return metadata
         else:
             _log.info("No results found.")
