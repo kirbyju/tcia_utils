@@ -1173,14 +1173,12 @@ def getSimpleSearchWithModalityAndBodyPartPaged(
 
     Example call: getSimpleSearchWithModalityAndBodyPartPaged(collections=["TCGA-UCEC", "4D-Lung"], modalities=["CT"])
     """
-    if format == "manifest":
-        endpoint = "getManifestForSimpleSearch"
-        size = 1000000
-    elif format == "uids":
+    if format in ["manifest", "manifest_text", "uids"]:
         endpoint = "getManifestForSimpleSearch"
         size = 1000000
     else:
         endpoint = "getSimpleSearchWithModalityAndBodyPartPaged"
+
     criteriaTypeIndex = 0
     options = {}
 
