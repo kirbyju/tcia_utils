@@ -78,6 +78,7 @@ def getImages(query, format=""):
         extracted_item['collectionId'] = item.get('field_collection')[0].get('target_id')
         extracted_item['subjectId'] = item.get('clinicaltrialsubjectid')[0].get('value')
         extracted_item['imageId'] = item.get('imageid')[0].get('value')
+        extracted_item['slideId'] = item.get('nid')[0].get('value')
         extracted_item['imageHeight'] = item.get('imagedvolumeheight')[0].get('value')
         extracted_item['imagedWidth'] = item.get('imagedvolumewidth')[0].get('value')
 
