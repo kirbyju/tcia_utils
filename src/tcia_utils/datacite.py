@@ -14,7 +14,7 @@ logging.basicConfig(
 )
 
 def getDoi(format = ""):
-    """ 
+    """
         Gets metadata for all TCIA DOIs.
         Returns a dataframe by default, but format can be set to CSV or JSON.
         See https://support.datacite.org/docs/api-get-doi for more details.
@@ -93,28 +93,30 @@ def getDoi(format = ""):
                     except KeyError:
                         funding_references = None
                     url = item["attributes"]["url"]
+                    view_count = item["attributes"]["viewCount"]
                     citation_count = item["attributes"]["citationCount"]
                     reference_count = item["attributes"]["referenceCount"]
                     related = f"{relation_type}: {related_identifier}" if relation_type and related_identifier else None
-                    dois.append({"DOI": doi, 
-                                "Identifier": identifier, 
+                    dois.append({"DOI": doi,
+                                "Identifier": identifier,
                                 "CreatorNames": "; ".join(creator_names),
-                                "Title": title, 
-                                "Created": created, 
-                                "Updated": updated, 
-                                "Related": related, 
-                                "Version": version, 
+                                "Title": title,
+                                "Created": created,
+                                "Updated": updated,
+                                "Related": related,
+                                "Version": version,
                                 "Rights": "; ".join(rights_list),
                                 "RightsURI": "; ".join(rights_uri_list),
-                                "Description": description, 
-                                "FundingReferences": funding_references, 
-                                "URL": url, 
-                                "CitationCount": citation_count, 
+                                "Description": description,
+                                "FundingReferences": funding_references,
+                                "URL": url,
+                                "ViewCount": view_count,
+                                "CitationCount": citation_count,
                                 "ReferenceCount": reference_count})
 
-                df = pd.DataFrame(dois, columns=["DOI", "Identifier", "CreatorNames", "Title", "Created", "Updated", "Related", 
-                                                  "Version", "Rights", "RightsURI", "Description", "FundingReferences", "URL", 
-                                                  "CitationCount", "ReferenceCount"])  
+                df = pd.DataFrame(dois, columns=["DOI", "Identifier", "CreatorNames", "Title", "Created", "Updated", "Related",
+                                                  "Version", "Rights", "RightsURI", "Description", "FundingReferences", "URL",
+                                                  "ViewCount", "CitationCount", "ReferenceCount"])  
                 if format == "csv":
                     now = datetime.now()
                     dt_string = now.strftime("%Y-%m-%d_%H%M")
@@ -123,7 +125,7 @@ def getDoi(format = ""):
                 return df
         else:
             _log.info(f'No results found.')
-            
+
     # handle errors
     except requests.exceptions.HTTPError as errh:
         _log.error(f'Error: {errh}')
@@ -133,14 +135,14 @@ def getDoi(format = ""):
         _log.error(f'Error: {errt}')
     except requests.exceptions.RequestException as err:
         _log.error(f'Error: {err}')
-        
-        
+
+
 def getDerivedDois(dois, format='df'):
     """
     Retrieve datasets that are derived from a given list of DOIs or a single DOI using the DataCite API.
 
     This function queries the DataCite API to find datasets that have a "IsDerivedFrom" relationship
-    with each DOI in the provided list or the single DOI provided. The results can be returned in various formats: 
+    with each DOI in the provided list or the single DOI provided. The results can be returned in various formats:
     a pandas DataFrame, a CSV string, or a list of dictionaries (JSON).
 
     Parameters:
@@ -166,14 +168,14 @@ def getDerivedDois(dois, format='df'):
     >>> dois = ["10.1234/example.doi1", "10.5678/example.doi2"]
     >>> df = getDerivedDois(dois, format='df')
     >>> print(df)
-    
+
     >>> single_doi = "10.1234/example.doi1"
     >>> df = getDerivedDois(single_doi, format='df')
     >>> print(df)
     """
     if isinstance(dois, str):
         dois = [dois]
-    
+
     base_url = "https://api.datacite.org/works"
     all_datasets = []
 
@@ -197,7 +199,7 @@ def getDerivedDois(dois, format='df'):
                 _log.info(f"No datasets found derived from DOI: {doi}")
         else:
             _log.error(f"Failed to retrieve data for DOI: {doi}, Error: {response.text}")
-    
+
     if format == 'df':
         df = pd.json_normalize(all_datasets)
         return df
@@ -210,7 +212,7 @@ def getDerivedDois(dois, format='df'):
     else:
         _log.error(f"Invalid format specified. Use 'df', 'csv', or 'json'.")
 
-        
+
 def getGithubMentions(token, delay=10, resume_from=None):
     """
     Search GitHub for mentions of TCIA DOIs and return a DataFrame with the results.
@@ -229,36 +231,36 @@ def getGithubMentions(token, delay=10, resume_from=None):
     """
     # get current TCIA DOIs
     datacite_df = getDoi()
-    
+
     # Extract unique DOIs from both columns
     unique_dois = pd.unique(datacite_df[['Identifier', 'DOI']].values.ravel('K'))
-    
+
     # Initialize an empty DataFrame for the results
     tcia_mentions = pd.DataFrame()
-    
+
     # Determine the starting index if resuming
     start_index = 0
     if resume_from:
         start_index = unique_dois.tolist().index(resume_from)
-    
+
     # Iterate over each unique DOI starting from the resume point
     while start_index < len(unique_dois):
         doi = unique_dois[start_index]
-        _log.info(f'Starting search for DOI: {doi}')  
-        
+        _log.info(f'Starting search for DOI: {doi}')
+
         # Construct the search query
         query = f'"{doi}" in:file'
         url = f'https://api.github.com/search/code?q={query}'
-        
+
         # Set up the headers with your personal token for authentication
         headers = {
             'Authorization': f'token {token}'
         }
-        
+
         try:
             # Make the request to the GitHub API
             response = requests.get(url, headers=headers)
-            
+
             # Check if the request was successful
             if response.status_code == 200:
                 # Parse the response JSON
@@ -273,12 +275,12 @@ def getGithubMentions(token, delay=10, resume_from=None):
                 start_index += 1
             else:
                 _log.warning(f'Failed to fetch data for DOI {doi}: {response.status_code}')
-            
+
             time.sleep(delay)  # Delay the next request by the specified number of seconds
         except Exception as e:
             _log.error(f'An error occurred: {e}')
             # Do not increment start_index, retry the same DOI
-    
+
     # Define a function to extract nested information of interest in certain fields
     def extract_info(record):
         full_name = record.get('full_name', '')
@@ -294,14 +296,14 @@ def getGithubMentions(token, delay=10, resume_from=None):
     # Drop unnecessary columns
     columns_to_drop = ['name', 'repository', 'sha', 'url', 'git_url', 'score']
     tcia_mentions = tcia_mentions.drop(columns_to_drop, axis = 1)
-    
+
     # Reorder the columns
     columns_order = ['DOI', 'login', 'full_name', 'path', 'html_url', 'description']
     tcia_mentions = tcia_mentions[columns_order]
-    
+
     # Save the DataFrame to an Excel file
     date_str = datetime.now().strftime('%Y-%m-%d')
     file_name = f'tcia_github_mentions_{date_str}.xlsx'
     tcia_mentions.to_excel(file_name, index=False)
-    
+
     return tcia_mentions
