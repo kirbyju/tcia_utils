@@ -136,17 +136,27 @@ def setApiUrl(endpoint, api_url):
 
     return base_url
 
+def getToken(user: str = "", pw: str = "", api_url: str = "", return_values: bool = False) -> tuple | None:
+    """
+    Retrieves an access token for API authorization.
+    tcia_utils manages tokens with global variables so you do not need to pass them to other functions.
+    "return_values = True" can be used if you want to manage/use the tokens with other code outside of tcia_utils.
 
-def getToken(user="", pw="", api_url=""):
+    Parameters:
+        user (str): The username. Use "nbia_guest" for anonymous access.
+        pw (str): The password. If not provided, the function prompts for input.
+        api_url (str): API server identifier. Use "nlst" for the NLST server.
+        return_values (bool): If True, returns token details as a tuple. Defaults to False.
+
+    Returns:
+        tuple or int:
+            - If return_values is True, returns a tuple:
+                (API call headers (dict), Access token (str), Token expiration time (datetime),
+                 Refresh token (str), ID token (str)).
+            - If return_values is False, returns 200 to indicate success.
     """
-    getToken() accepts user and pw parameters to create a token to access APIs that require authorization.
-    Access tokens can be refreshed with refreshToken().
-    Set user = "nbia_guest" for anonymous access to Advanced API functions
-    Interactive prompts are provided for user/pw if they're not specified as parameters.
-    "Advanced APIs" can be accessed anonymously using the nbia_guest account with the default guest password.
-    Set api_url to "nlst" for accessing the NLST server.
-    """
-    global token_exp_time, api_call_headers, access_token, refresh_token, id_token, nlst_token_exp_time, nlst_api_call_headers, nlst_access_token, nlst_refresh_token, nlst_id_token
+    global token_exp_time, api_call_headers, access_token, refresh_token, id_token
+    global nlst_token_exp_time, nlst_api_call_headers, nlst_access_token, nlst_refresh_token, nlst_id_token
 
     # specify user/pw unless nbia_guest is being used for accessing Advanced API anonymously
     if user != "":
@@ -193,33 +203,44 @@ def getToken(user="", pw="", api_url=""):
             nlst_api_call_headers = tmp_api_call_headers
             nlst_refresh_token = tmp_refresh_token
             nlst_id_token = tmp_id_token
-            _log.info(f'Success - Token saved to nlst_api_call_headers variable and expires at {nlst_token_exp_time}')
+            _log.info(f'Success - Token saved to global nlst_api_call_headers variable and expires at {nlst_token_exp_time}')
         else:
             access_token = tmp_access_token
             token_exp_time = tmp_token_exp_time
             api_call_headers = tmp_api_call_headers
             refresh_token = tmp_refresh_token
             id_token = tmp_id_token
-            _log.info(f'Success - Token saved to api_call_headers variable and expires at {token_exp_time}')
-        return 200
+            _log.info(f'Success - Token saved to global api_call_headers variable and expires at {token_exp_time}')
+        # Return results based on `return_values` flag
+        if return_values:
+            return tmp_api_call_headers, tmp_access_token, tmp_token_exp_time, tmp_refresh_token, tmp_id_token
+        else:
+            return None
     # handle errors
     except requests.exceptions.RequestException as err:
         return log_request_exception(err)
         raise StopExecution
 
 
-def refreshToken(api_url="primary"):
+def refreshToken(api_url: str = "primary", return_values: bool = False) -> tuple | None:
     """
-    refreshToken() refreshes security tokens to extend access time for APIs
-    that require authorization. It attempts to verify that a refresh token
-    exists and recommends using getToken() to create a new token if needed.
-    This function is called as needed by setApiUrl() and is generally not
-    something that needs to be called directly in your code.
+    Refreshes security tokens to extend access time for APIs that require authorization.
+
+    Parameters:
+        api_url (str): API server identifier. Use "nlst" for the NLST server.
+        return_values (bool): If True, returns refreshed token details as a tuple. Defaults to False.
+
+    Returns:
+        tuple or None:
+            - If return_values is True, returns a tuple:
+                (API call headers (dict), Access token (str), Token expiration time (datetime),
+                 Refresh token (str), ID token (str)).
+            - If return_values is False, returns None.
     """
     global token_exp_time, api_call_headers, access_token, refresh_token, id_token
     global nlst_token_exp_time, nlst_api_call_headers, nlst_access_token, nlst_refresh_token, nlst_id_token
 
-    # copy the relevant token to refresh (nlst vs primary server) into tmp_token
+    # determine which token to refresh
     try:
         if api_url == "nlst":
             tmp_token = nlst_refresh_token
@@ -272,7 +293,11 @@ def refreshToken(api_url="primary"):
             refresh_token = tmp_refresh_token
             id_token = tmp_id_token
             _log.info(f'Success - Token refreshed for api_call_headers variable and expires at {token_exp_time}')
-        return 200
+        # Return results based on `return_values` flag
+        if return_values:
+            return tmp_api_call_headers, tmp_access_token, tmp_token_exp_time, tmp_refresh_token, tmp_id_token
+        else:
+            return None
 
     # handle errors
     except requests.exceptions.RequestException as err:
