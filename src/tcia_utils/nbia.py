@@ -30,29 +30,35 @@ logging.basicConfig(
 )
 
 
-def log_request_exception(err: requests.exceptions.RequestException) -> int:
+def log_request_exception(err: requests.exceptions.RequestException) -> None:
+    """
+    Logs details of a RequestException, categorizing the error type.
+
+    Args:
+        err (requests.exceptions.RequestException): The exception raised during a request.
+
+    Returns:
+        None
+    """
     if isinstance(err, requests.exceptions.HTTPError):
-        if err.response.status_code == 401:
-            _log.error(f"Authentication Error: {err}. Status code: 401. Unauthorized access.")
-            return 401  # Unauthorized
-        elif err.response.status_code == 403:
-            _log.error(f"Permission Error: {err}. Status code: 403. Forbidden access.")
-            return 403  # Forbidden
-        elif err.response.status_code == 404:
-            _log.error(f"Resource Not Found: {err}. Status code: 404.")
-            return 404  # Not Found
+        if err.response is not None:
+            status_code = err.response.status_code
+            if status_code == 401:
+                _log.error(f"Authentication Error: {err}. Status code: 401. Unauthorized access.")
+            elif status_code == 403:
+                _log.error(f"Permission Error: {err}. Status code: 403. Forbidden access.")
+            elif status_code == 404:
+                _log.error(f"Resource Not Found: {err}. Status code: 404.")
+            else:
+                _log.error(f"HTTP Error: {err}. Status code: {status_code}.")
         else:
-            _log.error(f"HTTP Error: {err}. Status code: {err.response.status_code}")
-            return 400  # Generic client error for other HTTP errors
+            _log.error(f"HTTP Error with no response: {err}")
     elif isinstance(err, requests.exceptions.ConnectionError):
         _log.error(f"Connection Error: {err}. Unable to reach the server.")
-        return 502  # Bad Gateway or service down
     elif isinstance(err, requests.exceptions.Timeout):
         _log.error(f"Timeout Error: {err}. The request timed out.")
-        return 408  # Timeout error
     else:
         _log.error(f"Request Exception: {err}. An unknown error occurred.")
-        return 500  # General server error
 
 
 # Used by functions that accept parameters used in GUI Simple Search
@@ -98,7 +104,7 @@ def setApiUrl(endpoint, api_url):
                        "NewPatientsInCollection", "NewStudiesInPatientCollection",
                        "getSeriesSize", "getUpdatedSeries"]
     advancedEndpoints = ["getModalityValuesAndCounts", "getBodyPartValuesAndCounts",
-                         "getDicomTags", "getSeriesMetadata2", "getCollectionOrSeriesForDOI",
+                         "getDicomTags", "getSeriesMetadata2", "getSeriesMetadata3", "getCollectionOrSeriesForDOI",
                          "getCollectionValuesAndCounts", "getCollectionDescriptions",
                          "getSimpleSearchWithModalityAndBodyPartPaged", "getManufacturerValuesAndCounts",
                          "getAdvancedQCSearch", "createSharedList", "getManifestForSimpleSearch"]
@@ -335,13 +341,30 @@ def makeCredentialFile(user = "", pw = ""):
     _log.info("Credential file for NBIA Data Retriever saved: credentials.txt")
 
 
-def queryData(endpoint, options, api_url, format, method="GET", param=None):
+def queryData(
+    endpoint: str,
+    options: dict,
+    api_url: str,
+    format: str = "json",
+    method: str = "GET",
+    param: Optional[dict] = None
+) -> Optional[Union[dict, pd.DataFrame]]:
     """
-    queryData() is called by many other query functions and is generally
-    not something that needs to be called directly in your code.
-    It uses setApiURL() to set a base URL and handles errors
-    for HTTP status and empty search results.
-    Formats output as JSON by default with options for "df" (dataframe) and "csv".
+    Sends an HTTP request to the specified endpoint and formats the response.
+
+    Args:
+        endpoint (str): The API endpoint to query.
+        options (dict): Query parameters for GET requests.
+        api_url (str): Base URL of the API.
+        format (str): Format of the output. Options are "json", "df" (DataFrame), or "csv". Defaults to "json".
+        method (str): HTTP method to use. Options are "GET" or "POST". Defaults to "GET".
+        param (Optional[dict]): Form data for POST requests. Defaults to None.
+
+    Returns:
+        Optional[Union[dict, pd.DataFrame]]: The API response in the requested format, or None if an error occurs.
+
+    Raises:
+        requests.exceptions.RequestException: If the request fails with an HTTP error.
     """
     base_url = setApiUrl(endpoint, api_url)
     url = f"{base_url}{endpoint}"
@@ -357,32 +380,34 @@ def queryData(endpoint, options, api_url, format, method="GET", param=None):
             _log.info(f'Calling {endpoint} with parameters {options}')
             response = requests.get(url, params=options, headers=headers)
 
-        response.raise_for_status()
+        response.raise_for_status()  # Raise an HTTPError for bad responses (4xx, 5xx)
 
-        if response and not response.content.strip():
-            _log.info(f"No results found.")
+        if not response.content.strip():
+            _log.info("No results found.")
             return None
 
-    except requests.exceptions.RequestException as err:
-        return log_request_exception(err)
-    except ValueError as json_err:
-        _log.error(f"JSON Decode Error: {json_err} - Response text: {response.text if response else 'No response'}")
-        return None
+        # Attempt to parse the JSON response
+        try:
+            data = response.json()
+        except ValueError:
+            _log.error(f"Failed to decode JSON from response. Response text: {response.text}")
+            return None
 
-    else:
-        data = response.json()
-        # format the output
-        if format == "df":
-            df = pd.DataFrame(data)
-            return df
-        elif format == "csv":
+        # Format the response
+        if format.lower() == "df":
+            return pd.DataFrame(data)
+        elif format.lower() == "csv":
             df = pd.DataFrame(data)
             csv_filename = f"{endpoint}_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.csv"
-            df.to_csv(csv_filename)
+            df.to_csv(csv_filename, index=False)
             _log.info(f"CSV saved to: {csv_filename}")
             return df
         else:
             return data
+
+    except requests.exceptions.RequestException as err:
+        log_request_exception(err)  # Log the error
+        return None  # Explicitly return None to indicate failure
 
 
 def getCollections(api_url = "",
@@ -984,53 +1009,76 @@ def getManufacturerCounts(collection = "",
     return data
 
 
-def getSeriesList(uids, api_url = "", csv_filename = "", format = ""):
+def getSeriesList(
+    uids: List[str],
+    api_url: str = "",
+    csv_filename: str = "",
+    format: str = "",
+    include_patient_study: bool = False
+) -> Optional[Union[pd.DataFrame, None]]:
     """
-    Get metadata for a list of series from Advanced API.
-    Returns result as dataframe (default) or as CSV if format = 'csv'.
-    Use csv_filename to set a custom filename.
-    """
+    Retrieve metadata for a list of series from the Advanced API.
 
-    # break up the list into smaller chunks if > 10,000 series
+    Args:
+        uids (List[str]): List of unique identifiers (series UIDs) to query.
+        api_url (str, optional): Base URL of the API to be used for the requests. Defaults to an empty string.
+        csv_filename (str, optional): Name of the CSV file to save results. Ignored if `format` is not "csv".
+        format (str, optional): Output format. If "csv", the results are saved to a CSV file.
+        include_patient_study (bool, optional): Whether to include additional metadata from
+            patient and study levels for the requested series. Defaults to False.
+
+    Returns:
+        Optional[Union[pd.DataFrame, None]]: A DataFrame containing the series metadata. If `format` is "csv",
+        the results are saved to a file, and None is returned.
+    """
     chunk_size = 10000
-    if len(uids) > chunk_size:
-        chunked_uids = list()
-        for i in range(0, len(uids), chunk_size):
-            chunked_uids.append(uids[i:i+chunk_size])
-        # Count how many chunks
-        chunk_count = len(chunked_uids)
-        _log.info(f'Your data has been split into {chunk_count} groups.')
-    else:
-        chunk_count = 0
+    chunked_uids = [uids[i:i + chunk_size] for i in range(0, len(uids), chunk_size)]
 
+    if len(chunked_uids) > 1:
+        _log.info(f"Your data has been split into {len(chunked_uids)} chunks for processing.")
 
-    if chunk_count == 0:
-        df = getSeriesListData(uids, api_url)
-    else:
-        count = 0
-        dfs = []  # create an empty list to store DataFrames
-        for x in chunked_uids:
-            str_count = str(count)
-            chunk_df = getSeriesListData(x, api_url)
-            dfs.append(chunk_df)  # append the DataFrame for this chunk to the list
-            count += 1
+    dfs = []
 
-        # concatenate all the DataFrames in the list into a single DataFrame
-        df = pd.concat(dfs, ignore_index=True)
+    # Process each chunk
+    for idx, chunk in enumerate(chunked_uids, start=1):
+        try:
+            if len(chunked_uids) > 1:
+                _log.info(f"Processing chunk {idx}/{len(chunked_uids)}...")
+            chunk_df = getSeriesListData(chunk, api_url, include_patient_study)
 
-    if format == "csv" and csv_filename != "":
-        df.to_csv(csv_filename + '.csv')
-        _log.info(f"Report saved as {csv_filename}.csv")
-    elif format == "csv":
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f'series_report_{timestamp}.csv'
+            if chunk_df is None or chunk_df.empty:
+                #_log.warning(f"No data returned for chunk {idx}.")
+                continue
+
+            dfs.append(chunk_df)
+        except requests.exceptions.RequestException as err:
+            #_log.error(f"Error processing chunk {idx}:")
+            log_request_exception(err)
+            continue
+
+    # Handle the case where no data was retrieved
+    if not dfs:
+        _log.error("No results returned for the provided series UIDs. Ensure you have access to the requested data.")
+        return None
+
+    # Combine all retrieved DataFrames
+    df = pd.concat(dfs, ignore_index=True)
+
+    if format.lower() == "csv":
+        if csv_filename:
+            filename = f"{csv_filename}.csv"
+        else:
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f"series_report_{timestamp}.csv"
+
         df.to_csv(filename, index=False)
         _log.info(f"Collection summary report saved as '{filename}'")
-    else:
-        return df
+        return None
+
+    return df
 
 
-def getSeriesListData(uids, api_url):
+def getSeriesListData(uids, api_url, include_patient_study):
     """
     Ingests input from getSeriesList().
     Not intended to be used directly.
@@ -1038,7 +1086,7 @@ def getSeriesListData(uids, api_url):
     """
     uidList = ",".join(uids)
     param = {'list': uidList}
-    endpoint = "getSeriesMetadata2"
+    endpoint = "getSeriesMetadata3" if include_patient_study else "getSeriesMetadata2"
 
     base_url = setApiUrl(endpoint, api_url)
     url = f"{base_url}{endpoint}"
@@ -1063,20 +1111,33 @@ def getSeriesListData(uids, api_url):
         return df
 
 
-def getDicomTags(seriesUid,
-                 api_url = "",
-                 format = ""):
+def getDicomTags(seriesUid: str, api_url: str = "", format: str = "df") -> Optional[pd.DataFrame]:
     """
-    Gets DICOM tag metadata for a given series UID (scan)
+    Retrieves DICOM tag metadata for a given Series UID.
+
+    Args:
+        seriesUid (str): The UID of the DICOM series to query.
+        api_url (str, optional): The base URL for the API. Defaults to "".
+        format (str, optional): Desired format of the output. Defaults to "df" (DataFrame).
+
+    Returns:
+        Optional[pd.DataFrame]: A DataFrame containing DICOM tag metadata, or None if the query fails.
     """
     endpoint = "getDicomTags"
+    options = {'SeriesUID': seriesUid}
 
-    # create options dict to construct URL
-    options = {}
-    options['SeriesUID'] = seriesUid
-
+    # Query the API
     data = queryData(endpoint, options, api_url, format)
-    return data
+
+    # Ensure a valid DataFrame is returned or log an error
+    if isinstance(data, pd.DataFrame):
+        return data
+    elif data is None:
+        _log.info(f"No data returned for Series UID: {seriesUid}")
+        return None
+    else:
+        _log.error(f"Unexpected response format for Series UID: {seriesUid}")
+        return None
 
 
 def getSegRefSeries(uid):
@@ -1952,65 +2013,64 @@ def makeSeriesReport(series_data, input_type = "", format = "", filename = None,
         _log.info(report)
 
 
-def reportDicomTags(series_uids, elements=None):
+def reportDicomTags(series_uids: List[str], elements: Optional[List[str]] = None) -> Optional[pd.DataFrame]:
     """
     Extract DICOM tags for a list of Series Instance UIDs.
 
     Args:
-    - series_uids: A list of Series Instance UIDs to extract DICOM tags.
-    - elements: (optional) A list of elements to extract. If not specified, all elements are extracted.
-                Elements should be specified with parentheses, e.g. ['(0018,0015)', '(0008,0060)'].
+        series_uids (List[str]): A list of Series Instance UIDs to extract DICOM tags.
+        elements (Optional[List[str]]): A list of elements to extract. If not specified, all elements
+            are extracted. Elements should be specified with parentheses, e.g., ['(0018,0015)', '(0008,0060)'].
 
     Returns:
-    - A DataFrame containing the extracted DICOM tags with concatenated column headers.
+        Optional[pd.DataFrame]: A DataFrame containing the extracted DICOM tags with concatenated
+        column headers, or None if no tags were found.
     """
-    # Initialize an empty list to store DataFrames
     tag_summary_list = []
 
     for uid in series_uids:
-        # Call nbia.getDicomTags to get tags for each uid
+        # Call getDicomTags to get tags for each UID
         tags = getDicomTags(uid, format="df")
 
-        if tags is None:
-            _log.info(f"No tags found for: {uid}")
+        # Ensure tags is a valid DataFrame before processing
+        if tags is None or not isinstance(tags, pd.DataFrame):
+            _log.info(f"No valid tags found for UID {uid}. Skipping.")
+            continue
+
+        # Create a dictionary to store the extracted information with concatenated column headers
+        extracted_info = {}
+        extracted_info['Series Instance UID (0020,000E)'] = uid
+
+        # Extract relevant information from tags based on elements
+        if not elements:
+            # Extract all elements
+            for _, row in tags.iterrows():
+                name = row.get('name')
+                element = row.get('element')
+                data = row.get('data')
+                if name and element and name != 'Series Instance UID':
+                    extracted_info[f'{name} {element}'] = data
         else:
-            # Create a dictionary to store the extracted information with concatenated column headers
-            extracted_info = {}
+            # Extract specific elements
+            for element in elements:
+                matching_rows = tags[tags['element'] == element]
+                if not matching_rows.empty:
+                    name = matching_rows['name'].values[0]
+                    data = matching_rows['data'].values[0]
+                    extracted_info[f'{name} {element}'] = data
 
-            # Add the 'Series Instance UID' column
-            extracted_info['Series Instance UID (0020,000E)'] = uid
+        # Create a DataFrame for the current UID and extracted information
+        tag_summary_df = pd.DataFrame(extracted_info, index=[0])
 
-            # Extract the relevant information from tags based on elements
-            if not elements:
-                # Extract all elements
-                for index, row in tags.iterrows():
-                    name = row['name']
-                    element = row['element']
-                    if name != 'Series Instance UID':
-                        extracted_info[f'{name} {element}'] = row['data']
-            else:
-                # Extract specific elements
-                for element in elements:
-                    matching_rows = tags[tags['element'] == element]
-                    if not matching_rows.empty:
-                        # Use the 'name' and 'data' columns with concatenated column headers
-                        name = matching_rows['name'].values[0]
-                        element = matching_rows['element'].values[0]
-                        extracted_info[f'{name} {element}'] = matching_rows['data'].values[0]
+        # Append the DataFrame to the list
+        tag_summary_list.append(tag_summary_df)
 
-            # Create a DataFrame for the current uid and extracted information
-            tag_summary_df = pd.DataFrame(extracted_info, index=[0])
-
-            # Append the DataFrame to the list
-            tag_summary_list.append(tag_summary_df)
-
-    # Check if tag_summary_list is empty
     if not tag_summary_list:
-        _log.info(f"No results were returned.")
+        _log.info("No results were returned.")
         return None
-    else:
-        tagSummary = pd.concat(tag_summary_list, ignore_index=True)
-        return tagSummary
+
+    tagSummary = pd.concat(tag_summary_list, ignore_index=True)
+    return tagSummary
 
 
 ##########################
