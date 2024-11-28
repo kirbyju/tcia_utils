@@ -8,6 +8,7 @@ import getpass
 import zipfile
 import io
 import os
+import random
 from datetime import datetime
 from datetime import timedelta
 from enum import Enum
@@ -142,7 +143,7 @@ def setApiUrl(endpoint, api_url):
 
     return base_url
 
-def getToken(user: str = "", pw: str = "", api_url: str = "", return_values: bool = False) -> tuple | None:
+def getToken(user: str = "", pw: str = "", api_url: str = "", return_values: bool = False) -> Union[tuple, None]:
     """
     Retrieves an access token for API authorization.
     tcia_utils manages tokens with global variables so you do not need to pass them to other functions.
@@ -228,7 +229,7 @@ def getToken(user: str = "", pw: str = "", api_url: str = "", return_values: boo
         raise StopExecution
 
 
-def refreshToken(api_url: str = "primary", return_values: bool = False) -> tuple | None:
+def refreshToken(api_url: str = "primary", return_values: bool = False) -> Union[tuple, None]:
     """
     Refreshes security tokens to extend access time for APIs that require authorization.
 
@@ -741,7 +742,7 @@ def getSharedCart(name,
 
 def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
                    number: int = 0,
-                   path: str = "",
+                   path: str = "tciaDownload",
                    hash: str = "",
                    api_url: str = "",
                    input_type: str = "",
@@ -791,10 +792,21 @@ def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
     # Set option to include md5 hashes
     downloadOptions = "getImageWithMD5Hash?SeriesInstanceUID=" if hash == "y" else "getImage?NewFileNames=Yes&SeriesInstanceUID="
 
+    # Ensure the root directory exists
+    try:
+        if not os.path.exists(path):
+            os.makedirs(path)
+            _log.info(f"Directory '{path}' created successfully.")
+        else:
+            _log.info(f"Directory '{path}' already exists.")
+    except OSError as e:
+        _log.error(f"Failed to create directory '{path}': {e}")
+        return None
+
     # Get the data
     try:
         for seriesUID in series_data:
-            pathTmp = os.path.join(path, seriesUID) if path else os.path.join("tciaDownload", seriesUID)
+            pathTmp = os.path.join(path, seriesUID) if path else os.path.join(path, seriesUID)
             zip_path = f"{pathTmp}.zip"
             base_url = setApiUrl(endpoint, api_url)
             headers = nlst_api_call_headers if api_url == "nlst" else api_call_headers
@@ -1890,8 +1902,6 @@ def reportSeriesReleaseDate(series_data, chart_width = 1024, chart_height = 768)
     fig.show()
 
 
-import random
-
 def makeSharedCart(
     uids: List[str],
     name: Optional[str] = None,
@@ -1956,7 +1966,6 @@ def makeSharedCart(
 
     # Final log for completion
     _log.info("All chunks processed. Shared cart creation completed.")
-
 
 
 def makeSeriesReport(series_data, input_type = "", format = "", filename = None, api_url = ""):
