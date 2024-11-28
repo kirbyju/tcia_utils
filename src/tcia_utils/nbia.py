@@ -1890,34 +1890,73 @@ def reportSeriesReleaseDate(series_data, chart_width = 1024, chart_height = 768)
     fig.show()
 
 
-def makeSharedCart(uids, name, description, description_url, api_url=""):
+import random
+
+def makeSharedCart(
+    uids: List[str],
+    name: Optional[str] = None,
+    description: str = "",
+    description_url: str = "",
+    api_url: str = "",
+    chunk_size: int = 5000
+) -> None:
     """
     Create a shared cart from a list of series UIDs.
-    """
-    # Construct the query string manually
-    uid_query = "&".join([f"list={uid}" for uid in uids])
-    param = f"{uid_query}&name={name}&description={description}&url={description_url}"
-    endpoint = "createSharedList"
 
-    # set urls
+    Args:
+        uids (List[str]): List of series UIDs to include in the shared cart.
+        name (Optional[str]): Name of the shared cart. If not provided, a random name is generated.
+        description (str): Description of the shared cart.
+        description_url (str): URL providing additional details about the shared cart.
+        api_url (str, optional): Base URL of the API to use. Defaults to an empty string.
+        chunk_size (int, optional): Maximum number of UIDs per request. Defaults to 5000.
+
+    Returns:
+        None: Logs messages for success or failure.
+    """
+    # Generate a random name if none is provided
+    if not name:
+        random_number = random.randint(10**15, 10**17 - 1)  # 16-digit random number
+        name = f"nbia-{random_number}"
+        _log.info(f"No name provided. Generated name: {name}")
+
+    # Split the UIDs into chunks
+    chunked_uids = [uids[i:i + chunk_size] for i in range(0, len(uids), chunk_size)]
+
+    endpoint = "createSharedList"
     base_url = setApiUrl(endpoint, api_url)
     url = base_url + endpoint
 
-    # get data & handle any request.post() errors
-    try:
-        headers = nlst_api_call_headers if api_url == "nlst" else api_call_headers
-        # Create a copy of headers and add the new header
-        headers_with_content_type = headers.copy()
-        headers_with_content_type['Content-Type'] = 'application/x-www-form-urlencoded'
-        _log.info(f'Calling {endpoint} with parameters {param}')
-        metadata = requests.post(url, headers=headers_with_content_type, data=param)
-        metadata.raise_for_status()
-        # log success and return success code
-        _log.info(metadata.text)
-        return 200
+    headers = nlst_api_call_headers if api_url == "nlst" else api_call_headers
+    headers_with_content_type = headers.copy()
+    headers_with_content_type['Content-Type'] = 'application/x-www-form-urlencoded'
 
-    except requests.exceptions.RequestException as err:
-        return log_request_exception(err)
+    # Process each chunk
+    for idx, chunk in enumerate(chunked_uids, start=1):
+        # Append a unique part suffix if there are multiple chunks
+        chunk_name = f"{name}-part{idx}" if len(chunked_uids) > 1 else name
+
+        try:
+            # Construct the query string manually for the current chunk
+            uid_query = "&".join([f"list={uid}" for uid in chunk])
+            param = f"{uid_query}&name={chunk_name}&description={description}&url={description_url}"
+
+            _log.info(f"Processing chunk {idx}/{len(chunked_uids)}. Calling {endpoint} with name: {chunk_name}")
+            metadata = requests.post(url, headers=headers_with_content_type, data=param)
+            metadata.raise_for_status()
+
+            # Log success for this chunk
+            _log.info(f"Chunk {idx}/{len(chunked_uids)} processed successfully. Response: {metadata.text}")
+
+        except requests.exceptions.RequestException as err:
+            # Log and continue to the next chunk
+            _log.error(f"Error processing chunk {idx}/{len(chunked_uids)} with name: {chunk_name}")
+            log_request_exception(err)
+            continue
+
+    # Final log for completion
+    _log.info("All chunks processed. Shared cart creation completed.")
+
 
 
 def makeSeriesReport(series_data, input_type = "", format = "", filename = None, api_url = ""):
