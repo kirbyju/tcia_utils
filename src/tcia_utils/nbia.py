@@ -845,7 +845,7 @@ def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
                 elif os.path.isfile(zip_path):
                     _log.warning(f"Series {seriesUID} already downloaded as a zip file.")
                 if manifestDF is not None:
-                    metadata = requests.get(metadata_url, headers=api_call_headers).json()
+                    metadata = requests.get(metadata_url, headers=headers).json()
                     manifestDF = pd.concat([manifestDF, pd.DataFrame(metadata)], ignore_index=True)
                 previous += 1
 
@@ -1909,7 +1909,7 @@ def makeSharedCart(
     description_url: str = "",
     api_url: str = "",
     chunk_size: int = 5000
-) -> None:
+) -> List[str]:
     """
     Create a shared cart from a list of series UIDs.
 
@@ -1922,13 +1922,18 @@ def makeSharedCart(
         chunk_size (int, optional): Maximum number of UIDs per request. Defaults to 5000.
 
     Returns:
-        None: Logs messages for success or failure.
+        List[str]: A list of URLs pointing to the created shared carts, one for each chunk.
     """
     # Generate a random name if none is provided
     if not name:
         random_number = random.randint(10**15, 10**17 - 1)  # 16-digit random number
         name = f"nbia-{random_number}"
         _log.info(f"No name provided. Generated name: {name}")
+
+    # Set up the base cart URL
+    base_cart_url = "https://nbia.cancerimagingarchive.net/nbia-search/?saved-cart="
+    if api_url == "nlst":
+        base_cart_url = base_cart_url.replace("nbia.", "nlst.")
 
     # Split the UIDs into chunks
     chunked_uids = [uids[i:i + chunk_size] for i in range(0, len(uids), chunk_size)]
@@ -1941,10 +1946,13 @@ def makeSharedCart(
     headers_with_content_type = headers.copy()
     headers_with_content_type['Content-Type'] = 'application/x-www-form-urlencoded'
 
+    cart_urls = []  # List to store the cart URLs for each chunk
+
     # Process each chunk
     for idx, chunk in enumerate(chunked_uids, start=1):
         # Append a unique part suffix if there are multiple chunks
         chunk_name = f"{name}-part{idx}" if len(chunked_uids) > 1 else name
+        cart_url = f"{base_cart_url}{chunk_name}"  # Construct the cart URL
 
         try:
             # Construct the query string manually for the current chunk
@@ -1957,6 +1965,7 @@ def makeSharedCart(
 
             # Log success for this chunk
             _log.info(f"Chunk {idx}/{len(chunked_uids)} processed successfully. Response: {metadata.text}")
+            cart_urls.append(cart_url)  # Add the URL to the list
 
         except requests.exceptions.RequestException as err:
             # Log and continue to the next chunk
@@ -1966,6 +1975,8 @@ def makeSharedCart(
 
     # Final log for completion
     _log.info("All chunks processed. Shared cart creation completed.")
+
+    return cart_urls
 
 
 def makeSeriesReport(series_data, input_type = "", format = "", filename = None, api_url = ""):
