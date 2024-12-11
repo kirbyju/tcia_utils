@@ -1393,57 +1393,66 @@ def getSimpleSearchWithModalityAndBodyPartPaged(
         return log_request_exception(err)
 
 
-def getAdvancedQCSearch(criteria_values, api_url = "", format = "", input_type = {}):
+def getAdvancedQCSearch(criteria_values, api_url="", format="", input_type={}):
     """
     This function allows TCIA data curators to perform an advanced QC search.
     This function will not work for end users of TCIA.
 
     Parameters:
-    - criteria_values (list of tuples): A list of tuples where each tuple contains a criteria type and its corresponding value.
-        - For example, [("patientID", "12345"), ("studyUID", "67890")].
-        - The criteria type can be one of the following: "collection", "qcstatus", "released", "batchnumber", "complete", "patientID", "submissiondate", "studyUID", "seriesUID", "studyDate", "seriesDesc", "modality", "manufacturer".
-        - The value depends on the criteria type and the input type. For "list" input type, it can be a single value or multiple values separated by commas. For "commaSeperatedList" input type, it should be a list of exact matches. For "contains" input type, it should be a substring to search for. For "dateRange" input type, it should be a date or a range of dates in the format "MM/DD/YYYY".
-    - api_url (str, optional): The base URL for the API. Defaults to an empty string.
-    - format (str, optional): The format of the response. Defaults to an empty string.
-    - override_input_type (dict, optional): A dictionary where keys are criteria types and values are the new input types. This allows the user to override the default input type for certain criteria types. Defaults to an empty dictionary.
-        - For example, {"patientID": "contains", "studyUID": "contains"}.
+    - criteria_values: List of tuples, where each tuple contains a criteria,
+        its value(s).
+
+        TODO: Consider adding "OR" support in tuples at some point.
+
+      Criteria type options with default input types include:
+       "collection": "list",
+       "qcstatus": "list",
+       "released": "list",
+       "batchnumber": "list",
+       "complete": "list",
+       "patientID": "commaSeperatedList",
+       "submissiondate": "dateRange",
+       "studyUID": "commaSeperatedList",
+       "seriesUID": "commaSeperatedList",
+       "studyDate": "dateRange",
+       "seriesDesc": "contains",
+       "modality": "list",
+       "manufacturer": "list"
+      Criteria values can be single strings or lists of strings for multiple entries.
+    - api_url: Base URL for the API.
+    - format: Response format, e.g., "json", "df".
+    - input_type: Overrides for the default input type of a given criteria.
+        Possible options:
+            "list",
+            "commaSeperatedList",
+            "dateRange",
+            "contains"
 
     Returns:
-    - data: The response from the API call.
+    - The API response data.
 
-    Examples:
+    Example with single values:
+        criteria_values = [
+            ("collection", "APOLLO-5-KIRP//UVA-Limited"),
+            ("modality", "MR")
+        ]
 
-    1. Searching for all patient IDs that contain “LIDC”, have a modality of “CR” or “DX”,
-    and a submission date between Feb 25, 2020 and Jan 1, 2023. Uses input_type to override
-    the default for patientID (comma separated list) to return anything that contains "LIDC".
+        response = nbia.getAdvancedQCSearch(criteria_values, format="df")
 
-        criteria_values = [("patientID", "LIDC"),
-                            ("modality", "CR,DX"),
-                            ("submissiondate", "2/25/2020"),
-                            ("submissiondate", "1/1/2023")]
+    Example with multiple criteria, input type override and boolean override:
+        criteria_values = [
+            ("collection", ["MIDRC-RICORD-1A//RSNA", "MIDRC-RICORD-1C//RSNA"]),
+            ("qcstatus", "Not Visible"),
+            ("qcstatus", "Visible"),
+            ("submissiondate", "12/2/2020"), # earliest date range
+            ("submissiondate", "12/12/2020") # latest date range
+        ]
 
-        input_type = {"patientID": "contains"}
-
-        getAdvancedQCSearch(criteria_values, input_type=input_type)
-
-    2. Searching for all data with collection “APOLLO-5-KIRP//UVA-Limited” or “APOLLO-5-LIHC//UVA-Limited”
-    and qcstatus is either “Not Visible” or “Visible” with results formatted as a dataframe.
-
-        criteria_values = [("collection", "APOLLO-5-KIRP//UVA-Limited"),
-                            ("collection", "APOLLO-5-LIHC//UVA-Limited"),
-                            ("qcstatus", "Not Visible"),
-                            ("qcstatus", "Visible")]
-
-        getAdvancedQCSearch(criteria_values, format = "df")
-
-    3. Searching for a list of UIDs with results formatted as a dataframe and saved to a CSV file.
-
-        criteria_values = [("seriesUID", "1.3.6.1.4.1.14519.5.2.1.6279.6001.709632090821449989953075380984,1.3.6.1.4.1.14519.5.2.1.6279.6001.109097931021726413867023009234")]
-
-        getAdvancedQCSearch(criteria_values, format = "csv")
+        response = nbia.getAdvancedQCSearch(criteria_values, format="df")
     """
-    # Mapping between criteriaType and inputType
+    # Default mapping between criteriaType and inputType
     input_type_map = {
+        "collection": "list",
         "qcstatus": "list",
         "released": "list",
         "batchnumber": "list",
@@ -1455,24 +1464,47 @@ def getAdvancedQCSearch(criteria_values, api_url = "", format = "", input_type =
         "studyDate": "dateRange",
         "seriesDesc": "contains",
         "modality": "list",
-        "manufacturer": "list"
+        "manufacturer": "list",
     }
 
     endpoint = "getAdvancedQCSearch"
-
     param = {}
-    for i, (criteria, value) in enumerate(criteria_values):
-        param[f"criteriaType{i}"] = criteria
-        # Check if the criteria has an override input type
-        if criteria in input_type:
-            param[f"inputType{i}"] = input_type[criteria]
-        else:
-            param[f"inputType{i}"] = input_type_map[criteria]
-        param[f"boolean{i}"] = "AND"
-        param[f"value{i}"] = value
 
-    # Use queryData to make the POST request
-    data = queryData(endpoint=endpoint, options = None, api_url=api_url, format=format, method="POST", param=param)
+    # Process each criteria
+    counter = 0
+    for item in criteria_values:
+        # Unpack the tuple and handle optional boolean operator
+        if len(item) == 2:
+            criteria, values = item
+            boolean_op = "AND"  # Default to "AND"
+
+        # Potential handling of "OR" criteria to be added later
+        # Bugs with how chaining AND + OR criteria together prevents this from
+        #   working the way it's written currently.
+        #elif len(item) == 3:
+        #    criteria, values, boolean_op = item
+        #    # Validate boolean_op
+        #    if boolean_op not in {"AND", "OR"}:
+        #        raise ValueError(f"Invalid boolean operator: {boolean_op}. Must be 'AND' or 'OR'.")
+        #else:
+        #    raise ValueError("Each item in criteria_values must be a tuple of 2 or 3 elements.")
+
+        else:
+            raise ValueError("Each item in criteria_values must be a tuple of 2 elements.")
+
+        # Ensure values are treated as a list
+        if not isinstance(values, list):
+            values = [values]
+
+        for value in values:
+            param[f"criteriaType{counter}"] = criteria
+            param[f"inputType{counter}"] = input_type.get(criteria, input_type_map.get(criteria, "text"))
+            param[f"value{counter}"] = value
+            param[f"boolean{counter}"] = boolean_op
+            counter += 1
+
+    # Make the POST request
+    data = queryData(endpoint=endpoint, options=None, api_url=api_url, format=format, method="POST", param=param)
 
     return data
 
