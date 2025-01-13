@@ -25,7 +25,7 @@ def getDoi(format = ""):
 
     # set query parameters
     options = {}
-    options['provider-id'] = "tciar"
+    options['client-id'] = "nihnci.tcia"
     options['page[size]'] = 1000
     _log.info(f'Calling... {datacite_url} with parameters {options}')
 
@@ -116,7 +116,7 @@ def getDoi(format = ""):
 
                 df = pd.DataFrame(dois, columns=["DOI", "Identifier", "CreatorNames", "Title", "Created", "Updated", "Related",
                                                   "Version", "Rights", "RightsURI", "Description", "FundingReferences", "URL",
-                                                  "ViewCount", "CitationCount", "ReferenceCount"])  
+                                                  "ViewCount", "CitationCount", "ReferenceCount"])
                 if format == "csv":
                     now = datetime.now()
                     dt_string = now.strftime("%Y-%m-%d_%H%M")
