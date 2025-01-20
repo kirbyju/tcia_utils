@@ -36,7 +36,7 @@ def getDoi(format = ""):
         # check for empty results and format output
         if data.text != "":
             data = data.json()
-            # format the output (optional)
+            # If JSON format requested, return raw JSON data
             if format == "json":
                 return data
             else:
@@ -68,14 +68,18 @@ def getDoi(format = ""):
                     title = item["attributes"]["titles"][0]["title"]
                     created = item["attributes"]["created"]
                     updated = item["attributes"]["updated"]
+
+                    # Handle all related identifiers instead of just the first one
+                    related_ids = []
                     try:
-                        relation_type = item["attributes"]["relatedIdentifiers"][0]["relationType"]
+                        for related in item["attributes"]["relatedIdentifiers"]:
+                            relation_type = related.get("relationType")
+                            related_identifier = related.get("relatedIdentifier")
+                            if relation_type and related_identifier:
+                                related_ids.append(f"{relation_type}: {related_identifier}")
                     except (KeyError, IndexError):
-                        relation_type = None
-                    try:
-                        related_identifier = item["attributes"]["relatedIdentifiers"][0]["relatedIdentifier"]
-                    except (KeyError, IndexError):
-                        related_identifier = None
+                        related_ids = []
+
                     version = item["attributes"]["version"]
                     try:
                         rights = item["attributes"]["rightsList"]
@@ -96,27 +100,29 @@ def getDoi(format = ""):
                     view_count = item["attributes"]["viewCount"]
                     citation_count = item["attributes"]["citationCount"]
                     reference_count = item["attributes"]["referenceCount"]
-                    related = f"{relation_type}: {related_identifier}" if relation_type and related_identifier else None
-                    dois.append({"DOI": doi,
-                                "Identifier": identifier,
-                                "CreatorNames": "; ".join(creator_names),
-                                "Title": title,
-                                "Created": created,
-                                "Updated": updated,
-                                "Related": related,
-                                "Version": version,
-                                "Rights": "; ".join(rights_list),
-                                "RightsURI": "; ".join(rights_uri_list),
-                                "Description": description,
-                                "FundingReferences": funding_references,
-                                "URL": url,
-                                "ViewCount": view_count,
-                                "CitationCount": citation_count,
-                                "ReferenceCount": reference_count})
+
+                    dois.append({
+                        "DOI": doi,
+                        "Identifier": identifier,
+                        "CreatorNames": "; ".join(creator_names),
+                        "Title": title,
+                        "Created": created,
+                        "Updated": updated,
+                        "Related": "; ".join(related_ids) if related_ids else None,
+                        "Version": version,
+                        "Rights": "; ".join(rights_list),
+                        "RightsURI": "; ".join(rights_uri_list),
+                        "Description": description,
+                        "FundingReferences": funding_references,
+                        "URL": url,
+                        "ViewCount": view_count,
+                        "CitationCount": citation_count,
+                        "ReferenceCount": reference_count
+                    })
 
                 df = pd.DataFrame(dois, columns=["DOI", "Identifier", "CreatorNames", "Title", "Created", "Updated", "Related",
-                                                  "Version", "Rights", "RightsURI", "Description", "FundingReferences", "URL",
-                                                  "ViewCount", "CitationCount", "ReferenceCount"])
+                                               "Version", "Rights", "RightsURI", "Description", "FundingReferences", "URL",
+                                               "ViewCount", "CitationCount", "ReferenceCount"])
                 if format == "csv":
                     now = datetime.now()
                     dt_string = now.strftime("%Y-%m-%d_%H%M")
@@ -135,6 +141,127 @@ def getDoi(format = ""):
         _log.error(f'Error: {errt}')
     except requests.exceptions.RequestException as err:
         _log.error(f'Error: {err}')
+
+
+def analyze_doi_relations(df):
+    """
+    Analyzes the 'Related' column from the getDoi() DataFrame to examine
+      publications written about each dataset or other datasets derived from them.
+
+    Detects when the same DOI appears multiple times in a single record's Related column,
+    regardless of the relationship type or case.
+
+    Parameters:
+    df (pandas.DataFrame): DataFrame containing DOI information with a 'Related' column
+
+    Returns:
+    tuple: (relations_df, summary_stats, duplicates_df)
+        - relations_df: Detailed DataFrame of all relationships
+        - summary_stats: Summary statistics of relationship types
+        - duplicates_df: DataFrame containing duplicated DOIs within same record
+
+    Example usage:
+
+    # Get the detailed relations DataFrame, summary statistics, and duplicates
+    relations_df, summary_stats, duplicates_df = datacite.analyze_doi_relations(doi_df)
+
+    # View summary statistics
+    print("\nRelationship Type Summary:")
+    print(summary_stats)
+
+    # View detailed relations
+    print("\nDetailed Relations (first few rows):")
+    print(relations_df.head())
+
+    # Check for duplicates
+    if duplicates_df.empty:
+        print("\nNo duplicate DOIs found within any single record.")
+    else:
+        print("\nFound the following duplicate DOIs within records:")
+        print(duplicates_df)
+    """
+    # Initialize empty lists to store relationship data and duplicates
+    relation_data = []
+    duplicate_data = []
+
+    # Iterate through each row
+    for _, row in df.iterrows():
+        if pd.notna(row['Related']):
+            # Split multiple relations
+            relations = row['Related'].split('; ')
+
+            # Track seen DOIs and their relationship types for this record
+            seen_dois = {}  # Dictionary to store lowercase DOI -> (original DOI, list of relation types)
+
+            for relation in relations:
+                try:
+                    relation_type, identifier = relation.split(': ', 1)
+
+                    # Convert identifier to lowercase for comparison
+                    identifier_lower = identifier.lower()
+
+                    # Add this relationship type to the list for this DOI
+                    if identifier_lower in seen_dois:
+                        seen_dois[identifier_lower][1].append(relation_type)
+                        # Only add to duplicate_data if this is the first duplicate found
+                        if len(seen_dois[identifier_lower][1]) == 2:
+                            duplicate_data.append({
+                                'DOI': row['DOI'],
+                                'Identifier': row['Identifier'],
+                                'Title': row['Title'],
+                                'Duplicate_DOI': seen_dois[identifier_lower][0],  # Use first occurrence's original case
+                                'Relation_Types': '; '.join(seen_dois[identifier_lower][1]),
+                                'Created': row['Created']
+                            })
+                        # If we already have a record for this DOI, update its relation types
+                        elif len(seen_dois[identifier_lower][1]) > 2:
+                            # Find and update the existing record
+                            for i, dup in enumerate(duplicate_data):
+                                if (dup['DOI'] == row['DOI'] and
+                                    dup['Duplicate_DOI'].lower() == identifier_lower):
+                                    duplicate_data[i]['Relation_Types'] = '; '.join(seen_dois[identifier_lower][1])
+                                    break
+                    else:
+                        seen_dois[identifier_lower] = (identifier, [relation_type])  # Store original case and first relation type
+
+                    # Process relation for main analysis
+                    relation_data.append({
+                        'Source_DOI': row['DOI'],
+                        'Identifier': row['Identifier'],
+                        'Source_Title': row['Title'],
+                        'Relation_Type': relation_type,
+                        'Related_Identifier': identifier,
+                        'Source_Created': row['Created']
+                    })
+                except ValueError:
+                    continue
+
+    # Create DataFrame from collected data
+    relations_df = pd.DataFrame(relation_data)
+    duplicates_df = pd.DataFrame(duplicate_data)
+
+    if len(relations_df) == 0:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
+    # Create summary statistics with explicit type conversion
+    value_counts = relations_df['Relation_Type'].value_counts()
+    summary_stats = pd.DataFrame({
+        'Relation_Type': value_counts.index,
+        'Count': value_counts.values.astype(int)
+    })
+
+    # Calculate percentage using numeric values
+    total_relations = len(relations_df)
+    summary_stats['Percentage'] = (summary_stats['Count'].astype(float) / total_relations * 100).round(2)
+
+    # Sort relations_df by creation date
+    relations_df = relations_df.sort_values('Source_Created', ascending=False)
+
+    # Sort duplicates_df by creation date if not empty
+    if not duplicates_df.empty:
+        duplicates_df = duplicates_df.sort_values('Created', ascending=False)
+
+    return relations_df, summary_stats, duplicates_df
 
 
 def getDerivedDois(dois, format='df'):
