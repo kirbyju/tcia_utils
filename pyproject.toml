@@ -28,3 +28,9 @@ dependencies = [
 [project.urls]
 "Homepage" = "https://github.com/kirbyju/tcia_utils"
 "Bug Tracker" = "https://github.com/kirbyju/tcia_utils/issues"
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-mock",
+]
