@@ -1,8 +1,7 @@
 import pytest
 import pandas as pd
 from unittest.mock import patch, MagicMock
-import importlib
-nbia = importlib.import_module("tcia_utils.nbia-v4")
+from tcia_utils import nbia_v4 as nbia
 import os
 
 # A public collection
