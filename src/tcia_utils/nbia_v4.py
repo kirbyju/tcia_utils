@@ -30,6 +30,10 @@ logging.basicConfig(
     , level=logging.INFO
 )
 
+# Initialize global headers to prevent NameError on first anonymous call
+api_call_headers = {}
+nlst_api_call_headers = {}
+
 
 def log_request_exception(err: requests.exceptions.RequestException) -> None:
     """
@@ -97,14 +101,9 @@ def setApiUrl(endpoint, api_url):
     """
     # ensure a token exists
     if api_url == "nlst":
-        if 'nlst_token_exp_time' not in globals():
-            getToken(user="nbia_guest", api_url="nlst")
         if 'nlst_token_exp_time' in globals() and datetime.now() > nlst_token_exp_time:
             refreshToken(api_url = "nlst")
     else:
-        if 'token_exp_time' not in globals():
-            getToken(user="nbia_guest")
-            _log.info("Accessing public data anonymously. To access restricted data use nbia.getToken() with your credentials.")
         if 'token_exp_time' in globals() and datetime.now() > token_exp_time:
             refreshToken()
 
@@ -137,16 +136,14 @@ def getToken(user: str = "", pw: str = "", api_url: str = "", return_values: boo
     global token_exp_time, api_call_headers, access_token, refresh_token, id_token
     global nlst_token_exp_time, nlst_api_call_headers, nlst_access_token, nlst_refresh_token, nlst_id_token
 
-    # specify user/pw unless nbia_guest is being used for accessing Advanced API anonymously
+    # specify user/pw
     if user != "":
         userName = user
     else:
         print("Enter User: ")
         userName = input()
-    # set password for non-guest logins
-    if userName == "nbia_guest":
-        passWord = "ItsBetweenUAndMe" # this guest account password is documented in the public API guide
-    elif pw == "":
+    # set password
+    if pw == "":
         passWord = getpass.getpass(prompt='Enter Password: ')
     else:
         passWord = pw
