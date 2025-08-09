@@ -396,16 +396,9 @@ def queryData(
 
         # Format the response
         if format.lower() == "df":
-            df = pd.DataFrame(data)
-            # Standardize column names
-            if 'Series UID' in df.columns:
-                df.rename(columns={'Series UID': 'SeriesInstanceUID'}, inplace=True)
-            return df
+            return pd.DataFrame(data)
         elif format.lower() == "csv":
             df = pd.DataFrame(data)
-            # Standardize column names
-            if 'Series UID' in df.columns:
-                df.rename(columns={'Series UID': 'SeriesInstanceUID'}, inplace=True)
             csv_filename = f"{endpoint}_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.csv"
             df.to_csv(csv_filename, index=False)
             _log.info(f"CSV saved to: {csv_filename}")
@@ -840,10 +833,7 @@ def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
                     # Get metadata if desired
                     if manifestDF is not None:
                         metadata = requests.get(metadata_url, headers=headers).json()
-                        df_meta = pd.DataFrame(metadata)
-                        if 'Series UID' in df_meta.columns:
-                            df_meta.rename(columns={'Series UID': 'SeriesInstanceUID'}, inplace=True)
-                        manifestDF = pd.concat([manifestDF, df_meta], ignore_index=True)
+                        manifestDF = pd.concat([manifestDF, pd.DataFrame(metadata)], ignore_index=True)
                     if number > 0 and success == number:
                         break
                 else:
@@ -856,10 +846,7 @@ def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
                     _log.warning(f"Series {seriesUID} already downloaded as a zip file.")
                 if manifestDF is not None:
                     metadata = requests.get(metadata_url, headers=headers).json()
-                    df_meta = pd.DataFrame(metadata)
-                    if 'Series UID' in df_meta.columns:
-                        df_meta.rename(columns={'Series UID': 'SeriesInstanceUID'}, inplace=True)
-                    manifestDF = pd.concat([manifestDF, df_meta], ignore_index=True)
+                    manifestDF = pd.concat([manifestDF, pd.DataFrame(metadata)], ignore_index=True)
                 previous += 1
 
         # Summarize download results
