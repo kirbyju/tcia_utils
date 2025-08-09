@@ -190,7 +190,7 @@ def getAnalyses(per_page=100, format="", file_name=None, fields=None, ids=None, 
 def update_download_file_column(data):
     # Define a function to fetch 'source_url' from the API
     def fetch_source_url(row, current_url):
-        if current_url:
+        if pd.notna(current_url) and current_url:
             return current_url
         if isinstance(row, dict) and 'ID' in row:
             media_id = row['ID']
