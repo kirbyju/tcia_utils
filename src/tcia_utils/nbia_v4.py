@@ -848,17 +848,24 @@ def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
         _log.error(f"Failed to create directory '{path}': {e}")
         return None
 
+    # Get a list of existing files and directories for faster checks
+    existing_files = set(os.listdir(path))
+    previously_downloaded_uids = []
+
+
     # Get the data
     try:
         for seriesUID in series_data:
-            pathTmp = os.path.join(path, seriesUID) if path else os.path.join(path, seriesUID)
-            zip_path = f"{pathTmp}.zip"
-            base_url = setApiUrl(endpoint, api_url)
-            headers = nlst_api_call_headers if api_url == "nlst" else api_call_headers
-            metadata_url = base_url + "getSeriesMetaData?SeriesInstanceUID=" + seriesUID
+            unzipped_exists = seriesUID in existing_files
+            zip_exists = f"{seriesUID}.zip" in existing_files
+
 
             # Check for previously downloaded data
-            if not os.path.isdir(pathTmp) and not os.path.isfile(zip_path):
+            if not unzipped_exists and not zip_exists:
+                pathTmp = os.path.join(path, seriesUID)
+                zip_path = f"{pathTmp}.zip"
+                base_url = setApiUrl(endpoint, api_url)
+                headers = nlst_api_call_headers if api_url == "nlst" else api_call_headers
                 data_url = base_url + downloadOptions + seriesUID
 
                 # Download data
@@ -886,15 +893,19 @@ def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
                     _log.error(f"Error: {data.status_code} Series failed: {seriesUID}")
                     failed += 1
             else:
-                if os.path.isdir(pathTmp):
+                if unzipped_exists:
                     _log.warning(f"Series {seriesUID} already downloaded and unzipped.")
-                elif os.path.isfile(zip_path):
+                elif zip_exists:
                     _log.warning(f"Series {seriesUID} already downloaded as a zip file.")
                 if manifestDF is not None:
-                    df_meta = getSeriesList(uids=[seriesUID], api_url=api_url)
-                    if df_meta is not None:
-                        manifestDF = pd.concat([manifestDF, df_meta], ignore_index=True)
+                    previously_downloaded_uids.append(seriesUID)
                 previous += 1
+
+        # After the loop, fetch metadata for all previously downloaded series at once
+        if manifestDF is not None and previously_downloaded_uids:
+            df_meta_existing = getSeriesList(uids=previously_downloaded_uids, api_url=api_url)
+            if df_meta_existing is not None:
+                manifestDF = pd.concat([manifestDF, df_meta_existing], ignore_index=True)
 
         # Summarize download results
         _log.info(
