@@ -10,6 +10,8 @@ import io
 import os
 import random
 from datetime import datetime
+from tqdm import tqdm
+import concurrent.futures
 from datetime import timedelta
 from enum import Enum
 import plotly.express as px
@@ -740,6 +742,35 @@ def getSharedCart(name,
     return data
 
 
+def _download_and_unzip_series(seriesUID, path, api_url, downloadOptions, as_zip):
+    """Helper function to download and optionally unzip a single series."""
+    try:
+        endpoint = "getImage"
+        pathTmp = os.path.join(path, seriesUID)
+        zip_path = f"{pathTmp}.zip"
+        base_url = setApiUrl(endpoint, api_url)
+        headers = nlst_api_call_headers if api_url == "nlst" else api_call_headers
+        data_url = base_url + downloadOptions + seriesUID
+
+        _log.info(f"Downloading... {data_url}")
+        data = requests.get(data_url, headers=headers)
+
+        if data.status_code == 200:
+            if as_zip:
+                with open(zip_path, "wb") as zip_file:
+                    zip_file.write(data.content)
+            else:
+                with zipfile.ZipFile(io.BytesIO(data.content)) as file:
+                    file.extractall(path=pathTmp)
+            return seriesUID
+        else:
+            _log.error(f"Error: {data.status_code} Series failed: {seriesUID}")
+            return None
+    except Exception as e:
+        _log.error(f"Exception during download for series {seriesUID}: {e}")
+        return None
+
+
 def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
                    number: int = 0,
                    path: str = "tciaDownload",
@@ -748,7 +779,8 @@ def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
                    input_type: str = "",
                    format: str = "",
                    csv_filename: str = "",
-                   as_zip: bool = False) -> Union[pd.DataFrame, None]:
+                   as_zip: bool = False,
+                   max_workers: int = 10) -> Union[pd.DataFrame, None]:
     """
     Ingests a set of seriesUids and downloads them.
     By default, series_data expects JSON containing "SeriesInstanceUID" elements.
@@ -763,11 +795,6 @@ def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
     Setting a csv_filename will create the csv even if format isn't specified.
     If `as_zip` is set to True, it skips the unzipping steps.
     """
-    endpoint = "getImage"
-    success = 0
-    failed = 0
-    previous = 0
-
     # Prep a dataframe for later
     manifestDF = pd.DataFrame() if format in ["df", "csv"] or csv_filename else None
 
@@ -786,12 +813,6 @@ def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
         _log.error(f"Error parsing series_data: {e}")
         return None
 
-    # Set sample size if you don't want to download the full set of results
-    _log.info(f"Downloading {number if number > 0 else len(series_data)} out of {len(series_data)} Series Instance UIDs (scans).")
-
-    # Set option to include md5 hashes
-    downloadOptions = "getImageWithMD5Hash?SeriesInstanceUID=" if hash == "y" else "getImage?NewFileNames=Yes&SeriesInstanceUID="
-
     # Ensure the root directory exists
     try:
         if not os.path.exists(path):
@@ -803,61 +824,64 @@ def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
         _log.error(f"Failed to create directory '{path}': {e}")
         return None
 
-    # Get the data
-    try:
-        for seriesUID in series_data:
-            pathTmp = os.path.join(path, seriesUID) if path else os.path.join(path, seriesUID)
-            zip_path = f"{pathTmp}.zip"
-            base_url = setApiUrl(endpoint, api_url)
-            headers = nlst_api_call_headers if api_url == "nlst" else api_call_headers
-            metadata_url = base_url + "getSeriesMetaData?SeriesInstanceUID=" + seriesUID
+    # Identify series to download vs. already existing
+    existing_files = set(os.listdir(path))
+    uids_to_download = []
+    previously_downloaded_uids = []
+    for seriesUID in series_data:
+        unzipped_exists = seriesUID in existing_files
+        zip_exists = f"{seriesUID}.zip" in existing_files
+        if not unzipped_exists and not zip_exists:
+            uids_to_download.append(seriesUID)
+        else:
+            if unzipped_exists:
+                _log.warning(f"Series {seriesUID} already downloaded and unzipped.")
+            elif zip_exists:
+                _log.warning(f"Series {seriesUID} already downloaded as a zip file.")
+            previously_downloaded_uids.append(seriesUID)
 
-            # Check for previously downloaded data
-            if not os.path.isdir(pathTmp) and not os.path.isfile(zip_path):
-                data_url = base_url + downloadOptions + seriesUID
+    # Apply 'number' limit if specified
+    if number > 0:
+        uids_to_download = uids_to_download[:number]
 
-                # Download data
-                _log.info(f"Downloading... {data_url}")
-                data = requests.get(data_url, headers=headers)
-                if data.status_code == 200:
-                    # If `as_zip` is True, save the response as a zip file and don't extract it
-                    if as_zip:
-                        with open(zip_path, "wb") as zip_file:
-                            zip_file.write(data.content)
-                        success += 1
-                    else:
-                        # Unzip file
-                        with zipfile.ZipFile(io.BytesIO(data.content)) as file:
-                            file.extractall(path=pathTmp)
-                        success += 1
-                    # Get metadata if desired
-                    if manifestDF is not None:
-                        metadata = requests.get(metadata_url, headers=headers).json()
-                        manifestDF = pd.concat([manifestDF, pd.DataFrame(metadata)], ignore_index=True)
-                    if number > 0 and success == number:
-                        break
+    _log.info(f"Found {len(previously_downloaded_uids)} previously downloaded series.")
+    _log.info(f"Attempting to download {len(uids_to_download)} new series.")
+
+    # Concurrently download new series
+    successfully_downloaded_uids = []
+    failed_downloads = 0
+    if uids_to_download:
+        downloadOptions = "getImageWithMD5Hash?SeriesInstanceUID=" if hash == "y" else "getImage?NewFileNames=Yes&SeriesInstanceUID="
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_uid = {executor.submit(_download_and_unzip_series, uid, path, api_url, downloadOptions, as_zip): uid for uid in uids_to_download}
+
+            for future in tqdm(concurrent.futures.as_completed(future_to_uid), total=len(uids_to_download), desc="Downloading series"):
+                result_uid = future.result()
+                if result_uid:
+                    successfully_downloaded_uids.append(result_uid)
                 else:
-                    _log.error(f"Error: {data.status_code} Series failed: {seriesUID}")
-                    failed += 1
-            else:
-                if os.path.isdir(pathTmp):
-                    _log.warning(f"Series {seriesUID} already downloaded and unzipped.")
-                elif os.path.isfile(zip_path):
-                    _log.warning(f"Series {seriesUID} already downloaded as a zip file.")
-                if manifestDF is not None:
-                    metadata = requests.get(metadata_url, headers=headers).json()
-                    manifestDF = pd.concat([manifestDF, pd.DataFrame(metadata)], ignore_index=True)
-                previous += 1
+                    failed_downloads += 1
 
-        # Summarize download results
-        _log.info(
-            f"Downloaded {success} out of {number if number > 0 else len(series_data)} Series Instance UIDs (scans).\n"
-            f"{failed} failed to download.\n"
-            f"{previous} previously downloaded."
-        )
+    # Fetch metadata for all series if needed
+    if manifestDF is not None:
+        uids_for_metadata = previously_downloaded_uids + successfully_downloaded_uids
+        if uids_for_metadata:
+            _log.info(f"Fetching metadata for {len(uids_for_metadata)} series...")
+            # The V2 API does not have a batch metadata endpoint, so we loop.
+            for seriesUID in tqdm(uids_for_metadata, desc="Fetching metadata"):
+                metadata = getSeriesMetadata(seriesUID, api_url=api_url)
+                if metadata:
+                     manifestDF = pd.concat([manifestDF, pd.DataFrame(metadata)], ignore_index=True)
 
-    except requests.exceptions.RequestException as err:
-        return log_request_exception(err)
+    # Summarize and return
+    success = len(successfully_downloaded_uids)
+    previous = len(previously_downloaded_uids)
+    failed = failed_downloads
+    _log.info(
+        f"Downloaded {success} out of {len(uids_to_download)} targeted series.\n"
+        f"{failed} failed to download.\n"
+        f"{previous} were previously downloaded."
+    )
 
     # Return metadata dataframe and/or save to CSV file if requested
     if manifestDF is not None:

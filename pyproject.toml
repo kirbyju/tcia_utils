@@ -22,7 +22,8 @@ dependencies = [
   "bs4",
   "requests",
   "pandas",
-  "plotly"
+  "plotly",
+  "tqdm"
 ]
 
 [project.urls]
