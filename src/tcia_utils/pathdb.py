@@ -6,6 +6,9 @@ import numpy as np
 import logging
 from tcia_utils.utils import searchDf
 from tcia_utils.utils import copy_df_cols
+import os
+import concurrent.futures
+from tqdm import tqdm
 
 _log = logging.getLogger(__name__)
 logging.basicConfig(
@@ -197,6 +200,113 @@ def reportCollections(df, yearCreated=None, yearChanged=None, format=None):
         print(f"Summary report saved as '{filename}'")
 
     return summary
+
+
+def _download_image(image_info, path):
+    """Helper function to download a single image."""
+    try:
+        image_url = image_info.get("imageUrl")
+        if not image_url:
+            return None, image_info.get('imageId', 'Unknown')
+
+        parsed_url = urlparse(image_url)
+        filename = os.path.basename(parsed_url.path)
+        if not filename:
+            filename = f"{image_info.get('imageId', 'unnamed_image')}.jpg"
+
+        filepath = os.path.join(path, filename)
+
+        response = requests.get(image_url, stream=True, allow_redirects=True)
+        response.raise_for_status()
+
+        with open(filepath, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        
+        return filename, None
+    except Exception as e:
+        _log.error(f"An error occurred while processing {image_info.get('imageUrl')}: {e}")
+        return None, image_info.get('imageId', 'Unknown')
+
+
+def downloadImages(images_data, path="pathdb_images", max_workers=10, number: int = 0):
+    """
+    Downloads images from a list of image data objects.
+
+    This function takes the output from getImages() and downloads the files
+    concurrently. It checks for existing files to avoid re-downloading.
+
+    Args:
+        images_data (list or pd.DataFrame): A list of dictionaries or a pandas DataFrame
+            containing image metadata, including an 'imageUrl' key.
+        path (str): The local directory to save the downloaded images.
+        max_workers (int): The maximum number of concurrent download threads.
+        number (int): The maximum number of new images to download. Defaults to 0 (no limit).
+    """
+    if isinstance(images_data, pd.DataFrame):
+        images_data = images_data.to_dict('records')
+
+    if not images_data:
+        _log.info("No images to download.")
+        return
+
+    try:
+        if not os.path.exists(path):
+            os.makedirs(path)
+            _log.info(f"Directory '{path}' created successfully.")
+        else:
+            _log.info(f"Directory '{path}' already exists.")
+    except OSError as e:
+        _log.error(f"Failed to create directory '{path}': {e}")
+        return
+
+    # Identify new images to download
+    existing_files = set(os.listdir(path))
+    images_to_download = []
+    previously_downloaded_count = 0
+    for image_info in images_data:
+        image_url = image_info.get("imageUrl")
+        if not image_url:
+            continue
+            
+        parsed_url = urlparse(image_url)
+        filename = os.path.basename(parsed_url.path)
+        if not filename:
+            filename = f"{image_info.get('imageId', 'unnamed_image')}.jpg"
+
+        if filename in existing_files:
+            previously_downloaded_count += 1
+        else:
+            images_to_download.append(image_info)
+            
+    if number > 0:
+        images_to_download = images_to_download[:number]
+
+    _log.info(f"Found {previously_downloaded_count} previously downloaded images.")
+    _log.info(f"Attempting to download {len(images_to_download)} new images.")
+
+    # Download files concurrently
+    success_count = 0
+    failed_count = 0
+    if images_to_download:
+        with tqdm(total=len(images_to_download), desc="Downloading images", unit="file") as pbar:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_image = {executor.submit(_download_image, image_info, path): image_info for image_info in images_to_download}
+                
+                for future in concurrent.futures.as_completed(future_to_image):
+                    filename, error_id = future.result()
+                    if filename:
+                        success_count += 1
+                    else:
+                        failed_count += 1
+                    pbar.update(1)
+
+    _log.info(
+        f"Download complete. "
+        f"Successfully downloaded: {success_count}. "
+        f"Failed: {failed_count}. "
+        f"Previously downloaded: {previously_downloaded_count}."
+    )
 
 
 def reportSubmissions(df, useCreated=False, format=None):
