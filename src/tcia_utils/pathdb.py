@@ -7,6 +7,7 @@ import logging
 from tcia_utils.utils import searchDf
 from tcia_utils.utils import copy_df_cols
 import os
+from urllib.parse import urlparse
 import concurrent.futures
 from tqdm import tqdm
 
