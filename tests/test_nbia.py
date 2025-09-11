@@ -212,7 +212,7 @@ def test_downloadSeries(tmp_path, valid_series_uid):
     # Check that a DataFrame is returned with metadata
     assert isinstance(result_df, pd.DataFrame)
     assert not result_df.empty
-    assert result_df.loc[0, 'Series UID'] == valid_series_uid
+    assert result_df.loc[0, 'Series ID'] == valid_series_uid
 
     # Check that the series directory was created
     series_dir = tmp_path / valid_series_uid

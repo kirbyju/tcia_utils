@@ -108,10 +108,16 @@ def setApiUrl(endpoint, api_url):
         if 'token_exp_time' in globals() and datetime.now() > token_exp_time:
             refreshToken()
 
+    # The v4 getContentsByName endpoint is not yet implemented, so we use v1.
+    # This can be removed when the v4 endpoint is available.
+    api_version = "v4"
+    if endpoint == "getContentsByName":
+        api_version = "v1"
+
     if api_url == "nlst":
-        base_url = "https://nlst.cancerimagingarchive.net/nbia-api/services/v4/"
+        base_url = f"https://nlst.cancerimagingarchive.net/nbia-api/services/{api_version}/"
     else:
-        base_url = "https://services.cancerimagingarchive.net/nbia-api/services/v4/"
+        base_url = f"https://services.cancerimagingarchive.net/nbia-api/services/{api_version}/"
 
     return base_url
 
@@ -1635,7 +1641,10 @@ def reportDataSummary(series_data, input_type="", report_type = "", api_url = ""
     # choose between collection report or DOI report
     # these are used later when renaming and formatting the columns/charts
     if report_type == "doi":
-        group = "CollectionURI"
+        # Create DOI column and drop rows where it's missing
+        df['DOI'] = df['CollectionURI'].str.extract(r'doi.org/(\S+)$')
+        df.dropna(subset=['DOI'], inplace=True)
+        group = "DOI"
         column = "Collection"
         columnGrouped = "Collections"
         chartLabel = "Identifier"
@@ -1703,19 +1712,12 @@ def reportDataSummary(series_data, input_type="", report_type = "", api_url = ""
     grouped.drop(columns=[column + ' unique', 'Modality unique', 'LicenseName unique',
                         'Manufacturer unique', 'BodyPartExamined unique'], inplace=True)
 
-    # Reorder the columns
-    grouped = grouped[[group, columnGrouped, 'Licenses', 'Subjects', 'Studies', 'Series', 'Images', 'File Size', 'Disk Space',
-            'Body Parts', 'Modalities',  'Manufacturers', 'Min DateReleased', 'Max DateReleased', 'UniqueDateReleased']]
-
     if report_type == "doi":
         # look up DOI info from datacite and create dataframe
         datacite = getDoi(format = "df")
 
         # drop unnecessary columns in datacite df
         datacite = datacite[["DOI", "Identifier"]]
-
-        # Extract DOI from the end of CollectionURI and store it in "DOI" column
-        grouped["DOI"] = grouped["CollectionURI"].str.extract(r'doi.org/(\S+)$')
 
         # format the DOI values consistently
         grouped['DOI'] = grouped['DOI'].str.strip()
@@ -1726,13 +1728,21 @@ def reportDataSummary(series_data, input_type="", report_type = "", api_url = ""
         # Merge datacite with the df DataFrame
         grouped = grouped.merge(datacite, on='DOI', how='left')
 
-        # drop DOI column
-        grouped.drop(columns=['DOI'], inplace=True)
-
         # Move the 'Identifier' column to the first position
-        cols = list(grouped.columns)
-        cols.insert(0, cols.pop(cols.index('Identifier')))
-        grouped = grouped[cols]
+        if 'Identifier' in grouped.columns:
+            cols = list(grouped.columns)
+            cols.insert(0, cols.pop(cols.index('Identifier')))
+            grouped = grouped[cols]
+
+        # Reorder the columns
+        final_cols = ['Identifier', 'DOI', 'Collections', 'Licenses', 'Subjects', 'Studies', 'Series', 'Images', 'File Size', 'Disk Space',
+            'Body Parts', 'Modalities',  'Manufacturers', 'Min DateReleased', 'Max DateReleased', 'UniqueDateReleased']
+        grouped = grouped[[c for c in final_cols if c in grouped.columns]]
+    else:
+        # Reorder the columns for collection report
+        grouped = grouped[[group, columnGrouped, 'Licenses', 'Subjects', 'Studies', 'Series', 'Images', 'File Size', 'Disk Space',
+                'Body Parts', 'Modalities',  'Manufacturers', 'Min DateReleased', 'Max DateReleased', 'UniqueDateReleased']]
+
 
     # generate charts if requested
     if format == 'chart':
