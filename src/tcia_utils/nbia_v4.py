@@ -184,10 +184,10 @@ def queryData(
 
             if format.lower() == "html":              
                 # 1. Determine the display DataFrame and slice it *before* processing.
-                if len(df) > html_rows:
-                    _log.warning(f"Previewing the first {html_rows} of {len(df)} results. Use your query in combination with idcOhifViewer() for more flexibility.")
+                if len(df) > max_rows:
+                    _log.warning(f"Previewing the first {max_rows} of {len(df)} results. Use your query in combination with idcOhifViewer() for more flexibility.")
                     # Use .copy() to avoid a potential SettingWithCopyWarning
-                    df_display = df.head(html_rows).copy()
+                    df_display = df.head(max_rows).copy()
                 else:
                     df_display = df.copy()
 
