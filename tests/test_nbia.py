@@ -77,22 +77,6 @@ def test_formatSeriesInput_df():
     assert formatted_df['SeriesInstanceUID'].tolist() == ['1.2.3', '4.5.6']
 
 
-def test_viewSeries_raises_error():
-    """
-    Tests that viewSeries raises a NotImplementedError as expected.
-    """
-    with pytest.raises(NotImplementedError):
-        nbia.viewSeries()
-
-
-def test_viewSeriesAnnotation_raises_error():
-    """
-    Tests that viewSeriesAnnotation raises a NotImplementedError as expected.
-    """
-    with pytest.raises(NotImplementedError):
-        nbia.viewSeriesAnnotation()
-
-
 def test_getCollections():
     """
     Tests the getCollections function to ensure it returns a list of collections.
@@ -115,15 +99,15 @@ def test_getSeries():
     assert len(series) > 0
 
 
-def test_getSeriesMetadata(valid_series_uid):
+def test_getSeriesList(valid_series_uid):
     """
-    Tests the getSeriesMetadata function with a specific public series UID.
+    Tests the getSeriesList function with a specific public series UID.
     This is an integration test.
     """
-    metadata = nbia.getSeriesMetadata(seriesUid=valid_series_uid, format="df")
+    metadata = nbia.getSeriesList(uids=[valid_series_uid])
     assert isinstance(metadata, pd.DataFrame)
-    assert 'Series UID' in metadata.columns
-    assert metadata.loc[0, 'Series UID'] == valid_series_uid
+    assert 'SeriesInstanceUID' in metadata.columns
+    assert metadata.loc[0, 'SeriesInstanceUID'] == valid_series_uid
 
 
 @patch('requests.get')
@@ -163,35 +147,6 @@ def test_queryData_connection_error(mock_get, caplog):
     assert "Connection Error" in caplog.text
 
 
-def test_makeCredentialFile(tmp_path):
-    """
-    Tests the makeCredentialFile function to ensure it creates a credential file
-    with the correct content in a specified directory.
-    """
-    # Change the current working directory to the temporary directory
-    original_cwd = os.getcwd()
-    os.chdir(tmp_path)
-
-    try:
-        # Define user and password
-        user = "testuser"
-        pw = "testpassword"
-
-        # Call the function
-        nbia.makeCredentialFile(user=user, pw=pw)
-
-        # Check if the file was created and has the correct content
-        cred_file = tmp_path / "credentials.txt"
-        assert cred_file.exists()
-        with open(cred_file, 'r') as f:
-            content = f.read()
-            assert f"userName={user}" in content
-            assert f"passWord={pw}" in content
-    finally:
-        # Change back to the original working directory
-        os.chdir(original_cwd)
-
-
 def test_downloadSeries(tmp_path, valid_series_uid):
     """
     Tests the downloadSeries function by downloading a single series.
@@ -212,7 +167,7 @@ def test_downloadSeries(tmp_path, valid_series_uid):
     # Check that a DataFrame is returned with metadata
     assert isinstance(result_df, pd.DataFrame)
     assert not result_df.empty
-    assert result_df.loc[0, 'Series UID'] == valid_series_uid
+    assert result_df.loc[0, 'SeriesInstanceUID'] == valid_series_uid
 
     # Check that the series directory was created
     series_dir = tmp_path / valid_series_uid

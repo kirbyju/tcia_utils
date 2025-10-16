@@ -19,6 +19,7 @@ from tcia_utils.utils import copy_df_cols
 from tcia_utils.utils import format_disk_space
 from tcia_utils.utils import remove_html_tags
 from tcia_utils.datacite import getDoi
+from IPython.display import HTML
 
 class StopExecution(Exception):
     def _render_traceback_(self):
@@ -64,7 +65,7 @@ def log_request_exception(err: requests.exceptions.RequestException) -> None:
 
 
 # Used by functions that accept parameters used in GUI Simple Search
-# e.g. getSimpleSearchWithModalityAndBodyPartPaged()
+# e.g. getSimpleSearch()
 class Criteria(Enum):
     Collection = "CollectionCriteria"
     Species = "SpeciesCriteria"
@@ -76,7 +77,7 @@ class Criteria(Enum):
     NumStudies = "MinNumberOfStudiesCriteria"
     ModalityAnded = "ModalityAndedSearchCriteria"
 
-# Used by getSimpleSearchWithModalityAndBodyPartPaged() to transform
+# Used by getSimpleSearch() to transform
 #   species codes into human readable terms
 NPEXSpecies = {
     "human": 337915000
@@ -85,262 +86,37 @@ NPEXSpecies = {
 }
 
 
-def setApiUrl(endpoint, api_url):
+def setApiUrl(endpoint, api_url = "services"):
     """
     setApiUrl() is used by most other functions to select the correct base URL
     and is generally not something that needs to be called directly in your code.
 
     It assists with:
-        1. verifying you are calling a supported endpoint
-        2. selecting the correct base URL for Search vs Advanced APIs
-        3. selecting the correct base URL for regular collections vs NLST
-        4. ensuring you have a valid security token where necessary
+        1. selecting the correct base URL for regular collections vs NLST
+        2. token refreshes (no longer necessary for regular users)
 
     Learn more about the NBIA APIs at https://wiki.cancerimagingarchive.net/x/ZoATBg
     """
-    # create valid endpoint lists
-    searchEndpoints = ["getCollectionValues", "getBodyPartValues", "getModalityValues",
-                       "getPatient", "getPatientStudy", "getSeries", "getManufacturerValues",
-                       "getSOPInstanceUIDs", "getSeriesMetaData", "getContentsByName",
-                       "getImage", "getSingleImage", "getPatientByCollectionAndModality",
-                       "NewPatientsInCollection", "NewStudiesInPatientCollection",
-                       "getSeriesSize", "getUpdatedSeries"]
-    advancedEndpoints = ["getModalityValuesAndCounts", "getBodyPartValuesAndCounts",
-                         "getDicomTags", "getSeriesMetadata2", "getSeriesMetadata3", "getCollectionOrSeriesForDOI",
-                         "getCollectionValuesAndCounts", "getCollectionDescriptions",
-                         "getSimpleSearchWithModalityAndBodyPartPaged", "getManufacturerValuesAndCounts",
-                         "getAdvancedQCSearch", "createSharedList", "getManifestForSimpleSearch"]
+    # Validate api_url
+    # Convert empty string to default to services
+    if not api_url:
+        api_url = "services"
 
-    if endpoint not in searchEndpoints and endpoint not in advancedEndpoints:
-        _log.error(
-            f"Endpoint not supported by tcia_utils: {endpoint}\n"
-            f'Valid "Search" endpoints include {searchEndpoints}\n'
-            f'Valid "Advanced" endpoints include {advancedEndpoints}'
+    valid_api_urls = ["services", "nlst"]
+    if api_url not in valid_api_urls:
+        raise ValueError(
+            f"Invalid api_url '{api_url}'. Must be one of: {valid_api_urls}"
         )
-        raise StopExecution
 
-    # ensure a token exists
-    if api_url == "nlst":
-        if 'nlst_token_exp_time' not in globals():
-            getToken(user="nbia_guest", api_url="nlst")
-        if 'nlst_token_exp_time' in globals() and datetime.now() > nlst_token_exp_time:
-            refreshToken(api_url = "nlst")
-    else:
-        if 'token_exp_time' not in globals():
-            getToken(user="nbia_guest")
-            _log.info("Accessing public data anonymously. To access restricted data use nbia.getToken() with your credentials.")
-        if 'token_exp_time' in globals() and datetime.now() > token_exp_time:
-            refreshToken()
+    hostname = f"https://{api_url}.cancerimagingarchive.net/nbia-api/services"
 
-    if api_url in ["", "restricted"]:
-        base_url = "https://services.cancerimagingarchive.net/nbia-api/services/v2/" if endpoint in searchEndpoints else "https://services.cancerimagingarchive.net/nbia-api/services/"
-    elif api_url == "nlst":
-        base_url = "https://nlst.cancerimagingarchive.net/nbia-api/services/v2/" if endpoint in searchEndpoints else "https://nlst.cancerimagingarchive.net/nbia-api/services/"
+    # Some endpoints were not migrated to v4 API (and may never be)
+    if endpoint == "getContentsByName":
+        base_url = f"{hostname}/v1/"
     else:
-        _log.error(
-            f'"{api_url}" is an invalid api_url for the {"Search" if endpoint in searchEndpoints else "Advanced"} API endpoint: {endpoint}'
-        )
-        raise StopExecution
+        base_url = f"{hostname}/v4/"
 
     return base_url
-
-def getToken(user: str = "", pw: str = "", api_url: str = "", return_values: bool = False) -> Union[tuple, None]:
-    """
-    Retrieves an access token for API authorization.
-    tcia_utils manages tokens with global variables so you do not need to pass them to other functions.
-    "return_values = True" can be used if you want to manage/use the tokens with other code outside of tcia_utils.
-
-    Parameters:
-        user (str): The username. Use "nbia_guest" for anonymous access.
-        pw (str): The password. If not provided, the function prompts for input.
-        api_url (str): API server identifier. Use "nlst" for the NLST server.
-        return_values (bool): If True, returns token details as a tuple. Defaults to False.
-
-    Returns:
-        tuple or int:
-            - If return_values is True, returns a tuple:
-                (API call headers (dict), Access token (str), Token expiration time (datetime),
-                 Refresh token (str), ID token (str)).
-            - If return_values is False, returns 200 to indicate success.
-    """
-    global token_exp_time, api_call_headers, access_token, refresh_token, id_token
-    global nlst_token_exp_time, nlst_api_call_headers, nlst_access_token, nlst_refresh_token, nlst_id_token
-
-    # specify user/pw unless nbia_guest is being used for accessing Advanced API anonymously
-    if user != "":
-        userName = user
-    else:
-        print("Enter User: ")
-        userName = input()
-    # set password for non-guest logins
-    if userName == "nbia_guest":
-        passWord = "ItsBetweenUAndMe" # this guest account password is documented in the public API guide
-    elif pw == "":
-        passWord = getpass.getpass(prompt='Enter Password: ')
-    else:
-        passWord = pw
-
-    # request API token
-    try:
-        params = {'client_id': 'nbia',
-                  'scope': 'openid',
-                  'grant_type': 'password',
-                  'username': userName,
-                  'password': passWord
-                 }
-
-        if api_url == "nlst":
-            token_url = "https://keycloak.dbmi.cloud/auth/realms/TCIA/protocol/openid-connect/token"
-        else:
-            token_url = "https://keycloak-stg.dbmi.cloud/auth/realms/TCIA/protocol/openid-connect/token"
-        data = requests.post(token_url, data=params)
-        data.raise_for_status()
-        tmp_access_token = data.json()["access_token"]
-        expires_in = data.json()["expires_in"]
-        tmp_id_token = data.json()["id_token"]
-        # track expiration status/time
-        current_time = datetime.now()
-        tmp_token_exp_time = current_time + timedelta(seconds=expires_in)
-        tmp_api_call_headers = {'Authorization': 'Bearer ' + tmp_access_token}
-        tmp_refresh_token = data.json()["refresh_token"]
-
-        # Store tokens separately for each server
-        if api_url == "nlst":
-            nlst_access_token = tmp_access_token
-            nlst_token_exp_time = tmp_token_exp_time
-            nlst_api_call_headers = tmp_api_call_headers
-            nlst_refresh_token = tmp_refresh_token
-            nlst_id_token = tmp_id_token
-            _log.info(f'Success - Token saved to global nlst_api_call_headers variable and expires at {nlst_token_exp_time}')
-        else:
-            access_token = tmp_access_token
-            token_exp_time = tmp_token_exp_time
-            api_call_headers = tmp_api_call_headers
-            refresh_token = tmp_refresh_token
-            id_token = tmp_id_token
-            _log.info(f'Success - Token saved to global api_call_headers variable and expires at {token_exp_time}')
-        # Return results based on `return_values` flag
-        if return_values:
-            return tmp_api_call_headers, tmp_access_token, tmp_token_exp_time, tmp_refresh_token, tmp_id_token
-        else:
-            return None
-    # handle errors
-    except requests.exceptions.RequestException as err:
-        return log_request_exception(err)
-        raise StopExecution
-
-
-def refreshToken(api_url: str = "primary", return_values: bool = False) -> Union[tuple, None]:
-    """
-    Refreshes security tokens to extend access time for APIs that require authorization.
-
-    Parameters:
-        api_url (str): API server identifier. Use "nlst" for the NLST server.
-        return_values (bool): If True, returns refreshed token details as a tuple. Defaults to False.
-
-    Returns:
-        tuple or None:
-            - If return_values is True, returns a tuple:
-                (API call headers (dict), Access token (str), Token expiration time (datetime),
-                 Refresh token (str), ID token (str)).
-            - If return_values is False, returns None.
-    """
-    global token_exp_time, api_call_headers, access_token, refresh_token, id_token
-    global nlst_token_exp_time, nlst_api_call_headers, nlst_access_token, nlst_refresh_token, nlst_id_token
-
-    # determine which token to refresh
-    try:
-        if api_url == "nlst":
-            tmp_token = nlst_refresh_token
-        else:
-            tmp_token = refresh_token
-    except NameError:
-        _log.error("No token found. Create one using getToken().")
-        raise StopExecution
-
-    # refresh token request
-    try:
-        params = {
-            'client_id': 'nbia',
-            'grant_type': 'refresh_token',
-            'refresh_token': tmp_token
-        }
-
-        if api_url == "nlst":
-            token_url = "https://keycloak.dbmi.cloud/auth/realms/TCIA/protocol/openid-connect/token"
-        else:
-            token_url = "https://keycloak-stg.dbmi.cloud/auth/realms/TCIA/protocol/openid-connect/token"
-        response = requests.post(token_url, data=params)
-        response.raise_for_status()
-        data = response.json()
-        tmp_access_token = data.get("access_token")
-        expires_in = data.get("expires_in")
-        tmp_id_token = data.get("id_token")
-
-        if not tmp_access_token or not expires_in:
-            _log.error("Failed to refresh access token.")
-
-        # track expiration status/time
-        current_time = datetime.now()
-        tmp_token_exp_time = current_time + timedelta(seconds=expires_in)
-        tmp_api_call_headers = {'Authorization': 'Bearer ' + tmp_access_token}
-        tmp_refresh_token = data.get("refresh_token")
-
-        # Store tokens separately for each server
-        if api_url == "nlst":
-            nlst_access_token = tmp_access_token
-            nlst_token_exp_time = tmp_token_exp_time
-            nlst_api_call_headers = tmp_api_call_headers
-            nlst_refresh_token = tmp_refresh_token
-            nlst_id_token = tmp_id_token
-            _log.info(f'Success - Token refreshed for nlst_api_call_headers variable and expires at {nlst_token_exp_time}')
-        else:
-            access_token = tmp_access_token
-            token_exp_time = tmp_token_exp_time
-            api_call_headers = tmp_api_call_headers
-            refresh_token = tmp_refresh_token
-            id_token = tmp_id_token
-            _log.info(f'Success - Token refreshed for api_call_headers variable and expires at {token_exp_time}')
-        # Return results based on `return_values` flag
-        if return_values:
-            return tmp_api_call_headers, tmp_access_token, tmp_token_exp_time, tmp_refresh_token, tmp_id_token
-        else:
-            return None
-
-    # handle errors
-    except requests.exceptions.RequestException as err:
-        return log_request_exception(err)
-        raise StopExecution
-
-
-def makeCredentialFile(user = "", pw = ""):
-    """
-    Creates a credential file to use with NBIA Data Retriever.
-    Interactive prompts are provided for user/pw if they're not specified as parameters.
-    The credential file is a text file that passes the user's credentials in the following format:
-        userName = YourUserName
-        passWord = YourPassword
-        Both parameters are case-sensitive.
-    Additional documentation:
-        https://wiki.cancerimagingarchive.net/x/2QKPBQ
-        https://github.com/kirbyju/TCIA_Notebooks/blob/main/TCIA_Linux_Data_Retriever_App.ipynb
-    """
-    # set user name and password
-    if user == "":
-        print("Enter User: ")
-        userName = input()
-    else:
-        userName = user
-    if pw == "":
-        passWord = getpass.getpass(prompt = 'Enter Password: ')
-    else:
-        passWord = pw
-
-    # create credential file to use with NBIA Data Retriever
-    lines = ['userName=' + userName, 'passWord=' + passWord]
-    with open('credentials.txt', 'w') as f:
-        f.write('\n'.join(lines))
-    _log.info("Credential file for NBIA Data Retriever saved: credentials.txt")
 
 
 def queryData(
@@ -349,8 +125,9 @@ def queryData(
     api_url: str,
     format: str = "json",
     method: str = "GET",
-    param: Optional[dict] = None
-) -> Optional[Union[dict, pd.DataFrame]]:
+    param: Optional[dict] = None,
+    max_rows: int = 20
+) -> Optional[Union[dict, pd.DataFrame, HTML]]:
     """
     Sends an HTTP request to the specified endpoint and formats the response.
 
@@ -358,58 +135,89 @@ def queryData(
         endpoint (str): The API endpoint to query.
         options (dict): Query parameters for GET requests.
         api_url (str): Base URL of the API.
-        format (str): Format of the output. Options are "json", "df" (DataFrame), or "csv". Defaults to "json".
+        format (str): Format of the output. Options are "json", "df" (DataFrame),
+                      "csv", or "html". Defaults to "json".
         method (str): HTTP method to use. Options are "GET" or "POST". Defaults to "GET".
         param (Optional[dict]): Form data for POST requests. Defaults to None.
+        max_rows (int): The maximum number of rows to display for the 'html' format.
+                         Defaults to 20.
 
     Returns:
-        Optional[Union[dict, pd.DataFrame]]: The API response in the requested format, or None if an error occurs.
-
-    Raises:
-        requests.exceptions.RequestException: If the request fails with an HTTP error.
+        Optional[Union[dict, pd.DataFrame, HTML]]: The API response in the requested format,
+        or None if an error occurs.
     """
     base_url = setApiUrl(endpoint, api_url)
     url = f"{base_url}{endpoint}"
     response = None
 
     try:
-        headers = nlst_api_call_headers if api_url == "nlst" else api_call_headers
-
         if method.upper() == "POST":
             _log.info(f'Calling {endpoint} with parameters {param}')
-            response = requests.post(url, headers=headers, data=param)
+            response = requests.post(url, data=param)
         else:
             _log.info(f'Calling {endpoint} with parameters {options}')
-            response = requests.get(url, params=options, headers=headers)
+            response = requests.get(url, params=options)
 
-        response.raise_for_status()  # Raise an HTTPError for bad responses (4xx, 5xx)
+        response.raise_for_status()
 
         if not response.content.strip():
             _log.info("No results found.")
             return None
 
-        # Attempt to parse the JSON response
         try:
             data = response.json()
         except ValueError:
             _log.error(f"Failed to decode JSON from response. Response text: {response.text}")
             return None
 
-        # Format the response
-        if format.lower() == "df":
-            return pd.DataFrame(data)
-        elif format.lower() == "csv":
+        # --- Formatting Logic ---
+        if format.lower() in ["df", "csv", "html"]:
             df = pd.DataFrame(data)
-            csv_filename = f"{endpoint}_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.csv"
-            df.to_csv(csv_filename, index=False)
-            _log.info(f"CSV saved to: {csv_filename}")
+            if 'Series UID' in df.columns:
+                df.rename(columns={'Series UID': 'SeriesInstanceUID'}, inplace=True)
+
+            if format.lower() == "csv":
+                csv_filename = f"{endpoint}_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.csv"
+                df.to_csv(csv_filename, index=False)
+                _log.info(f"CSV saved to: {csv_filename}")
+                return df
+
+            if format.lower() == "html":
+                # 1. Determine the display DataFrame and slice it *before* processing.
+                if len(df) > max_rows:
+                    _log.warning(f"Previewing the first {max_rows} of {len(df)} results. Use your query in combination with idcOhifViewer() for more flexibility.")
+                    # Use .copy() to avoid a potential SettingWithCopyWarning
+                    df_display = df.head(max_rows).copy()
+                else:
+                    df_display = df.copy()
+
+                # 2. Now, run the expensive link-creation step *only on the small, sliced DataFrame*.
+                base_url = "https://viewer.imaging.datacommons.cancer.gov/v3/viewer/"
+
+                if 'SeriesInstanceUID' in df_display.columns and 'StudyInstanceUID' in df_display.columns:
+                    df_display['SeriesInstanceUID'] = df_display.apply(
+                        lambda row: f'<a href="{base_url}?StudyInstanceUIDs={row["StudyInstanceUID"]}&SeriesInstanceUIDs={row["SeriesInstanceUID"]}" target="_blank">{row["SeriesInstanceUID"]}</a>',
+                        axis=1
+                    )
+
+                if 'StudyInstanceUID' in df_display.columns:
+                    df_display['StudyInstanceUID'] = df_display['StudyInstanceUID'].apply(
+                        lambda uid: f'<a href="{base_url}?StudyInstanceUIDs={uid}" target="_blank">{uid}</a>'
+                    )
+
+                # 3. Convert the processed small DataFrame to HTML.
+                html_output = df_display.to_html(escape=False, index=False)
+                return HTML(html_output)
+
+            # This handles format == "df"
             return df
         else:
+            # This handles format == "json"
             return data
 
     except requests.exceptions.RequestException as err:
-        log_request_exception(err)  # Log the error
-        return None  # Explicitly return None to indicate failure
+        log_request_exception(err)
+        return None
 
 
 def getCollections(api_url = "",
@@ -518,10 +326,13 @@ def getNewPatientsInCollection(collection,
     """
     endpoint = "NewPatientsInCollection"
 
+    # Convert user-provided YYYY/MM/DD to the API's required MM/DD/YYYY format.
+    nbiaDate = datetime.strptime(date, "%Y/%m/%d").strftime("%m-%d-%Y")
+
     # create options dict to construct URL
     options = {}
     options['Collection'] = collection
-    options['Date'] = date
+    options['fromDate'] = nbiaDate
 
     data = queryData(endpoint, options, api_url, format)
     return data
@@ -564,11 +375,14 @@ def getNewStudiesInPatient(collection,
     """
     endpoint = "NewStudiesInPatientCollection"
 
+    # Convert user-provided YYYY/MM/DD to the API's required MM/DD/YYYY format.
+    nbiaDate = datetime.strptime(date, "%Y/%m/%d").strftime("%m-%d-%Y")
+
     # create options dict to construct URL
     options = {}
     options['Collection'] = collection
     options['PatientID'] = patientId
-    options['Date'] = date
+    options['fromDate'] = nbiaDate
 
     data = queryData(endpoint, options, api_url, format)
     return data
@@ -625,11 +439,8 @@ def getUpdatedSeries(date,
     """
     endpoint = "getUpdatedSeries"
 
-    # convert to NBIA's expected date format
-    # It appears there is likely a bug in the API here.
-    # Date format for the API is currently DD/MM/YYYY so we'll convert it.
-    nbiaDate = datetime.strptime(date, "%Y/%m/%d").strftime("%d/%m/%Y")
-
+    # Convert user-provided YYYY/MM/DD to the API's required MM/DD/YYYY format.
+    nbiaDate = datetime.strptime(date, "%Y/%m/%d").strftime("%m-%d-%Y")
 
     # create options dict to construct URL
     options = {}
@@ -638,23 +449,91 @@ def getUpdatedSeries(date,
     data = queryData(endpoint, options, api_url, format)
     return data
 
-def getSeriesMetadata(seriesUid,
-                      api_url = "",
-                      format = ""):
+def getSeriesList(
+    uids: List[str],
+    api_url: str = "",
+    csv_filename: str = ""
+) -> Optional[pd.DataFrame]:
     """
-    Optional: api_url, format
-    Gets Series (scan) metadata from a specified api_url.
-    Output includes DOI and license details that were historically
-      not in the getSeries() function.
+    Retrieve metadata for a list of series from the API.
+
+    Args:
+        uids (List[str]): List of unique identifiers (series UIDs) to query.
+        api_url (str, optional): Base URL of the API to be used for the requests. Defaults to an empty string.
+        csv_filename (str, optional): Name of the CSV file to save results.
+
+    Returns:
+        Optional[pd.DataFrame]: A DataFrame containing the series metadata.
     """
-    endpoint = "getSeriesMetaData"
+    chunk_size = 10000
+    chunked_uids = [uids[i:i + chunk_size] for i in range(0, len(uids), chunk_size)]
 
-    # create options dict to construct URL
-    options = {}
-    options['SeriesInstanceUID'] = seriesUid
+    if len(chunked_uids) > 1:
+        _log.info(f"Your data has been split into {len(chunked_uids)} chunks for processing.")
 
-    data = queryData(endpoint, options, api_url, format)
-    return data
+    dfs = []
+    endpoint = "getSeriesMetadata"
+
+    # Process each chunk
+    for idx, chunk in enumerate(chunked_uids, start=1):
+        if len(chunked_uids) > 1:
+            _log.info(f"Processing chunk {idx}/{len(chunked_uids)}...")
+
+        uidList = ",".join(chunk)
+        param = {'list': uidList}
+        base_url = setApiUrl(endpoint, api_url)
+        url = f"{base_url}{endpoint}"
+
+        try:
+            response = requests.post(url, data=param)
+            response.raise_for_status()
+
+            if response and not response.content.strip():
+                _log.info(f"No results found for chunk {idx}.")
+                continue
+
+            df_chunk = pd.read_csv(io.StringIO(response.text), sep=',')
+            dfs.append(df_chunk)
+
+        except requests.exceptions.RequestException as err:
+            log_request_exception(err)
+            continue
+        except Exception as e:
+            _log.error(f"An error occurred while processing chunk {idx}: {e}")
+            continue
+
+    if not dfs:
+        _log.error("No results returned for the provided series UIDs. Ensure you have access to the requested data.")
+        return None
+
+    df = pd.concat(dfs, ignore_index=True)
+
+    # Standardize column names to match other functions
+    column_mapping = {
+        'Patient ID': 'PatientID',
+        'Study Instance UID': 'StudyInstanceUID',
+        'Series Instance UID': 'SeriesInstanceUID',
+        'Study Date': 'StudyDate',
+        'Series Date': 'SeriesDate',
+        'Image Count': 'ImageCount',
+        'File Size': 'FileSize',
+        'Date Released': 'DateReleased',
+        'Body Part Examined': 'BodyPartExamined',
+        'Series Description': 'SeriesDescription',
+        'Manufacturer Model Name': 'ManufacturerModelName',
+        'Software Versions': 'SoftwareVersions',
+        'License Name': 'LicenseName',
+        'License URI': 'LicenseURI',
+        'Collection URI': 'DataDescriptionURI',
+    }
+    df.rename(columns=column_mapping, inplace=True)
+
+
+    if csv_filename:
+        df.to_csv(f"{csv_filename}.csv", index=False)
+        _log.info(f"Series metadata saved as '{csv_filename}.csv'")
+
+    return df
 
 def getSeriesSize(seriesUid,
                   api_url = "",
@@ -748,11 +627,10 @@ def _download_and_unzip_series(seriesUID, path, api_url, downloadOptions, as_zip
         pathTmp = os.path.join(path, seriesUID)
         zip_path = f"{pathTmp}.zip"
         base_url = setApiUrl(endpoint, api_url)
-        headers = nlst_api_call_headers if api_url == "nlst" else api_call_headers
         data_url = base_url + downloadOptions + seriesUID
 
         _log.info(f"Downloading... {data_url}")
-        data = requests.get(data_url, headers=headers)
+        data = requests.get(data_url)
 
         if data.status_code == 200:
             if as_zip:
@@ -768,6 +646,7 @@ def _download_and_unzip_series(seriesUID, path, api_url, downloadOptions, as_zip
     except Exception as e:
         _log.error(f"Exception during download for series {seriesUID}: {e}")
         return None
+
 
 def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
                    number: int = 0,
@@ -921,8 +800,7 @@ def downloadImage(seriesUID: str, sopUID: str, path: Optional[str] = "", api_url
         if not os.path.isfile(file_path):
             data_url = f"{base_url}getSingleImage?SeriesInstanceUID={seriesUID}&SOPInstanceUID={sopUID}"
             _log.info(f"Downloading... {data_url}")
-            headers = nlst_api_call_headers if api_url == "nlst" else api_call_headers
-            data = requests.get(data_url, headers=headers)
+            data = requests.get(data_url)
 
             if data.status_code == 200:
                 os.makedirs(path_tmp, exist_ok=True)
@@ -1042,108 +920,6 @@ def getManufacturerCounts(collection = "",
     return data
 
 
-def getSeriesList(
-    uids: List[str],
-    api_url: str = "",
-    csv_filename: str = "",
-    format: str = "",
-    include_patient_study: bool = False
-) -> Optional[Union[pd.DataFrame, None]]:
-    """
-    Retrieve metadata for a list of series from the Advanced API.
-
-    Args:
-        uids (List[str]): List of unique identifiers (series UIDs) to query.
-        api_url (str, optional): Base URL of the API to be used for the requests. Defaults to an empty string.
-        csv_filename (str, optional): Name of the CSV file to save results. Ignored if `format` is not "csv".
-        format (str, optional): Output format. If "csv", the results are saved to a CSV file.
-        include_patient_study (bool, optional): Whether to include additional metadata from
-            patient and study levels for the requested series. Defaults to False.
-
-    Returns:
-        Optional[Union[pd.DataFrame, None]]: A DataFrame containing the series metadata. If `format` is "csv",
-        the results are saved to a file, and None is returned.
-    """
-    chunk_size = 10000
-    chunked_uids = [uids[i:i + chunk_size] for i in range(0, len(uids), chunk_size)]
-
-    if len(chunked_uids) > 1:
-        _log.info(f"Your data has been split into {len(chunked_uids)} chunks for processing.")
-
-    dfs = []
-
-    # Process each chunk
-    for idx, chunk in enumerate(chunked_uids, start=1):
-        try:
-            if len(chunked_uids) > 1:
-                _log.info(f"Processing chunk {idx}/{len(chunked_uids)}...")
-            chunk_df = getSeriesListData(chunk, api_url, include_patient_study)
-
-            if chunk_df is None or chunk_df.empty:
-                #_log.warning(f"No data returned for chunk {idx}.")
-                continue
-
-            dfs.append(chunk_df)
-        except requests.exceptions.RequestException as err:
-            #_log.error(f"Error processing chunk {idx}:")
-            log_request_exception(err)
-            continue
-
-    # Handle the case where no data was retrieved
-    if not dfs:
-        _log.error("No results returned for the provided series UIDs. Ensure you have access to the requested data.")
-        return None
-
-    # Combine all retrieved DataFrames
-    df = pd.concat(dfs, ignore_index=True)
-
-    if format.lower() == "csv":
-        if csv_filename:
-            filename = f"{csv_filename}.csv"
-        else:
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            filename = f"series_report_{timestamp}.csv"
-
-        df.to_csv(filename, index=False)
-        _log.info(f"Collection summary report saved as '{filename}'")
-        return None
-
-    return df
-
-
-def getSeriesListData(uids, api_url, include_patient_study):
-    """
-    Ingests input from getSeriesList().
-    Not intended to be used directly.
-    Note: API returns a CSV (not JSON) which this converts to df.
-    """
-    uidList = ",".join(uids)
-    param = {'list': uidList}
-    endpoint = "getSeriesMetadata3" if include_patient_study else "getSeriesMetadata2"
-
-    base_url = setApiUrl(endpoint, api_url)
-    url = f"{base_url}{endpoint}"
-    response = None
-
-    try:
-        headers = nlst_api_call_headers if api_url == "nlst" else api_call_headers
-        _log.info(f'Calling {endpoint} with parameters {param}')
-        response = requests.post(url, headers=headers, data=param)
-        response.raise_for_status()
-
-        if response and not response.content.strip():
-            _log.info(f"No results found.")
-            return None
-
-    except requests.exceptions.RequestException as err:
-        return log_request_exception(err)
-        return None
-
-    else:
-        df = pd.read_csv(io.StringIO(response.text), sep=',')
-        return df
-
-
 def getDicomTags(seriesUid: str, api_url: str = "", format: str = "df") -> Optional[pd.DataFrame]:
     """
     Retrieves DICOM tag metadata for a given Series UID.
@@ -1235,22 +1011,7 @@ def getSegRefSeries(uid):
         return refSeriesUid
 
 
-def getDoiMetadata(doi, output="", api_url="", format=""):
-    """
-    Optional: output, api_url, format
-    Gets a list of Collections if output = "", or Series UIDs if output = "series", associated with a DOI.
-    The result includes whether the data are 3rd party analyses or not.
-    """
-    param = {'DOI': doi, 'CollectionOrSeries': output}
-    endpoint = "getCollectionOrSeriesForDOI"
-
-    # Use queryData to make the POST request
-    data = queryData(endpoint=endpoint, options = None, api_url=api_url, format=format, method="POST", param=param)
-
-    return data
-
-
-def getSimpleSearchWithModalityAndBodyPartPaged(
+def getSimpleSearch(
     collections = [],
     species = [],
     modalities = [],
@@ -1290,13 +1051,13 @@ def getSimpleSearchWithModalityAndBodyPartPaged(
                                 Series Instance UIDs or "manifest" to save a TCIA manifest file (up to 1,000,000 series).
                                 "manifest_text" can be used to return the manifest content as text rather than saving it to disk.
 
-    Example call: getSimpleSearchWithModalityAndBodyPartPaged(collections=["TCGA-UCEC", "4D-Lung"], modalities=["CT"])
+    Example call: getSimpleSearch(collections=["TCGA-UCEC", "4D-Lung"], modalities=["CT"])
     """
     if format in ["manifest", "manifest_text", "uids"]:
         endpoint = "getManifestForSimpleSearch"
         size = 1000000
     else:
-        endpoint = "getSimpleSearchWithModalityAndBodyPartPaged"
+        endpoint = "getSimpleSearch"
 
     criteriaTypeIndex = 0
     options = {}
@@ -1329,6 +1090,16 @@ def getSimpleSearchWithModalityAndBodyPartPaged(
             _log.error(f'Malformed date parameter(s) {bad_dates}; use Y/m/d format e.g. 1999/12/31')
             raise StopExecution
 
+        # NBIA switched to MM-DD-YYYY in v4 API, so we'll convert to retain tcia_utils format
+        nbiaFromDate = datetime.strptime(fromDate, "%Y/%m/%d").strftime("%m-%d-%Y")
+        nbiaToDate = datetime.strptime(toDate, "%Y/%m/%d").strftime("%m-%d-%Y")
+
+        criteria = getCriteria()
+        options[criteria] = Criteria.DateRange
+        options["fromDate" + str(criteriaTypeIndex)] = nbiaFromDate
+        options["toDate" + str(criteriaTypeIndex)] = nbiaToDate
+        criteriaTypeIndex += 1
+
     if collections:
         for collection in collections:
             setOptionValue(Criteria.Collection, collection)
@@ -1359,12 +1130,6 @@ def getSimpleSearchWithModalityAndBodyPartPaged(
     if modalityAnded:
         setOptionValue(Criteria.ModalityAnded, "all")
         criteriaTypeIndex += 1
-    if fromDate and toDate:
-        criteria = getCriteria()
-        options[criteria] = Criteria.DateRange
-        options["fromDate" + str(criteriaTypeIndex)] = fromDate
-        options["toDate" + str(criteriaTypeIndex)] = toDate
-        criteriaTypeIndex += 1
 
     options['sortField'] = sortField
     options['sortDirection'] = sortDirection
@@ -1381,7 +1146,7 @@ def getSimpleSearchWithModalityAndBodyPartPaged(
 
     # get data & handle any request.post() errors
     try:
-        metadata = requests.post(url, headers = api_call_headers, data = options)
+        metadata = requests.post(url, data = options)
         metadata.raise_for_status()
 
         # check for empty results and format output
@@ -1414,122 +1179,6 @@ def getSimpleSearchWithModalityAndBodyPartPaged(
         return log_request_exception(err)
 
 
-def getAdvancedQCSearch(criteria_values, api_url="", format="", input_type={}):
-    """
-    This function allows TCIA data curators to perform an advanced QC search.
-    This function will not work for end users of TCIA.
-
-    Parameters:
-    - criteria_values: List of tuples, where each tuple contains a criteria,
-        its value(s).
-
-        TODO: Consider adding "OR" support in tuples at some point.
-
-      Criteria type options with default input types include:
-       "collection": "list",
-       "qcstatus": "list",
-       "released": "list",
-       "batchnumber": "list",
-       "complete": "list",
-       "patientID": "commaSeperatedList",
-       "submissiondate": "dateRange",
-       "studyUID": "commaSeperatedList",
-       "seriesUID": "commaSeperatedList",
-       "studyDate": "dateRange",
-       "seriesDesc": "contains",
-       "modality": "list",
-       "manufacturer": "list"
-      Criteria values can be single strings or lists of strings for multiple entries.
-    - api_url: Base URL for the API.
-    - format: Response format, e.g., "json", "df".
-    - input_type: Overrides for the default input type of a given criteria.
-        Possible options:
-            "list",
-            "commaSeperatedList",
-            "dateRange",
-            "contains"
-
-    Returns:
-    - The API response data.
-
-    Example with single values:
-        criteria_values = [
-            ("collection", "APOLLO-5-KIRP//UVA-Limited"),
-            ("modality", "MR")
-        ]
-
-        response = nbia.getAdvancedQCSearch(criteria_values, format="df")
-
-    Example with multiple criteria, input type override and boolean override:
-        criteria_values = [
-            ("collection", ["MIDRC-RICORD-1A//RSNA", "MIDRC-RICORD-1C//RSNA"]),
-            ("qcstatus", "Not Visible"),
-            ("qcstatus", "Visible"),
-            ("submissiondate", "12/2/2020"), # earliest date range
-            ("submissiondate", "12/12/2020") # latest date range
-        ]
-
-        response = nbia.getAdvancedQCSearch(criteria_values, format="df")
-    """
-    # Default mapping between criteriaType and inputType
-    input_type_map = {
-        "collection": "list",
-        "qcstatus": "list",
-        "released": "list",
-        "batchnumber": "list",
-        "complete": "list",
-        "patientID": "commaSeperatedList",
-        "submissiondate": "dateRange",
-        "studyUID": "commaSeperatedList",
-        "seriesUID": "commaSeperatedList",
-        "studyDate": "dateRange",
-        "seriesDesc": "contains",
-        "modality": "list",
-        "manufacturer": "list",
-    }
-
-    endpoint = "getAdvancedQCSearch"
-    param = {}
-
-    # Process each criteria
-    counter = 0
-    for item in criteria_values:
-        # Unpack the tuple and handle optional boolean operator
-        if len(item) == 2:
-            criteria, values = item
-            boolean_op = "AND"  # Default to "AND"
-
-        # Potential handling of "OR" criteria to be added later
-        # Bugs with how chaining AND + OR criteria together prevents this from
-        #   working the way it's written currently.
-        #elif len(item) == 3:
-        #    criteria, values, boolean_op = item
-        #    # Validate boolean_op
-        #    if boolean_op not in {"AND", "OR"}:
-        #        raise ValueError(f"Invalid boolean operator: {boolean_op}. Must be 'AND' or 'OR'.")
-        #else:
-        #    raise ValueError("Each item in criteria_values must be a tuple of 2 or 3 elements.")
-
-        else:
-            raise ValueError("Each item in criteria_values must be a tuple of 2 elements.")
-
-        # Ensure values are treated as a list
-        if not isinstance(values, list):
-            values = [values]
-
-        for value in values:
-            param[f"criteriaType{counter}"] = criteria
-            param[f"inputType{counter}"] = input_type.get(criteria, input_type_map.get(criteria, "text"))
-            param[f"value{counter}"] = value
-            param[f"boolean{counter}"] = boolean_op
-            counter += 1
-
-    # Make the POST request
-    data = queryData(endpoint=endpoint, options=None, api_url=api_url, format=format, method="POST", param=param)
-
-    return data
-
-
 ##########################
 ##########################
 # Reports
@@ -1542,7 +1191,6 @@ def formatSeriesInput(series_data, input_type, api_url):
     inputs into a uniform dataframe output that is harmonized to
     the fields from getSeries() in order to be ingested by other functions.
     Missing fields are set to None.
-
     series_data can be provided as JSON (default), df, TCIA manifest file or python list.
     input_type informs the function which of those types are being used.
     If input_type = "manifest" the series_data should be the path to the manifest file.
@@ -1550,10 +1198,9 @@ def formatSeriesInput(series_data, input_type, api_url):
     # if input_type is manifest convert it to a list
     if input_type == "manifest":
         series_data = manifestToList(series_data)
-
     # download relevant metadata for lists and manifests converted to lists
     if input_type == "list" or input_type == "manifest":
-        df = getSeriesList(series_data, api_url = api_url)
+        df = getSeriesList(series_data, api_url=api_url)
     # pass the dataframe through if one was provided
     elif input_type == "df":
         df = series_data
@@ -1562,57 +1209,143 @@ def formatSeriesInput(series_data, input_type, api_url):
         # Create a DataFrame from the series_data
         df = pd.DataFrame(series_data)
 
-    # Rename the headers
+    # Check if data is empty
     if df is None or df.empty:
-        _log.warning(f"No data was provided for reformatting.")
+        _log.error(f"No data was provided for reformatting.")
         raise StopExecution
-    else:
-        column_mapping = {
-                'Collection Name': 'Collection',
-                'Data Description URI': 'CollectionURI',
-                # Modality is the same
-                # Manufacturer is the same
-                'Body Part Examined': 'BodyPartExamined',
-                'Subject ID': 'PatientID',
-                'Study UID': 'StudyInstanceUID',
-                'Study Description': 'StudyDesc',
-                'Study Date': 'StudyDate',
-                'Series ID': 'SeriesInstanceUID',
-                'Series Description': 'SeriesDescription',
-                'Series Number': 'SeriesNumber',
-                'Protocol Name': 'ProtocolName',
-                'Series Date': 'SeriesDate',
-                'Number of images': 'ImageCount',
-                'File Size (Bytes)': 'FileSize',
-                #TimeStamp is the same
-                'Date Released': 'DateReleased',
-                '3rd Party Analysis': 'ThirdPartyAnalysis',
-                'Manufacturer Model Name': 'ManufacturerModelName',
-                'Software Versions': 'SoftwareVersions',
-                'License Name': 'LicenseName',
-                'License URL': 'LicenseURI',
-                'Annotations Flag': 'AnnotationsFlag'
-            }
 
-        # Renaming the columns in the DataFrame
-        df.rename(columns=column_mapping, inplace=True)
+    # Updated column mapping to handle all three API endpoint formats
+    column_mapping = {
+        # Core identifiers - getSeriesMetadata() format -> standard format
+        'Patient ID': 'PatientID',
+        'Subject ID': 'PatientID',  # Alternative naming
+        'Series Instance UID': 'SeriesInstanceUID',
+        'Series ID': 'SeriesInstanceUID',  # Alternative naming
+        'Study Instance UID': 'StudyInstanceUID',
+        'Study UID': 'StudyInstanceUID',  # Alternative naming
+        'Collection Name': 'Collection',
 
-        # Verify all columns exist that should be there
-        required_columns = list(column_mapping.values()) + ['Modality', 'Manufacturer', 'TimeStamp']
+        # Study information
+        'Study Description': 'StudyDesc',
+        'Study Date': 'StudyDate',
 
-        for col in required_columns:
-                if col not in df.columns:
-                    df[col] = None
+        # Series information
+        'Series Description': 'SeriesDescription',
+        'Series Date': 'SeriesDate',
+        'Series Number': 'SeriesNumber',
+        'Protocol Name': 'ProtocolName',
+        'Body Part Examined': 'BodyPartExamined',
 
-        # Make all URLs lower case
-        df['CollectionURI'] = df['CollectionURI'].str.lower()
-        df['LicenseURI'] = df['LicenseURI'].str.lower()
+        # Technical metadata
+        'Manufacturer Model Name': 'ManufacturerModelName',
+        'Software Versions': 'SoftwareVersions',
 
-        # Format date-related columns to datetime
-        df['DateReleased'] = pd.to_datetime(df['DateReleased'])
-        df['TimeStamp'] = pd.to_datetime(df['TimeStamp'])
+        # File information
+        'Number of images': 'ImageCount',
+        'Image Count': 'ImageCount',  # Alternative naming
+        'File Size (Bytes)': 'FileSize',
+        'File Size': 'FileSize',  # Alternative naming without units
 
-        return df
+        # Licensing and release info
+        'License Name': 'LicenseName',
+        'License URL': 'LicenseURI',
+        'License URI': 'LicenseURI',  # Alternative naming
+        'Data Description URI': 'DataDescriptionURI',
+        'Date Released': 'DateReleased',
+        'Released Status': 'ReleasedStatus',
+        '3rd Party Analysis': 'ThirdPartyAnalysis',
+        'Third Party Analysis': 'ThirdPartyAnalysis',
+        'Annotations Flag': 'AnnotationsFlag',
+
+        # Patient demographics (from getSeriesMetadata)
+        'Patient Name': 'PatientName',
+        'Patient Sex': 'PatientSex',
+        'Patient Age': 'PatientAge',
+        'Ethnic Group': 'EthnicGroup',
+        'Species Code': 'SpeciesCode',
+        'Species Description': 'SpeciesDescription',
+
+        # Study details (from getSeriesMetadata)
+        'Study ID': 'StudyID',
+        'Admitting Diagnosis Description': 'AdmittingDiagnosisDescription',
+        'Longitudinal Temporal Event Type': 'LongitudinalTemporalEventType',
+        'Longitudinal Temporal Offset From Event': 'LongitudinalTemporalOffsetFromEvent',
+
+        # Technical imaging parameters (from getSeriesMetadata)
+        'Pixel Spacing(mm)- Row': 'PixelSpacingRow',
+        'Slice Thickness(mm)': 'SliceThickness',
+        'Max Submission Timestamp': 'MaxSubmissionTimestamp',
+
+        # Site information
+        'Site': 'Site',
+        'Phantom': 'Phantom'
+    }
+
+    # Rename the columns in the DataFrame
+    df.rename(columns=column_mapping, inplace=True)
+
+    # Define all possible columns that should exist after normalization
+    # Core columns (always expected)
+    core_columns = [
+        'SeriesInstanceUID', 'StudyInstanceUID', 'PatientID', 'Collection',
+        'Modality', 'Manufacturer', 'TimeStamp', 'DataDescriptionURI',
+        'LicenseName', 'LicenseURI', 'FileSize', 'ImageCount', 'DateReleased',
+        'BodyPartExamined', 'SeriesDescription', 'StudyDesc', 'StudyDate', 'Authorized'
+    ]
+
+    # Extended columns (may be present depending on API endpoint)
+    extended_columns = [
+        'SeriesDate', 'SeriesNumber', 'ProtocolName', 'ManufacturerModelName',
+        'SoftwareVersions', 'ThirdPartyAnalysis', 'AnnotationsFlag', 'ReleasedStatus',
+        'PatientName', 'PatientSex', 'PatientAge', 'EthnicGroup', 'SpeciesCode',
+        'SpeciesDescription', 'StudyID', 'AdmittingDiagnosisDescription',
+        'LongitudinalTemporalEventType', 'LongitudinalTemporalOffsetFromEvent',
+        'PixelSpacingRow', 'SliceThickness', 'MaxSubmissionTimestamp', 'Site', 'Phantom'
+    ]
+
+    all_possible_columns = core_columns + extended_columns
+
+    # Add missing columns and set them to None
+    for col in all_possible_columns:
+        if col not in df.columns:
+            df[col] = None
+
+    # Data cleaning and formatting
+    # Make all URLs lower case (handle NaN values)
+    if 'DataDescriptionURI' in df.columns:
+        df['DataDescriptionURI'] = df['DataDescriptionURI'].astype(str).str.lower()
+        df['DataDescriptionURI'] = df['DataDescriptionURI'].replace('nan', None)
+
+    if 'LicenseURI' in df.columns:
+        df['LicenseURI'] = df['LicenseURI'].astype(str).str.lower()
+        df['LicenseURI'] = df['LicenseURI'].replace('nan', None)
+
+    # Format date-related columns to datetime (handle various formats and NaN)
+    date_columns = ['DateReleased', 'TimeStamp', 'StudyDate', 'SeriesDate', 'MaxSubmissionTimestamp']
+    for date_col in date_columns:
+        if date_col in df.columns and df[date_col].notna().any():
+            try:
+                df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+            except Exception as e:
+                _log.warning(f"Could not convert {date_col} to datetime: {e}")
+
+    # Convert numeric columns where appropriate
+    numeric_columns = ['FileSize', 'ImageCount', 'SeriesNumber', 'PatientAge', 'Authorized']
+    for num_col in numeric_columns:
+        if num_col in df.columns and df[num_col].notna().any():
+            try:
+                df[num_col] = pd.to_numeric(df[num_col], errors='coerce')
+            except Exception as e:
+                _log.warning(f"Could not convert {num_col} to numeric: {e}")
+
+    # Clean up string columns - strip whitespace
+    string_columns = [col for col in df.columns if col not in date_columns + numeric_columns]
+    for str_col in string_columns:
+        if str_col in df.columns and df[str_col].dtype == 'object':
+            df[str_col] = df[str_col].astype(str).str.strip()
+            df[str_col] = df[str_col].replace('nan', None)
+
+    return df
 
 
 def reportDoiSummary(series_data, input_type="", api_url = "", format=""):
@@ -1704,13 +1437,13 @@ def reportDataSummary(series_data, input_type="", report_type = "", api_url = ""
     # choose between collection report or DOI report
     # these are used later when renaming and formatting the columns/charts
     if report_type == "doi":
-        group = "CollectionURI"
+        group = "DataDescriptionURI"
         column = "Collection"
         columnGrouped = "Collections"
         chartLabel = "Identifier"
     else:
         group = "Collection"
-        column = "CollectionURI"
+        column = "DataDescriptionURI"
         columnGrouped = "DOIs"
         chartLabel = "Collection"
 
@@ -1783,8 +1516,8 @@ def reportDataSummary(series_data, input_type="", report_type = "", api_url = ""
         # drop unnecessary columns in datacite df
         datacite = datacite[["DOI", "Identifier"]]
 
-        # Extract DOI from the end of CollectionURI and store it in "DOI" column
-        grouped["DOI"] = grouped["CollectionURI"].str.extract(r'doi.org/(\S+)$')
+        # Extract DOI from the end of DataDescriptionURI and store it in "DOI" column
+        grouped["DOI"] = grouped["DataDescriptionURI"].str.extract(r'doi.org/(\S+)$')
 
         # format the DOI values consistently
         grouped['DOI'] = grouped['DOI'].str.strip()
@@ -1953,83 +1686,6 @@ def reportSeriesReleaseDate(series_data, chart_width = 1024, chart_height = 768)
 
     # display figure
     fig.show()
-
-
-def makeSharedCart(
-    uids: List[str],
-    name: Optional[str] = None,
-    description: str = "",
-    description_url: str = "",
-    api_url: str = "",
-    chunk_size: int = 5000
-) -> List[str]:
-    """
-    Create a shared cart from a list of series UIDs.
-
-    Args:
-        uids (List[str]): List of series UIDs to include in the shared cart.
-        name (Optional[str]): Name of the shared cart. If not provided, a random name is generated.
-        description (str): Description of the shared cart.
-        description_url (str): URL providing additional details about the shared cart.
-        api_url (str, optional): Base URL of the API to use. Defaults to an empty string.
-        chunk_size (int, optional): Maximum number of UIDs per request. Defaults to 5000.
-
-    Returns:
-        List[str]: A list of URLs pointing to the created shared carts, one for each chunk.
-    """
-    # Generate a random name if none is provided
-    if not name:
-        random_number = random.randint(10**15, 10**17 - 1)  # 16-digit random number
-        name = f"nbia-{random_number}"
-        _log.info(f"No name provided. Generated name: {name}")
-
-    # Set up the base cart URL
-    base_cart_url = "https://nbia.cancerimagingarchive.net/nbia-search/?saved-cart="
-    if api_url == "nlst":
-        base_cart_url = base_cart_url.replace("nbia.", "nlst.")
-
-    # Split the UIDs into chunks
-    chunked_uids = [uids[i:i + chunk_size] for i in range(0, len(uids), chunk_size)]
-
-    endpoint = "createSharedList"
-    base_url = setApiUrl(endpoint, api_url)
-    url = base_url + endpoint
-
-    headers = nlst_api_call_headers if api_url == "nlst" else api_call_headers
-    headers_with_content_type = headers.copy()
-    headers_with_content_type['Content-Type'] = 'application/x-www-form-urlencoded'
-
-    cart_urls = []  # List to store the cart URLs for each chunk
-
-    # Process each chunk
-    for idx, chunk in enumerate(chunked_uids, start=1):
-        # Append a unique part suffix if there are multiple chunks
-        chunk_name = f"{name}-part{idx}" if len(chunked_uids) > 1 else name
-        cart_url = f"{base_cart_url}{chunk_name}"  # Construct the cart URL
-
-        try:
-            # Construct the query string manually for the current chunk
-            uid_query = "&".join([f"list={uid}" for uid in chunk])
-            param = f"{uid_query}&name={chunk_name}&description={description}&url={description_url}"
-
-            _log.info(f"Processing chunk {idx}/{len(chunked_uids)}. Calling {endpoint} with name: {chunk_name}")
-            metadata = requests.post(url, headers=headers_with_content_type, data=param)
-            metadata.raise_for_status()
-
-            # Log success for this chunk
-            _log.info(f"Chunk {idx}/{len(chunked_uids)} processed successfully. Response: {metadata.text}")
-            cart_urls.append(cart_url)  # Add the URL to the list
-
-        except requests.exceptions.RequestException as err:
-            # Log and continue to the next chunk
-            _log.error(f"Error processing chunk {idx}/{len(chunked_uids)} with name: {chunk_name}")
-            log_request_exception(err)
-            continue
-
-    # Final log for completion
-    _log.info("All chunks processed. Shared cart creation completed.")
-
-    return cart_urls
 
 
 def makeSeriesReport(series_data, input_type = "", format = "", filename = None, api_url = ""):
@@ -2225,84 +1881,139 @@ def manifestToList(manifest):
 ##########################
 # Visualization
 
-def makeVizLinks(series_data, csv_filename=""):
+def idcOhifViewer(data: Union[pd.DataFrame, List[dict]], max_rows: int = 500) -> Optional[HTML]:
     """
-    Ingests JSON output of getSeries() or getSharedCart().
-    Creates URLs to visualize them in a browser.
-    The links appear in the last 2 columns of the dataframe.
-    TCIA links display the individual series described in each row.
-    IDC links display the entire study (all scans from that time point).
-    IDC links may not work if they haven't mirrored the series from TCIA, yet.
-    This function only works with fully public datasets (not limited-access).
-    Accepts a csv_filename parameter if you'd like to export a CSV file.
+    Renders a DataFrame or JSON/list as an HTML table with clickable IDC OHIF viewer links.
+
+    This utility function takes the output of a query (either a DataFrame or the
+    default JSON/list format) and displays it as an interactive table. UIDs are
+    converted into hyperlinks that open the IDC's OHIF viewer in a new tab.
+
+    Args:
+        data (Union[pd.DataFrame, List[dict]]):
+            The input data. This can be a Pandas DataFrame or a list of dictionaries
+            (the default JSON output from functions like getSeries).
+        max_rows (int, optional):
+            The maximum number of rows to display in the HTML table to prevent
+            browser performance issues. Defaults to 500.
+
+    Returns:
+        Optional[IPython.display.HTML]:
+            An object that renders as a clickable HTML table in a notebook, or None
+            if the input data is invalid.
+
+    Example 1: Visualizing the default JSON output
+        # Get data in the default format (JSON/list)
+        series_json = nbia.getSeries(collection="TCGA-BRCA", modality="MR")
+
+        # Directly visualize the result
+        idcOhifViewer(series_json)
+
+    Example 2: Visualizing a filtered DataFrame
+        # Get the full dataset as a DataFrame
+        all_series_df = nbia.getSeries(collection="TCGA-BRCA", modality="MR", format="df")
+
+        # Filter for a specific patient
+        patient_df = all_series_df[all_series_df['PatientID'] == 'TCGA-A2-A0CM']
+
+        # Display the filtered results with IDC links
+        idcOhifViewer(patient_df)
     """
-    # set base urls for tcia/idc
-    tciaVizUrl = "https://nbia.cancerimagingarchive.net/viewer/?series="
-    idcVizUrl = "https://viewer.imaging.datacommons.cancer.gov/viewer/"
-
-    # create dataframe and append base URLs to study/series UIDs
-    df = pd.DataFrame(series_data)
-    df['VisualizeSeriesOnTcia'] = tciaVizUrl + df['SeriesInstanceUID']
-    df['VisualizeStudyOnIdc'] = idcVizUrl + df['StudyInstanceUID']
-
-    # display manifest dataframe and/or save manifest to CSV file
-    if csv_filename != "":
-        df.to_csv(csv_filename + '.csv')
-        _log.info(f"Manifest CSV saved as {csv_filename}.csv")
-        return df
+    # --- 1. Handle different input types ---
+    if isinstance(data, list):
+        # Convert JSON/list output to a DataFrame
+        df = pd.DataFrame(data)
+    elif isinstance(data, pd.DataFrame):
+        # The input is already a DataFrame
+        df = data
     else:
-        return df
+        _log.error("Invalid input type. Please provide a Pandas DataFrame or a list (from JSON output).")
+        return None
+
+    if df.empty:
+        _log.info("The provided DataFrame is empty. Nothing to display.")
+        return
+
+    # --- 2. Slice FIRST for performance, then process ---
+    if len(df) > max_rows:
+        _log.info(f"Displaying the first {max_rows} of {len(df)} rows.")
+        # Use .copy() to avoid a potential SettingWithCopyWarning
+        df_display = df.head(max_rows).copy()
+    else:
+        df_display = df.copy()
+
+    # --- 3. Run the link-creation step on the smaller DataFrame ---
+    base_url = "https://viewer.imaging.datacommons.cancer.gov/v3/viewer/"
+
+    if 'SeriesInstanceUID' in df_display.columns and 'StudyInstanceUID' in df_display.columns:
+        df_display['SeriesInstanceUID'] = df_display.apply(
+            lambda row: f'<a href="{base_url}?StudyInstanceUIDs={row["StudyInstanceUID"]}&SeriesInstanceUIDs={row["SeriesInstanceUID"]}" target="_blank">{row["SeriesInstanceUID"]}</a>',
+            axis=1
+        )
+
+    if 'StudyInstanceUID' in df_display.columns:
+        df_display['StudyInstanceUID'] = df_display['StudyInstanceUID'].apply(
+            lambda uid: f'<a href="{base_url}?StudyInstanceUIDs={uid}" target="_blank">{uid}</a>'
+        )
+
+    # --- 4. Convert to HTML and return for display ---
+    html_output = df_display.to_html(escape=False, index=False)
+    return HTML(html_output)
 
 
-def viewSeries(*args, **kwargs):
+##########################
+##########################
+# Backwards Compatibility
+
+_DEPRECATION_MAP = {
+    "getToken": None,
+    "refreshToken": None,
+    "makeCredentialFile": None,
+    "getSimpleSearchWithModalityAndBodyPartPaged": "getSimpleSearch",
+    "viewSeries": "simpleDicomViewer",
+    "viewSeriesAnnotation": "simpleDicomViewer",
+    "makeVizLinks": None,
+}
+
+def __getattr__(name: str):
     """
-    This function has been removed from `tcia_utils`.
-
-    The functionality is now available in the `simpleDicomViewer` package.
-
-    Please follow the instructions below to install the necessary dependencies:
-
-    1. Install the forked `pydicom-seg` with updated jsonschema version:
-
-        import sys
-        !{sys.executable} -m pip install --upgrade -q git+https://github.com/kirbyju/pydicom-seg.git@master
-
-    2. Install `simpleDicomViewer`:
-
-        import sys
-        !{sys.executable} -m pip install --upgrade -q simpleDicomViewer
-
-    Usage in `simpleDicomViewer` has changed slightly as the `seriesUid` parameter is no longer available:
-
-        from simpleDicomViewer import viewSeries
-        viewSeries(path = "")
+    Provides a compatibility layer for deprecated or renamed functions.
+    This function is called by Python when an attribute is not found in the module.
+    It checks a mapping of old names to new names and provides helpful warnings.
     """
-    raise NotImplementedError("viewSeries() has been migrated to the `simpleDicomViewer` PyPI package.")
+    if name in _DEPRECATION_MAP:
+        new_name = _DEPRECATION_MAP[name]
+        if new_name == "simpleDicomViewer":
+            # Special case for functions moved to simpleDicomViewer
+            warnings.warn(
+                f"`{name}` has been moved to the `simpleDicomViewer` package. "
+                "Please install it and update your code. See MIGRATION.md for more details.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+        elif new_name:
+            # This is a renamed function
+            warnings.warn(
+                f"`{name}` is deprecated and will be removed in a future version. "
+                f"Please use `{new_name}` instead. "
+                "See MIGRATION.md for more details.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            # Return the new function
+            return globals()[new_name]
+        else:
+            # This function was removed
+            warnings.warn(
+                f"`{name}` has been removed because it is no longer needed with the new V4 API. "
+                "See MIGRATION.md for details on how to update your code.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            # Raise an attribute error to make it clear the function doesn't exist
+            raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
+    # For any other attribute not found, raise the standard error
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
-def viewSeriesAnnotation(*args, **kwargs):
-    """
-    This function has been removed from `tcia_utils`.
-
-    The functionality is now available in the `simpleDicomViewer` package.
-
-    Please follow the instructions below to install the necessary dependencies:
-
-    1. Install the forked `pydicom-seg` with updated jsonschema version:
-
-        import sys
-        !{sys.executable} -m pip install --upgrade -q git+https://github.com/kirbyju/pydicom-seg.git@master
-
-    2. Install `simpleDicomViewer`:
-
-        import sys
-        !{sys.executable} -m pip install --upgrade -q simpleDicomViewer
-
-    Usage in `simpleDicomViewer` has changed slightly as the `seriesUid` and annotationUid parameters are no longer available.
-
-    Note that annotationPath should be the path to the specific segmentation file name as opposed to a directory containing multiple segmentation files:
-
-        from simpleDicomViewer import viewSeriesAnnotations
-        viewSeriesAnnotation(seriesPath = "", annotationPath = "")
-    """
-    raise NotImplementedError("viewSeriesAnnotation() has been migrated to the `simpleDicomViewer` PyPI package.")
