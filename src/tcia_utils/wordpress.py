@@ -1,6 +1,7 @@
 import pandas as pd
 import json
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 import logging
 from tcia_utils.utils import searchDf
@@ -187,21 +188,70 @@ def getAnalyses(per_page=100, format="", file_name=None, fields=None, ids=None, 
     return data
 
 
-def update_download_file_column(data):
+def update_download_file_column(data, max_workers=10):
+    """
+    Update download_url column by fetching source URLs from WordPress media API in parallel.
+    
+    Args:
+        data: DataFrame containing download_file column
+        max_workers: Maximum number of parallel threads (default 10)
+    """
     # Define a function to fetch 'source_url' from the API
-    def fetch_source_url(row, current_url):
-        if pd.notna(current_url) and current_url:
-            return current_url
-        if isinstance(row, dict) and 'ID' in row:
-            media_id = row['ID']
-            response = requests.get(f'https://cancerimagingarchive.net/api/wp/v2/media/{media_id}')
+    def fetch_source_url(media_id):
+        try:
+            response = requests.get(
+                f'https://cancerimagingarchive.net/api/wp/v2/media/{media_id}',
+                timeout=10
+            )
             if response.status_code == 200:
                 media_data = response.json()
-                return media_data.get('source_url', '')
-        return ''
+                return media_id, media_data.get('source_url', '')
+            else:
+                _log.warning(f'Failed to fetch media {media_id}: status {response.status_code}')
+                return media_id, ''
+        except Exception as e:
+            _log.error(f'Error fetching media {media_id}: {e}')
+            return media_id, ''
     
-    # Apply the function to the 'download_file' column to update it with the fetched URLs
-    data['download_url'] = data.apply(lambda x: fetch_source_url(x['download_file'], x.get('download_url')), axis=1)
+    # Initialize download_url column if it doesn't exist
+    if 'download_url' not in data.columns:
+        data['download_url'] = ''
+    
+    # Extract media IDs that need to be fetched
+    media_ids = []
+    indices = []
+    for idx, download_file_value in enumerate(data['download_file']):
+        if isinstance(download_file_value, dict) and 'ID' in download_file_value:
+            media_ids.append(download_file_value['ID'])
+            indices.append(idx)
+    
+    if not media_ids:
+        _log.info('No media IDs found to fetch')
+        return data
+    
+    _log.info(f'Fetching {len(media_ids)} media URLs in parallel with {max_workers} workers')
+    
+    # Fetch URLs in parallel
+    url_map = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all tasks
+        future_to_id = {executor.submit(fetch_source_url, media_id): media_id 
+                       for media_id in media_ids}
+        
+        # Process completed tasks
+        completed = 0
+        for future in as_completed(future_to_id):
+            media_id, url = future.result()
+            url_map[media_id] = url
+            completed += 1
+            if completed % 50 == 0:
+                _log.info(f'Completed {completed}/{len(media_ids)} requests')
+    
+    # Update the DataFrame with fetched URLs
+    for idx, media_id in zip(indices, media_ids):
+        data.at[idx, 'download_url'] = url_map.get(media_id, '')
+    
+    _log.info(f'Successfully fetched {len([u for u in url_map.values() if u])} URLs')
     return data
 
 
