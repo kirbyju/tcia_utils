@@ -949,15 +949,13 @@ def getDicomTags(seriesUid: str, api_url: str = "", format: str = "df") -> Optio
         return None
 
 
-def getSegRefSeries(uid):
+def getSegRefSeries(uid, api_url: str = ""):
     """
     Gets DICOM tag metadata for a given SEG/RTSTRUCT series UID (scan)
     and looks up the corresponding original/reference series UID
-
-    Note: Since there are no SEG/RTSTRUCT series in the NLST server it is not queried.
     """
     # get dicom tags for the series as a dataframe
-    df = getDicomTags(uid, format="df")
+    df = getDicomTags(uid, api_url=api_url, format="df")
 
     if df is not None:
         # Find the row where element = "(0008,0060) Modality"
