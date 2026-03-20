@@ -58,7 +58,10 @@ def getQuery(endpoint, per_page, format="", file_name=None, fields=None, ids=Non
     # Add ids to the parameters if provided
     if ids:
         ids_str = ','.join(str(id) for id in ids)
-        params['include'] = ids_str
+        if api_version == "v2":
+            params['id'] = ids_str
+        else:
+            params['include'] = ids_str
     
     # Add query to the parameters if provided
     if query:
