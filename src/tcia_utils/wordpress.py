@@ -2,6 +2,7 @@ import pandas as pd
 import json
 import requests
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from tcia_utils.utils import searchDf
 from tcia_utils.utils import remove_html_tags
 from tcia_utils.utils import copy_df_cols
@@ -90,17 +91,29 @@ def getQuery(endpoint, per_page, format="", file_name=None, fields=None, ids=Non
             total_pages = response_data.get('total_pages', 1)
             current_page = response_data.get('page', 1)
 
-            # Check if there are more pages to fetch
-            while current_page < total_pages:
-                current_page += 1
-                params['page'] = current_page
-                _log.info('Requesting page %s of %s', current_page, total_pages)
-                response = requests.get(url, params=params)
-                if response.status_code == 200:
-                    data.extend(response.json().get('results', []))
-                else:
-                    _log.error('Error accessing the API: %s', response.status_code)
-                    break
+            if current_page < total_pages:
+                pages_to_fetch = range(current_page + 1, total_pages + 1)
+                _log.info('Requesting %s additional pages in parallel', len(pages_to_fetch))
+
+                def fetch_page(page_num):
+                    page_params = params.copy()
+                    page_params['page'] = page_num
+                    res = requests.get(url, params=page_params)
+                    if res.status_code == 200:
+                        return page_num, res.json().get('results', [])
+                    else:
+                        _log.error('Error accessing the API page %s: %s', page_num, res.status_code)
+                        return page_num, []
+
+                results_map = {}
+                with ThreadPoolExecutor(max_workers=10) as executor:
+                    future_to_page = {executor.submit(fetch_page, p): p for p in pages_to_fetch}
+                    for future in as_completed(future_to_page):
+                        page_num, page_data = future.result()
+                        results_map[page_num] = page_data
+
+                for p in sorted(results_map.keys()):
+                    data.extend(results_map[p])
         else:
             # v1 logic
             data = response_data
