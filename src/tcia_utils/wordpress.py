@@ -189,16 +189,23 @@ def getQuery(endpoint, per_page, format="", file_name=None, fields=None, ids=Non
         return None
 
 
-def getCollections(per_page=100, format="", file_name=None, fields=None, ids=None, query=None,
+def getCollections(per_page=50, format="", file_name=None, fields=None, ids=None, query=None,
                    removeHtml=None, api_version="v2", verbose=False, orderby=None, order=None):
     """
     Retrieve collections from the API.
 
     Args:
-        per_page (int, optional): Number of collections per page (default is 100).
+        per_page (int, optional): Number of collections per page (default is 50).
         format (str, optional): Output format ('json' or 'df') (default is JSON if not populated).
         file_name (str, optional): File name to save the output as JSON or CSV if format = "df".
         fields (list, optional): List of custom fields to include in the return values (default is None).
+                                 v2 Possible fields: id, slug, collection_doi, collection_title, collection_short_title,
+                                 collection_summary, collection_abstract, detailed_description,
+                                 collection_page_accessibility, collection_acknowledgements, program,
+                                 collection_featured_image, collection_funding, cancer_types, cancer_locations,
+                                 data_types, citations, collection_downloads, related_analysis_results, species,
+                                 related_collection, version_number, date_updated, subjects, supporting_data,
+                                 analysis_results, _links, wordpress_featured_image.
         ids (list, optional): List of IDs to include in the request (default is None).
         query (str, optional): Search criteria to filter results (default is None).
         removeHtml (str, optional): If "yes", removes HTML tags from relevant columns in DataFrame output.
@@ -220,7 +227,7 @@ def getCollections(per_page=100, format="", file_name=None, fields=None, ids=Non
     return data
 
 
-def getCancerTypes(per_page=200, format="", file_name=None, fields=None, ids=None, query=None,
+def getCancerTypes(per_page=50, format="", file_name=None, fields=None, ids=None, query=None,
                    removeHtml=None, api_version="v2", verbose=False, orderby=None, order=None):
     """
     Retrieve Cancer Type metadata from the API.
@@ -248,7 +255,7 @@ def getCancerTypes(per_page=200, format="", file_name=None, fields=None, ids=Non
     return data
 
 
-def getCancerLocations(per_page=200, format="", file_name=None, fields=None, ids=None, query=None,
+def getCancerLocations(per_page=50, format="", file_name=None, fields=None, ids=None, query=None,
                        removeHtml=None, api_version="v2", verbose=False, orderby=None, order=None):
     """
     Retrieve Cancer Location metadata from the API.
@@ -276,7 +283,7 @@ def getCancerLocations(per_page=200, format="", file_name=None, fields=None, ids
     return data
 
 
-def getSpecies(per_page=200, format="", file_name=None, fields=None, ids=None, query=None,
+def getSpecies(per_page=50, format="", file_name=None, fields=None, ids=None, query=None,
                removeHtml=None, api_version="v2", verbose=False, orderby=None, order=None):
     """
     Retrieve Species metadata from the API.
@@ -304,7 +311,7 @@ def getSpecies(per_page=200, format="", file_name=None, fields=None, ids=None, q
     return data
 
 
-def getDataTypes(per_page=200, format="", file_name=None, fields=None, ids=None, query=None,
+def getDataTypes(per_page=50, format="", file_name=None, fields=None, ids=None, query=None,
                  removeHtml=None, api_version="v2", verbose=False, orderby=None, order=None):
     """
     Retrieve Data Type metadata from the API.
@@ -332,7 +339,7 @@ def getDataTypes(per_page=200, format="", file_name=None, fields=None, ids=None,
     return data
 
 
-def getSupportingData(per_page=200, format="", file_name=None, fields=None, ids=None, query=None,
+def getSupportingData(per_page=50, format="", file_name=None, fields=None, ids=None, query=None,
                       removeHtml=None, api_version="v2", verbose=False, orderby=None, order=None):
     """
     Retrieve Supporting Data metadata from the API.
@@ -360,7 +367,7 @@ def getSupportingData(per_page=200, format="", file_name=None, fields=None, ids=
     return data
 
 
-def getFileTypes(per_page=200, format="", file_name=None, fields=None, ids=None, query=None,
+def getFileTypes(per_page=50, format="", file_name=None, fields=None, ids=None, query=None,
                  removeHtml=None, api_version="v2", verbose=False, orderby=None, order=None):
     """
     Retrieve File Type metadata from the API.
@@ -388,7 +395,7 @@ def getFileTypes(per_page=200, format="", file_name=None, fields=None, ids=None,
     return data
 
 
-def getLicenses(per_page=200, format="", file_name=None, fields=None, ids=None, query=None,
+def getLicenses(per_page=50, format="", file_name=None, fields=None, ids=None, query=None,
                 removeHtml=None, api_version="v2", verbose=False, orderby=None, order=None):
     """
     Retrieve License metadata from the API.
@@ -416,7 +423,7 @@ def getLicenses(per_page=200, format="", file_name=None, fields=None, ids=None, 
     return data
 
 
-def getDownloadRequirements(per_page=200, format="", file_name=None, fields=None, ids=None, query=None,
+def getDownloadRequirements(per_page=50, format="", file_name=None, fields=None, ids=None, query=None,
                              removeHtml=None, api_version="v2", verbose=False, orderby=None, order=None):
     """
     Retrieve Download Requirement metadata from the API.
@@ -444,7 +451,7 @@ def getDownloadRequirements(per_page=200, format="", file_name=None, fields=None
     return data
 
 
-def getPrograms(per_page=200, format="", file_name=None, fields=None, ids=None, query=None,
+def getPrograms(per_page=50, format="", file_name=None, fields=None, ids=None, query=None,
                 removeHtml=None, api_version="v2", verbose=False, orderby=None, order=None):
     """
     Retrieve Program metadata from the API.
@@ -472,7 +479,7 @@ def getPrograms(per_page=200, format="", file_name=None, fields=None, ids=None, 
     return data
 
 
-def getVersionDownloads(per_page=200, format="", file_name=None, fields=None, ids=None, query=None,
+def getVersionDownloads(per_page=50, format="", file_name=None, fields=None, ids=None, query=None,
                         removeHtml=None, api_version="v2", verbose=False, orderby=None, order=None):
     """
     Retrieve Version Download metadata from the API.
@@ -500,16 +507,22 @@ def getVersionDownloads(per_page=200, format="", file_name=None, fields=None, id
     return data
 
 
-def getAnalyses(per_page=100, format="", file_name=None, fields=None, ids=None, query=None,
+def getAnalyses(per_page=50, format="", file_name=None, fields=None, ids=None, query=None,
                 removeHtml=None, api_version="v2", verbose=False, orderby=None, order=None):
     """
     Retrieve Analysis Results from the API.
 
     Args:
-        per_page (int, optional): Number of analysis results per page (default is 100).
+        per_page (int, optional): Number of analysis results per page (default is 50).
         format (str, optional): Output format ('json' or 'df') (default is JSON if not populated).
         file_name (str, optional): File name to save the output as JSON or CSV if format = "df".
         fields (list, optional): List of custom fields to include in the return values (default is None).
+                                 v2 Possible fields: id, slug, result_title, result_short_title, result_summary,
+                                 detailed_description, result_page_accessibility, result_acknowledgements,
+                                 program, result_featured_image, result_funding, cancer_types, cancer_locations,
+                                 species, subjects, supporting_data, citations, collection_downloads,
+                                 collections, related_analysis_results, related_collections, version_number,
+                                 date_updated, _links, wordpress_featured_image, result_doi.
         ids (list, optional): List of IDs to include in the request (default is None).
         query (str, optional): Search criteria to filter results (default is None).
         removeHtml (str, optional): If "yes", removes HTML tags from relevant columns in DataFrame output.
@@ -531,16 +544,21 @@ def getAnalyses(per_page=100, format="", file_name=None, fields=None, ids=None, 
     return data
 
 
-def getDownloads(per_page=200, format="", file_name=None, fields=None, ids=None, query=None,
+def getDownloads(per_page=50, format="", file_name=None, fields=None, ids=None, query=None,
                  removeHtml=None, api_version="v2", verbose=False, orderby=None, order=None):
     """
     Retrieve Download metadata from the API.
 
     Args:
-        per_page (int, optional): Number of downloads per page (default is 200).
+        per_page (int, optional): Number of downloads per page (default is 50).
         format (str, optional): Output format ('json' or 'df') (default is JSON if not populated).
         file_name (str, optional): File name to save the output as JSON or CSV if format = "df".
         fields (list, optional): List of custom fields to include in the return values (default is None).
+                                 v2 Possible fields: id, slug, download_title, download_type, data_type,
+                                 file_type, download_access, collection_status, date_updated, download_file,
+                                 download_url, fill_download_specs, download_requirements, data_license,
+                                 search_url, description, supporting_data, download_size, download_size_unit,
+                                 subjects, study_count, series_count, image_count, download_metadata.
         ids (list, optional): List of IDs to include in the request (default is None).
         query (str, optional): Search criteria to filter results (default is None).
         removeHtml (str, optional): If "yes", removes HTML tags from relevant columns in DataFrame output.
@@ -562,7 +580,7 @@ def getDownloads(per_page=200, format="", file_name=None, fields=None, ids=None,
     return data
 
 
-def getCitations(per_page=200, format="", file_name=None, fields=None, ids=None, query=None,
+def getCitations(per_page=50, format="", file_name=None, fields=None, ids=None, query=None,
                  removeHtml=None, api_version="v2", verbose=False, orderby=None, order=None):
     """
     Retrieve Citation metadata from the API.
@@ -592,7 +610,7 @@ def getCitations(per_page=200, format="", file_name=None, fields=None, ids=None,
     return data
 
 
-def getVersions(per_page=200, format="", file_name=None, fields=None, ids=None, query=None,
+def getVersions(per_page=50, format="", file_name=None, fields=None, ids=None, query=None,
                 removeHtml=None, api_version="v2", verbose=False, orderby=None, order=None):
     """
     Retrieve Version metadata from the API.
