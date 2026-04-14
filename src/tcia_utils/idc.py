@@ -1,0 +1,351 @@
+import logging
+import pandas as pd
+from typing import Union, List, Optional
+from datetime import datetime
+from idc_index import IDCClient
+from IPython.display import HTML
+import os
+import concurrent.futures
+import plotly.express as px
+from tcia_utils.utils import format_disk_space
+
+_log = logging.getLogger(__name__)
+
+# Global client instance
+_client = None
+
+def get_client():
+    global _client
+    if _client is None:
+        _client = IDCClient.client()
+    # Ensure index is registered in duckdb
+    _client.sql_query("SELECT 1 FROM index LIMIT 1")
+    return _client
+
+# Mapping IDC columns to NBIA columns
+COLUMN_MAPPING = {
+    'collection_id': 'Collection',
+    'PatientID': 'PatientID',
+    'SeriesInstanceUID': 'SeriesInstanceUID',
+    'StudyInstanceUID': 'StudyInstanceUID',
+    'Modality': 'Modality',
+    'BodyPartExamined': 'BodyPartExamined',
+    'Manufacturer': 'Manufacturer',
+    'ManufacturerModelName': 'ManufacturerModelName',
+    'StudyDate': 'StudyDate',
+    'SeriesDate': 'SeriesDate',
+    'SeriesDescription': 'SeriesDescription',
+    'SeriesNumber': 'SeriesNumber',
+    'instanceCount': 'ImageCount',
+    'license_short_name': 'LicenseName',
+    'source_DOI': 'DataDescriptionURI',
+    'series_size_MB': 'FileSize'
+}
+
+def format_output(df: pd.DataFrame, format: str = "json", max_rows: int = 20):
+    if df.empty:
+        if format == "json":
+            return []
+        return df
+
+    # Standardize column names
+    df = df.rename(columns=COLUMN_MAPPING)
+
+    if format == "df":
+        return df
+    elif format == "csv":
+        csv_filename = f"idc_query_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.csv"
+        df.to_csv(csv_filename, index=False)
+        _log.info(f"CSV saved to: {csv_filename}")
+        return df
+    elif format == "html":
+        return idcOhifViewer(df, max_rows=max_rows)
+    else: # default json
+        return df.to_dict(orient='records')
+
+def getCollections(format: str = ""):
+    client = get_client()
+    collections = client.get_collections()
+    df = pd.DataFrame(collections, columns=['collection_id'])
+    return format_output(df, format=format)
+
+def getBodyPart(collection: str = "", modality: str = "", format: str = ""):
+    client = get_client()
+    query = "SELECT DISTINCT BodyPartExamined FROM index WHERE 1=1"
+    params = []
+    if collection:
+        query += " AND collection_id = ?"
+        params.append(collection)
+    if modality:
+        query += " AND Modality = ?"
+        params.append(modality)
+
+    df = client._duckdb_conn.execute(query, params).df()
+    return format_output(df, format=format)
+
+def getModality(collection: str = "", bodyPart: str = "", format: str = ""):
+    client = get_client()
+    query = "SELECT DISTINCT Modality FROM index WHERE 1=1"
+    params = []
+    if collection:
+        query += " AND collection_id = ?"
+        params.append(collection)
+    if bodyPart:
+        query += " AND BodyPartExamined = ?"
+        params.append(bodyPart)
+    df = client._duckdb_conn.execute(query, params).df()
+    return format_output(df, format=format)
+
+def getPatient(collection: str = "", format: str = ""):
+    client = get_client()
+    query = "SELECT DISTINCT collection_id, PatientID, PatientSex, PatientAge FROM index WHERE 1=1"
+    params = []
+    if collection:
+        query += " AND collection_id = ?"
+        params.append(collection)
+    df = client._duckdb_conn.execute(query, params).df()
+    return format_output(df, format=format)
+
+def getPatientByCollectionAndModality(collection: str, modality: str, format: str = ""):
+    client = get_client()
+    query = "SELECT DISTINCT PatientID FROM index WHERE collection_id = ? AND Modality = ?"
+    params = [collection, modality]
+    df = client._duckdb_conn.execute(query, params).df()
+    return format_output(df, format=format)
+
+def getStudy(collection: str, patientId: str = "", studyUid: str = "", format: str = ""):
+    client = get_client()
+    query = "SELECT DISTINCT collection_id, PatientID, StudyInstanceUID, StudyDate, StudyDescription FROM index WHERE collection_id = ?"
+    params = [collection]
+    if patientId:
+        query += " AND PatientID = ?"
+        params.append(patientId)
+    if studyUid:
+        query += " AND StudyInstanceUID = ?"
+        params.append(studyUid)
+    df = client._duckdb_conn.execute(query, params).df()
+    return format_output(df, format=format)
+
+def getSeries(collection: str = "", patientId: str = "", studyUid: str = "", seriesUid: str = "",
+              modality: str = "", bodyPart: str = "", manufacturer: str = "", manufacturerModel: str = "",
+              format: str = ""):
+    client = get_client()
+    query = "SELECT * FROM index WHERE 1=1"
+    params = []
+    if collection:
+        query += " AND collection_id = ?"
+        params.append(collection)
+    if patientId:
+        query += " AND PatientID = ?"
+        params.append(patientId)
+    if studyUid:
+        query += " AND StudyInstanceUID = ?"
+        params.append(studyUid)
+    if seriesUid:
+        query += " AND SeriesInstanceUID = ?"
+        params.append(seriesUid)
+    if modality:
+        query += " AND Modality = ?"
+        params.append(modality)
+    if bodyPart:
+        query += " AND BodyPartExamined = ?"
+        params.append(bodyPart)
+    if manufacturer:
+        query += " AND Manufacturer = ?"
+        params.append(manufacturer)
+    if manufacturerModel:
+        query += " AND ManufacturerModelName = ?"
+        params.append(manufacturerModel)
+
+    df = client._duckdb_conn.execute(query, params).df()
+    return format_output(df, format=format)
+
+def getSeriesList(uids: List[str], format: str = "df"):
+    client = get_client()
+    if not uids:
+        return format_output(pd.DataFrame(), format=format)
+    placeholders = ",".join(["?" for _ in uids])
+    query = f"SELECT * FROM index WHERE SeriesInstanceUID IN ({placeholders})"
+    df = client._duckdb_conn.execute(query, uids).df()
+    return format_output(df, format=format)
+
+def getSopInstanceUids(seriesUid: str, format: str = ""):
+    _log.warning("getSopInstanceUids is not supported by idc-index 'index' table.")
+    return []
+
+def getManufacturer(collection: str = "", modality: str = "", bodyPart: str = "", format: str = ""):
+    client = get_client()
+    query = "SELECT DISTINCT Manufacturer, ManufacturerModelName FROM index WHERE 1=1"
+    params = []
+    if collection:
+        query += " AND collection_id = ?"
+        params.append(collection)
+    if modality:
+        query += " AND Modality = ?"
+        params.append(modality)
+    if bodyPart:
+        query += " AND BodyPartExamined = ?"
+        params.append(bodyPart)
+    df = client._duckdb_conn.execute(query, params).df()
+    return format_output(df, format=format)
+
+def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
+                   number: int = 0,
+                   path: str = "idcDownload",
+                   input_type: str = "",
+                   format: str = "",
+                   max_workers: int = 10):
+    client = get_client()
+    uids = []
+    if input_type == "list":
+        uids = series_data
+    elif input_type == "df":
+        uids = series_data['SeriesInstanceUID'].tolist()
+    elif isinstance(series_data, str):
+        if series_data.endswith(".tcia") or series_data.endswith(".txt"):
+            with open(series_data, 'r') as f:
+                uids = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+        else:
+            uids = [series_data]
+    else:
+        uids = [item['SeriesInstanceUID'] for item in series_data]
+
+    if number > 0:
+        uids = uids[:number]
+
+    _log.info(f"Downloading {len(uids)} series to {path}...")
+    client.download_dicom_series(seriesInstanceUID=uids, downloadDir=path)
+
+    if format == "df":
+        return getSeriesList(uids)
+    return None
+
+def downloadImage(seriesUID: str, sopUID: str, path: str = "idcDownload"):
+    client = get_client()
+    client.download_dicom_instance(sopInstanceUID=sopUID, downloadDir=path)
+
+def getDicomTags(seriesUid: str, format: str = "df"):
+    _log.warning("getDicomTags is not supported by idc-index.")
+    return None
+
+def getSegRefSeries(uid: str):
+    client = get_client()
+    try:
+        client.fetch_index('seg_index')
+        # Ensure it's registered
+        client.sql_query("SELECT 1 FROM seg_index LIMIT 1")
+        query = "SELECT segmented_SeriesInstanceUID FROM seg_index WHERE SeriesInstanceUID = ?"
+        df = client._duckdb_conn.execute(query, [uid]).df()
+        if not df.empty:
+            return df.iloc[0]['segmented_SeriesInstanceUID']
+
+        client.fetch_index('rtstruct_index')
+        client.sql_query("SELECT 1 FROM rtstruct_index LIMIT 1")
+        query = "SELECT referenced_SeriesInstanceUID FROM rtstruct_index WHERE SeriesInstanceUID = ?"
+        df = client._duckdb_conn.execute(query, [uid]).df()
+        if not df.empty:
+            return df.iloc[0]['referenced_SeriesInstanceUID']
+    except Exception as e:
+        _log.error(f"Error in getSegRefSeries: {e}")
+
+    _log.warning(f"Could not find reference series for {uid}")
+    return "N/A"
+
+def idcOhifViewer(data: Union[pd.DataFrame, List[dict]], max_rows: int = 500) -> Optional[HTML]:
+    if isinstance(data, list):
+        df = pd.DataFrame(data)
+    elif isinstance(data, pd.DataFrame):
+        df = data.copy()
+    else:
+        return None
+
+    if df.empty:
+        return None
+
+    if len(df) > max_rows:
+        df = df.head(max_rows)
+
+    base_url = "https://viewer.imaging.datacommons.cancer.gov/v3/viewer/"
+
+    if 'SeriesInstanceUID' in df.columns and 'StudyInstanceUID' in df.columns:
+        df['SeriesInstanceUID'] = df.apply(
+            lambda row: f'<a href="{base_url}?StudyInstanceUIDs={row["StudyInstanceUID"]}&SeriesInstanceUIDs={row["SeriesInstanceUID"]}" target="_blank">{row["SeriesInstanceUID"]}</a>',
+            axis=1
+        )
+
+    if 'StudyInstanceUID' in df.columns:
+        df['StudyInstanceUID'] = df['StudyInstanceUID'].apply(
+            lambda uid: f'<a href="{base_url}?StudyInstanceUIDs={uid}" target="_blank">{uid}</a>'
+        )
+
+    html_output = df.to_html(escape=False, index=False)
+    return HTML(html_output)
+
+def getCollectionDescriptions(format = ""):
+    client = get_client()
+    try:
+        client.fetch_index('collections_index')
+        query = "SELECT * FROM collections_index"
+        df = client.sql_query(query)
+        return format_output(df, format=format)
+    except Exception as e:
+        _log.error(f"Error in getCollectionDescriptions: {e}")
+    return None
+
+def reportDataSummary(series_data, input_type="", report_type = "", format=""):
+    uids = []
+    if input_type == "list":
+        uids = series_data
+    elif input_type == "df":
+        uids = series_data['SeriesInstanceUID'].tolist()
+    elif isinstance(series_data, str):
+        with open(series_data, 'r') as f:
+            uids = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+    else:
+        uids = [item['SeriesInstanceUID'] for item in series_data]
+
+    df = getSeriesList(uids, format="df")
+
+    if report_type == "doi":
+        group = "DataDescriptionURI"
+    else:
+        group = "Collection"
+
+    # Aggregation
+    summary = df.groupby(group).agg({
+        'Modality': 'unique',
+        'LicenseName': 'unique',
+        'Manufacturer': 'unique',
+        'BodyPartExamined': 'unique',
+        'PatientID': 'nunique',
+        'StudyInstanceUID': 'nunique',
+        'SeriesInstanceUID': 'nunique',
+        'ImageCount': 'sum',
+        'FileSize': 'sum'
+    }).reset_index()
+
+    summary.rename(columns={
+        'PatientID': 'Subjects',
+        'StudyInstanceUID': 'Studies',
+        'SeriesInstanceUID': 'Series',
+        'ImageCount': 'Images',
+        'FileSize': 'File Size MB'
+    }, inplace=True)
+
+    summary['Disk Space'] = (summary['File Size MB'] * 1024 * 1024).apply(format_disk_space)
+
+    if format == 'chart':
+        for metric in ['Subjects', 'Studies', 'Series', 'Images']:
+            fig = px.pie(summary, names=group, values=metric, title=f'{metric} Distribution')
+            fig.show()
+
+    if format == 'csv':
+        summary.to_csv(f"idc_{report_type}_report.csv", index=False)
+
+    return summary
+
+def reportCollectionSummary(series_data, input_type="", format=""):
+    return reportDataSummary(series_data, input_type, report_type="collection", format=format)
+
+def reportDoiSummary(series_data, input_type="", format=""):
+    return reportDataSummary(series_data, input_type, report_type="doi", format=format)
