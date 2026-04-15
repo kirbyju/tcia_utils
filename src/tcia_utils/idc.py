@@ -7,6 +7,7 @@ from IPython.display import HTML
 import os
 import plotly.express as px
 from tcia_utils.utils import format_disk_space
+import csv
 
 _log = logging.getLogger(__name__)
 
@@ -17,8 +18,8 @@ def get_client():
     global _client
     if _client is None:
         _client = IDCClient.client()
-    # Ensure index is registered in duckdb
-    _client.sql_query("SELECT 1 FROM index LIMIT 1")
+        # Ensure index is registered in duckdb upon initialization
+        _client.sql_query("SELECT 1 FROM index LIMIT 1")
     return _client
 
 # Mapping IDC columns to NBIA columns
@@ -188,6 +189,43 @@ def getManufacturer(collection: str = "", modality: str = "", bodyPart: str = ""
     df = client._duckdb_conn.execute(query, params).df()
     return format_output(df, format=format)
 
+def _processManifest(manifest_path: str) -> Union[List[str], str]:
+    """
+    Processes various manifest types and returns a list of UIDs or the path to an s5cmd manifest.
+    """
+    if manifest_path.endswith(".s5cmd"):
+        return manifest_path
+
+    try:
+        with open(manifest_path, 'r', newline='') as f:
+            first_line = f.readline().strip()
+            f.seek(0)
+
+            # Check for NBIA manifest
+            if first_line.startswith("downloadServerUrl="):
+                _log.info("Detected NBIA manifest.")
+                lines = f.readlines()
+                # Skip first 6 lines of metadata
+                uids = [line.strip() for line in lines[6:] if line.strip()]
+                return uids
+
+            # Check for CSV/TSV
+            if manifest_path.endswith((".csv", ".tsv")):
+                delimiter = "," if manifest_path.endswith(".csv") else "\t"
+                df = pd.read_csv(manifest_path, sep=delimiter)
+                for col in ["SeriesInstanceUID", "SeriesUID"]:
+                    if col in df.columns:
+                        _log.info(f"Detected {col} in CSV/TSV manifest.")
+                        return df[col].dropna().astype(str).tolist()
+
+            # Default: treat as one UID per line
+            _log.info("Treating manifest as one UID per line.")
+            return [line.strip() for line in f if line.strip() and not line.startswith("#")]
+
+    except Exception as e:
+        _log.error(f"Error processing manifest {manifest_path}: {e}")
+        return []
+
 def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
                    number: int = 0,
                    path: str = "idcDownload",
@@ -196,26 +234,35 @@ def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
                    max_workers: int = 10):
     client = get_client()
     uids = []
+    s5cmd_manifest = None
+
     if input_type == "list":
         uids = series_data
     elif input_type == "df":
         uids = series_data['SeriesInstanceUID'].tolist()
     elif isinstance(series_data, str):
-        if series_data.endswith(".tcia") or series_data.endswith(".txt"):
-            with open(series_data, 'r') as f:
-                uids = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+        processed = _processManifest(series_data)
+        if isinstance(processed, str): # s5cmd path
+            s5cmd_manifest = processed
         else:
-            uids = [series_data]
+            uids = processed
     else:
         uids = [item['SeriesInstanceUID'] for item in series_data]
 
-    if number > 0:
+    if number > 0 and uids:
         uids = uids[:number]
 
-    _log.info(f"Downloading {len(uids)} series to {path}...")
-    client.download_dicom_series(seriesInstanceUID=uids, downloadDir=path)
+    if s5cmd_manifest:
+        _log.info(f"Downloading from s5cmd manifest {s5cmd_manifest} to {path}...")
+        client.download_from_manifest(manifestFile=s5cmd_manifest, downloadDir=path)
+    elif uids:
+        _log.info(f"Downloading {len(uids)} series to {path}...")
+        client.download_dicom_series(seriesInstanceUID=uids, downloadDir=path)
+    else:
+        _log.warning("No data found to download.")
+        return None
 
-    if format == "df":
+    if format == "df" and uids:
         return getSeriesList(uids)
     return None
 
@@ -231,6 +278,7 @@ def getSegRefSeries(uid: str):
     client = get_client()
     try:
         client.fetch_index('seg_index')
+        # Ensure it's registered
         client.sql_query("SELECT 1 FROM seg_index LIMIT 1")
         query = "SELECT segmented_SeriesInstanceUID FROM seg_index WHERE SeriesInstanceUID = ?"
         df = client._duckdb_conn.execute(query, [uid]).df()
@@ -297,8 +345,12 @@ def reportDataSummary(series_data, input_type="", report_type = "", format=""):
     elif input_type == "df":
         uids = series_data['SeriesInstanceUID'].tolist()
     elif isinstance(series_data, str):
-        with open(series_data, 'r') as f:
-            uids = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+        processed = _processManifest(series_data)
+        if isinstance(processed, list):
+            uids = processed
+        else:
+            _log.warning("Cannot generate report from s5cmd manifest path.")
+            return None
     else:
         uids = [item['SeriesInstanceUID'] for item in series_data]
 
@@ -381,8 +433,6 @@ def getSimpleSearch(
         client.sql_query("SELECT 1 FROM collections_index LIMIT 1")
         placeholders = ",".join(["?" for _ in species])
         where_clauses.append(f"collection_id IN (SELECT collection_id FROM collections_index WHERE Species IN ({placeholders}))")
-        # Species in collections_index are like 'Human', 'Mouse', etc.
-        # NBIA uses lowercase 'human'. Let's title case them for IDC.
         params.extend([s.title() for s in species])
 
     if modalities:
@@ -406,7 +456,6 @@ def getSimpleSearch(
         params.extend(patients)
 
     if fromDate:
-        # IDC StudyDate is YYYY-MM-DD
         isoFromDate = fromDate.replace("/", "-")
         where_clauses.append("StudyDate >= ?")
         params.append(isoFromDate)
@@ -420,7 +469,6 @@ def getSimpleSearch(
         query += " WHERE " + " AND ".join(where_clauses)
 
     if modalityAnded and modalities:
-        # Patients that have ALL the requested modalities
         placeholders = ",".join(["?" for _ in modalities])
         query += f" AND PatientID IN (SELECT PatientID FROM index WHERE Modality IN ({placeholders}) GROUP BY PatientID HAVING COUNT(DISTINCT Modality) = ?)"
         params.extend(modalities)

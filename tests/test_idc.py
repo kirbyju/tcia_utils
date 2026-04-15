@@ -1,5 +1,6 @@
 import unittest
 import pandas as pd
+import os
 from tcia_utils import idc
 
 class TestIDC(unittest.TestCase):
@@ -67,6 +68,29 @@ class TestIDC(unittest.TestCase):
         self.assertIsInstance(uids, list)
         self.assertGreater(len(uids), 0)
         self.assertIsInstance(uids[0], str)
+
+    def test_manifest_nbia(self):
+        content = "downloadServerUrl=https://public.cancerimagingarchive.net/nbia-download/servlet/DownloadServlet\nline2\nline3\nline4\nline5\nline6\nUID1\nUID2"
+        with open("test_nbia.tcia", "w") as f:
+            f.write(content)
+        uids = idc._processManifest("test_nbia.tcia")
+        self.assertEqual(uids, ["UID1", "UID2"])
+        os.remove("test_nbia.tcia")
+
+    def test_manifest_csv(self):
+        df = pd.DataFrame({"SeriesInstanceUID": ["UID1", "UID2"], "Other": [1, 2]})
+        df.to_csv("test.csv", index=False)
+        uids = idc._processManifest("test.csv")
+        self.assertEqual(uids, ["UID1", "UID2"])
+        os.remove("test.csv")
+
+    def test_manifest_s5cmd(self):
+        manifest_path = "test.s5cmd"
+        with open(manifest_path, "w") as f:
+            f.write("cp s3://bucket/obj ./dest")
+        processed = idc._processManifest(manifest_path)
+        self.assertEqual(processed, manifest_path)
+        os.remove(manifest_path)
 
 if __name__ == '__main__':
     unittest.main()
