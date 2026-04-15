@@ -8,6 +8,10 @@ import os
 import plotly.express as px
 from tcia_utils.utils import format_disk_space
 import csv
+import warnings
+import requests
+import io
+import pydicom
 
 _log = logging.getLogger(__name__)
 
@@ -170,7 +174,29 @@ def getSeriesList(uids: List[str], format: str = "df"):
     return format_output(df, format=format)
 
 def getSopInstanceUids(seriesUid: str, format: str = ""):
-    _log.warning("getSopInstanceUids is not supported by idc-index 'index' table.")
+    client = get_client()
+    try:
+        urls = client.get_series_file_URLs(seriesUid)
+        if not urls:
+            return []
+
+        first_url = urls[0]
+        http_url = first_url.replace("s3://idc-open-data/", "https://idc-open-data.s3.amazonaws.com/")
+        resp = requests.get(http_url, headers={'Range': 'bytes=0-1048575'})
+        if resp.status_code in [200, 206]:
+            with io.BytesIO(resp.content) as f:
+                ds = pydicom.dcmread(f, stop_before_pixels=True)
+                filename_uid = os.path.basename(first_url).replace(".dcm", "")
+                if ds.SOPInstanceUID != filename_uid:
+                    _log.warning("SOPInstanceUID may not match file names. Returning instance UUIDs.")
+
+                uids = [os.path.basename(url).replace(".dcm", "") for url in urls]
+                if format == "df":
+                    return pd.DataFrame(uids, columns=["SOPInstanceUID"])
+                else:
+                    return uids
+    except Exception as e:
+        _log.error(f"Error in getSopInstanceUids: {e}")
     return []
 
 def getManufacturer(collection: str = "", modality: str = "", bodyPart: str = "", format: str = ""):
@@ -190,9 +216,6 @@ def getManufacturer(collection: str = "", modality: str = "", bodyPart: str = ""
     return format_output(df, format=format)
 
 def _processManifest(manifest_path: str) -> Union[List[str], str]:
-    """
-    Processes various manifest types and returns a list of UIDs or the path to an s5cmd manifest.
-    """
     if manifest_path.endswith(".s5cmd"):
         return manifest_path
 
@@ -201,15 +224,12 @@ def _processManifest(manifest_path: str) -> Union[List[str], str]:
             first_line = f.readline().strip()
             f.seek(0)
 
-            # Check for NBIA manifest
             if first_line.startswith("downloadServerUrl="):
                 _log.info("Detected NBIA manifest.")
                 lines = f.readlines()
-                # Skip first 6 lines of metadata
                 uids = [line.strip() for line in lines[6:] if line.strip()]
                 return uids
 
-            # Check for CSV/TSV
             if manifest_path.endswith((".csv", ".tsv")):
                 delimiter = "," if manifest_path.endswith(".csv") else "\t"
                 df = pd.read_csv(manifest_path, sep=delimiter)
@@ -218,7 +238,6 @@ def _processManifest(manifest_path: str) -> Union[List[str], str]:
                         _log.info(f"Detected {col} in CSV/TSV manifest.")
                         return df[col].dropna().astype(str).tolist()
 
-            # Default: treat as one UID per line
             _log.info("Treating manifest as one UID per line.")
             return [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
@@ -271,14 +290,43 @@ def downloadImage(seriesUID: str, sopUID: str, path: str = "idcDownload"):
     client.download_dicom_instance(sopInstanceUID=sopUID, downloadDir=path)
 
 def getDicomTags(seriesUid: str, format: str = "df"):
-    _log.warning("getDicomTags is not supported by idc-index.")
+    client = get_client()
+    try:
+        urls = client.get_series_file_URLs(seriesUid)
+        if not urls:
+            return None
+
+        s3_url = urls[0]
+        http_url = s3_url.replace("s3://idc-open-data/", "https://idc-open-data.s3.amazonaws.com/")
+
+        _log.info(f"Fetching DICOM tags from {http_url}")
+        resp = requests.get(http_url, headers={'Range': 'bytes=0-1048575'})
+        if resp.status_code in [200, 206]:
+            with io.BytesIO(resp.content) as f:
+                ds = pydicom.dcmread(f, stop_before_pixels=True)
+
+                tag_data = []
+                for element in ds:
+                    if element.tag.group < 0x7fe0:
+                        tag_data.append({
+                            "element": f"({element.tag.group:04x},{element.tag.element:04x})",
+                            "name": element.name,
+                            "data": str(element.value)
+                        })
+
+                df = pd.DataFrame(tag_data)
+                if format == "df":
+                    return df
+                else:
+                    return tag_data
+    except Exception as e:
+        _log.error(f"Error in getDicomTags: {e}")
     return None
 
 def getSegRefSeries(uid: str):
     client = get_client()
     try:
         client.fetch_index('seg_index')
-        # Ensure it's registered
         client.sql_query("SELECT 1 FROM seg_index LIMIT 1")
         query = "SELECT segmented_SeriesInstanceUID FROM seg_index WHERE SeriesInstanceUID = ?"
         df = client._duckdb_conn.execute(query, [uid]).df()
@@ -465,6 +513,11 @@ def getSimpleSearch(
         where_clauses.append("StudyDate <= ?")
         params.append(isoToDate)
 
+    if minStudies > 0:
+        # Number of studies a patient has
+        where_clauses.append("PatientID IN (SELECT PatientID FROM index GROUP BY PatientID HAVING COUNT(DISTINCT StudyInstanceUID) >= ?)")
+        params.append(minStudies)
+
     if where_clauses:
         query += " WHERE " + " AND ".join(where_clauses)
 
@@ -485,7 +538,7 @@ def getSimpleSearch(
     order = "ASC" if sortDirection == 'ascending' else "DESC"
     query += f" ORDER BY {field} {order}"
 
-    if format not in ["uids", "manifest_text"]:
+    if format not in ["uids", "manifest_text", "manifest"]:
         query += f" LIMIT {size} OFFSET {start}"
 
     df = client._duckdb_conn.execute(query, params).df()
@@ -494,5 +547,75 @@ def getSimpleSearch(
         return df['SeriesInstanceUID'].tolist()
     elif format == "manifest_text":
         return "\n".join(df['SeriesInstanceUID'].tolist())
+    elif format == "manifest":
+        uids = df['SeriesInstanceUID'].tolist()
+        manifest_df = getSeriesList(uids, format="df")
+        now = datetime.now()
+        filename = now.strftime("manifest-%Y-%m-%d_%H-%M.csv")
+        manifest_df.to_csv(filename, index=False)
+        _log.info(f"Manifest saved as {filename}")
+        return manifest_df
 
     return format_output(df, format=format)
+
+# Unsupported function stubs with warnings
+
+def setApiUrl(*args, **kwargs):
+    warnings.warn("setApiUrl is not supported in the IDC module.", UserWarning)
+    return None
+
+def getSeriesSize(*args, **kwargs):
+    warnings.warn("getSeriesSize is not supported in the IDC module.", UserWarning)
+    return None
+
+def getSharedCart(*args, **kwargs):
+    warnings.warn("getSharedCart is not supported in the IDC module.", UserWarning)
+    return None
+
+def makeSeriesReport(*args, **kwargs):
+    warnings.warn("makeSeriesReport is not supported in the IDC module.", UserWarning)
+    return None
+
+def reportSeriesSubmissionDate(*args, **kwargs):
+    warnings.warn("reportSeriesSubmissionDate is not supported in the IDC module.", UserWarning)
+    return None
+
+def reportSeriesReleaseDate(*args, **kwargs):
+    warnings.warn("reportSeriesReleaseDate is not supported in the IDC module.", UserWarning)
+    return None
+
+def getNewPatientsInCollection(*args, **kwargs):
+    warnings.warn("getNewPatientsInCollection is not supported in the IDC module.", UserWarning)
+    return None
+
+def getNewStudiesInPatient(*args, **kwargs):
+    warnings.warn("getNewStudiesInPatient is not supported in the IDC module.", UserWarning)
+    return None
+
+def getUpdatedSeries(*args, **kwargs):
+    warnings.warn("getUpdatedSeries is not supported in the IDC module.", UserWarning)
+    return None
+
+def getDoiMetadata(*args, **kwargs):
+    warnings.warn("getDoiMetadata is not supported in the IDC module.", UserWarning)
+    return None
+
+def getCollectionPatientCounts(*args, **kwargs):
+    warnings.warn("getCollectionPatientCounts is not supported in the IDC module.", UserWarning)
+    return None
+
+def getModalityCounts(*args, **kwargs):
+    warnings.warn("getModalityCounts is not supported in the IDC module.", UserWarning)
+    return None
+
+def getBodyPartCounts(*args, **kwargs):
+    warnings.warn("getBodyPartCounts is not supported in the IDC module.", UserWarning)
+    return None
+
+def getManufacturerCounts(*args, **kwargs):
+    warnings.warn("getManufacturerCounts is not supported in the IDC module.", UserWarning)
+    return None
+
+def reportDicomTags(*args, **kwargs):
+    warnings.warn("reportDicomTags is not supported in the IDC module.", UserWarning)
+    return None

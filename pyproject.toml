@@ -25,7 +25,9 @@ dependencies = [
   "tqdm",
   "plotly",
   "IPython",
-  "idc-index"
+  "idc-index",
+  "pydicom",
+  "requests"
 ]
 
 [project.urls]

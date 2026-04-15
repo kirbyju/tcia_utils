@@ -1,6 +1,7 @@
 import unittest
 import pandas as pd
 import os
+import glob
 from tcia_utils import idc
 
 class TestIDC(unittest.TestCase):
@@ -34,7 +35,6 @@ class TestIDC(unittest.TestCase):
         self.assertIn("BodyPartExamined", body_parts.columns)
 
     def test_getSeriesList(self):
-        # First get some UIDs
         series = idc.getSeries(collection="rider_pilot", format="json")
         uids = [s["SeriesInstanceUID"] for s in series[:2]]
         series_list = idc.getSeriesList(uids, format="df")
@@ -57,17 +57,29 @@ class TestIDC(unittest.TestCase):
         self.assertIn("Subjects", summary.columns)
 
     def test_getSimpleSearch(self):
-        # Test basic search
         results = idc.getSimpleSearch(collections=["rider_pilot"], modalities=["CT"], format="df")
         self.assertIsInstance(results, pd.DataFrame)
         self.assertGreater(len(results), 0)
         self.assertTrue(all(results["Collection"] == "rider_pilot"))
 
-        # Test uids format
         uids = idc.getSimpleSearch(collections=["rider_pilot"], format="uids")
         self.assertIsInstance(uids, list)
         self.assertGreater(len(uids), 0)
         self.assertIsInstance(uids[0], str)
+
+    def test_getSimpleSearch_manifest(self):
+        manifest_files = glob.glob("manifest-*.csv")
+        for f in manifest_files:
+            os.remove(f)
+
+        df = idc.getSimpleSearch(collections=["rider_pilot"], format="manifest")
+        self.assertIsInstance(df, pd.DataFrame)
+        self.assertIn("SeriesInstanceUID", df.columns)
+
+        manifest_files = glob.glob("manifest-*.csv")
+        self.assertEqual(len(manifest_files), 1)
+        for f in manifest_files:
+            os.remove(f)
 
     def test_manifest_nbia(self):
         content = "downloadServerUrl=https://public.cancerimagingarchive.net/nbia-download/servlet/DownloadServlet\nline2\nline3\nline4\nline5\nline6\nUID1\nUID2"
@@ -91,6 +103,28 @@ class TestIDC(unittest.TestCase):
         processed = idc._processManifest(manifest_path)
         self.assertEqual(processed, manifest_path)
         os.remove(manifest_path)
+
+    def test_getDicomTags(self):
+        series = idc.getSeries(collection="rider_pilot", format="json")
+        if series:
+            uid = series[0]["SeriesInstanceUID"]
+            tags = idc.getDicomTags(uid)
+            self.assertIsInstance(tags, pd.DataFrame)
+            self.assertIn("element", tags.columns)
+            self.assertIn("name", tags.columns)
+            self.assertIn("data", tags.columns)
+
+    def test_getSopInstanceUids(self):
+        series = idc.getSeries(collection="rider_pilot", format="json")
+        if series:
+            uid = series[0]["SeriesInstanceUID"]
+            sop_uids = idc.getSopInstanceUids(uid)
+            self.assertIsInstance(sop_uids, list)
+            self.assertGreater(len(sop_uids), 0)
+
+    def test_unsupported_warnings(self):
+        with self.assertWarns(UserWarning):
+            idc.getSharedCart("test")
 
 if __name__ == '__main__':
     unittest.main()
