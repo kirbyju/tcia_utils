@@ -5,7 +5,6 @@ from datetime import datetime
 from idc_index import IDCClient
 from IPython.display import HTML
 import os
-import concurrent.futures
 import plotly.express as px
 from tcia_utils.utils import format_disk_space
 
@@ -232,7 +231,6 @@ def getSegRefSeries(uid: str):
     client = get_client()
     try:
         client.fetch_index('seg_index')
-        # Ensure it's registered
         client.sql_query("SELECT 1 FROM seg_index LIMIT 1")
         query = "SELECT segmented_SeriesInstanceUID FROM seg_index WHERE SeriesInstanceUID = ?"
         df = client._duckdb_conn.execute(query, [uid]).df()
@@ -349,3 +347,104 @@ def reportCollectionSummary(series_data, input_type="", format=""):
 
 def reportDoiSummary(series_data, input_type="", format=""):
     return reportDataSummary(series_data, input_type, report_type="doi", format=format)
+
+def getSimpleSearch(
+    collections = [],
+    species = [],
+    modalities = [],
+    bodyParts = [],
+    manufacturers  = [],
+    fromDate = "",
+    toDate = "",
+    patients = [],
+    minStudies: int = 0,
+    modalityAnded = False,
+    start = 0,
+    size = 10,
+    sortDirection = 'ascending',
+    sortField = 'subject',
+    format = ""):
+
+    client = get_client()
+
+    query = "SELECT * FROM index"
+    params = []
+    where_clauses = []
+
+    if collections:
+        placeholders = ",".join(["?" for _ in collections])
+        where_clauses.append(f"collection_id IN ({placeholders})")
+        params.extend(collections)
+
+    if species:
+        client.fetch_index('collections_index')
+        client.sql_query("SELECT 1 FROM collections_index LIMIT 1")
+        placeholders = ",".join(["?" for _ in species])
+        where_clauses.append(f"collection_id IN (SELECT collection_id FROM collections_index WHERE Species IN ({placeholders}))")
+        # Species in collections_index are like 'Human', 'Mouse', etc.
+        # NBIA uses lowercase 'human'. Let's title case them for IDC.
+        params.extend([s.title() for s in species])
+
+    if modalities:
+        placeholders = ",".join(["?" for _ in modalities])
+        where_clauses.append(f"Modality IN ({placeholders})")
+        params.extend(modalities)
+
+    if bodyParts:
+        placeholders = ",".join(["?" for _ in bodyParts])
+        where_clauses.append(f"BodyPartExamined IN ({placeholders})")
+        params.extend(bodyParts)
+
+    if manufacturers:
+        placeholders = ",".join(["?" for _ in manufacturers])
+        where_clauses.append(f"Manufacturer IN ({placeholders})")
+        params.extend(manufacturers)
+
+    if patients:
+        placeholders = ",".join(["?" for _ in patients])
+        where_clauses.append(f"PatientID IN ({placeholders})")
+        params.extend(patients)
+
+    if fromDate:
+        # IDC StudyDate is YYYY-MM-DD
+        isoFromDate = fromDate.replace("/", "-")
+        where_clauses.append("StudyDate >= ?")
+        params.append(isoFromDate)
+
+    if toDate:
+        isoToDate = toDate.replace("/", "-")
+        where_clauses.append("StudyDate <= ?")
+        params.append(isoToDate)
+
+    if where_clauses:
+        query += " WHERE " + " AND ".join(where_clauses)
+
+    if modalityAnded and modalities:
+        # Patients that have ALL the requested modalities
+        placeholders = ",".join(["?" for _ in modalities])
+        query += f" AND PatientID IN (SELECT PatientID FROM index WHERE Modality IN ({placeholders}) GROUP BY PatientID HAVING COUNT(DISTINCT Modality) = ?)"
+        params.extend(modalities)
+        params.append(len(modalities))
+
+    # Sorting
+    sort_map = {
+        'subject': 'PatientID',
+        'studies': 'StudyInstanceUID',
+        'series': 'SeriesInstanceUID',
+        'collection': 'collection_id'
+    }
+    field = sort_map.get(sortField, 'PatientID')
+    order = "ASC" if sortDirection == 'ascending' else "DESC"
+    query += f" ORDER BY {field} {order}"
+
+    if format not in ["uids", "manifest_text"]:
+        query += f" LIMIT {size} OFFSET {start}"
+
+    df = client._duckdb_conn.execute(query, params).df()
+
+    if format == "uids":
+        return df['SeriesInstanceUID'].tolist()
+    elif format == "manifest_text":
+        return "\n".join(df['SeriesInstanceUID'].tolist())
+
+    return format_output(df, format=format)

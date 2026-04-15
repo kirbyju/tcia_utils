@@ -41,10 +41,6 @@ class TestIDC(unittest.TestCase):
         self.assertIn(uids[0], series_list["SeriesInstanceUID"].values)
 
     def test_getSegRefSeries(self):
-        # We need a known SEG or RTSTRUCT series.
-        # From previous exploration: rider_pilot has an SR with UID
-        # 1.2.276.0.7230010.3.1.3.1031255639.2476.1345992261.66
-        # Let's find an RTSTRUCT in 4d_lung
         series = idc.getSeries(collection="4d_lung", modality="RTSTRUCT", format="json")
         if series:
             uid = series[0]["SeriesInstanceUID"]
@@ -58,6 +54,19 @@ class TestIDC(unittest.TestCase):
         self.assertIsInstance(summary, pd.DataFrame)
         self.assertIn("Collection", summary.columns)
         self.assertIn("Subjects", summary.columns)
+
+    def test_getSimpleSearch(self):
+        # Test basic search
+        results = idc.getSimpleSearch(collections=["rider_pilot"], modalities=["CT"], format="df")
+        self.assertIsInstance(results, pd.DataFrame)
+        self.assertGreater(len(results), 0)
+        self.assertTrue(all(results["Collection"] == "rider_pilot"))
+
+        # Test uids format
+        uids = idc.getSimpleSearch(collections=["rider_pilot"], format="uids")
+        self.assertIsInstance(uids, list)
+        self.assertGreater(len(uids), 0)
+        self.assertIsInstance(uids[0], str)
 
 if __name__ == '__main__':
     unittest.main()
