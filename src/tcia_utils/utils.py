@@ -135,7 +135,13 @@ def remove_html_tags(text):
     """
     Helper function to convert HTML to plain text.
     """
-    soup = BeautifulSoup(text, 'html.parser')
-    plain_text = soup.get_text().strip()
-    clean_text = unidecode(plain_text)  # Apply unidecode to remove or replace non-ASCII characters
-    return clean_text
+    if not text or not isinstance(text, str):
+        return text
+    # Check if text actually contains HTML tags to avoid MarkupResemblesLocatorWarning
+    if '<' in text and '>' in text:
+        soup = BeautifulSoup(text, 'html.parser')
+        plain_text = soup.get_text().strip()
+        clean_text = unidecode(plain_text)  # Apply unidecode to remove or replace non-ASCII characters
+        return clean_text
+    else:
+        return text
