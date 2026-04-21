@@ -7,6 +7,7 @@ from IPython.display import HTML
 import os
 import plotly.express as px
 from tcia_utils.utils import format_disk_space
+from tcia_utils.utils import get_proxy
 import csv
 import warnings
 import requests
@@ -182,7 +183,7 @@ def getSopInstanceUids(seriesUid: str, format: str = ""):
 
         first_url = urls[0]
         http_url = first_url.replace("s3://idc-open-data/", "https://idc-open-data.s3.amazonaws.com/")
-        resp = requests.get(http_url, headers={'Range': 'bytes=0-1048575'})
+        resp = requests.get(http_url, headers={'Range': 'bytes=0-1048575'}, proxies=get_proxy())
         if resp.status_code in [200, 206]:
             with io.BytesIO(resp.content) as f:
                 ds = pydicom.dcmread(f, stop_before_pixels=True)
@@ -300,7 +301,7 @@ def getDicomTags(seriesUid: str, format: str = "df"):
         http_url = s3_url.replace("s3://idc-open-data/", "https://idc-open-data.s3.amazonaws.com/")
 
         _log.info(f"Fetching DICOM tags from {http_url}")
-        resp = requests.get(http_url, headers={'Range': 'bytes=0-1048575'})
+        resp = requests.get(http_url, headers={'Range': 'bytes=0-1048575'}, proxies=get_proxy())
         if resp.status_code in [200, 206]:
             with io.BytesIO(resp.content) as f:
                 ds = pydicom.dcmread(f, stop_before_pixels=True)
