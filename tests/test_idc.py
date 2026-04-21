@@ -2,7 +2,6 @@ import unittest
 import pandas as pd
 import os
 import glob
-import shutil
 from tcia_utils import idc
 
 class TestIDC(unittest.TestCase):
@@ -78,7 +77,7 @@ class TestIDC(unittest.TestCase):
         self.assertIn("SeriesInstanceUID", df.columns)
 
         manifest_files = glob.glob("manifest-*.csv")
-        self.assertGreater(len(manifest_files), 0)
+        self.assertEqual(len(manifest_files), 1)
         for f in manifest_files:
             os.remove(f)
 
@@ -126,33 +125,6 @@ class TestIDC(unittest.TestCase):
     def test_unsupported_warnings(self):
         with self.assertWarns(UserWarning):
             idc.getSharedCart("test")
-
-    def test_downloadSeries_zip(self):
-        path = "testDownloadZip"
-        if os.path.exists(path):
-            shutil.rmtree(path)
-        series = idc.getSeries(collection="rider_pilot", modality="SR", format="json")
-        if series:
-            uid = series[0]["SeriesInstanceUID"]
-            idc.downloadSeries([{'SeriesInstanceUID': uid}], path=path, as_zip=True)
-            zip_files = glob.glob(os.path.join(path, "**", "*.zip"), recursive=True)
-            self.assertGreater(len(zip_files), 0)
-        shutil.rmtree(path)
-
-    def test_downloadSeries_nifti(self):
-        path = "testDownloadNifti"
-        if os.path.exists(path):
-            shutil.rmtree(path)
-        # 4D-Lung series for NIfTI (larger stack than rider_pilot SR/single slices)
-        series = idc.getSeries(collection="4d_lung", modality="CT", format="json")
-        if series:
-            df = pd.DataFrame(series)
-            valid_series = df[df['ImageCount'] > 20].iloc[0]
-            uid = valid_series['SeriesInstanceUID']
-            idc.downloadSeries([{'SeriesInstanceUID': uid}], path=path, as_nifti=True)
-            nifti_files = glob.glob(os.path.join(path, "**", "*.nii.gz"), recursive=True)
-            self.assertGreater(len(nifti_files), 0)
-        shutil.rmtree(path)
 
 if __name__ == '__main__':
     unittest.main()

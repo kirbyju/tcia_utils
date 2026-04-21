@@ -27,9 +27,7 @@ dependencies = [
   "IPython",
   "idc-index",
   "pydicom",
-  "requests",
-  "dicom2nifti",
-  "scipy"
+  "requests"
 ]
 
 [project.urls]
