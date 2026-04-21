@@ -12,6 +12,13 @@ import warnings
 import requests
 import io
 import pydicom
+import shutil
+import zipfile
+try:
+    import dicom2nifti
+    import dicom2nifti.settings as settings
+except ImportError:
+    dicom2nifti = None
 
 _log = logging.getLogger(__name__)
 
@@ -250,6 +257,8 @@ def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
                    path: str = "idcDownload",
                    input_type: str = "",
                    format: str = "",
+                   as_zip: bool = False,
+                   as_nifti: bool = False,
                    max_workers: int = 10):
     client = get_client()
     uids = []
@@ -276,7 +285,48 @@ def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
         client.download_from_manifest(manifestFile=s5cmd_manifest, downloadDir=path)
     elif uids:
         _log.info(f"Downloading {len(uids)} series to {path}...")
+        meta_df = getSeriesList(uids, format="df")
         client.download_dicom_series(seriesInstanceUID=uids, downloadDir=path)
+
+        # Post-processing
+        for _, row in meta_df.iterrows():
+            series_uid = row['SeriesInstanceUID']
+            patient_id = row['PatientID']
+            collection_id = row['Collection']
+            study_uid = row['StudyInstanceUID']
+            modality = row['Modality']
+
+            series_folder = os.path.join(path, collection_id, patient_id, study_uid, f"{modality}_{series_uid}")
+
+            if not os.path.exists(series_folder):
+                _log.warning(f"Could not find downloaded folder for series {series_uid} at {series_folder}")
+                continue
+
+            if as_nifti:
+                if dicom2nifti is None:
+                    _log.error("dicom2nifti not installed. Skipping NIfTI conversion.")
+                else:
+                    _log.info(f"Converting series {series_uid} to NIfTI...")
+                    try:
+                        settings.disable_validate_slicecount()
+                        # We need an output filename for dicom_series_to_nifti
+                        nifti_output = os.path.join(series_folder, f"{series_uid}.nii.gz")
+                        dicom2nifti.dicom_series_to_nifti(series_folder, nifti_output, reorient_nifti=True)
+                        for f in os.listdir(series_folder):
+                            if f.endswith(".dcm"):
+                                os.remove(os.path.join(series_folder, f))
+                    except Exception as e:
+                        _log.error(f"Error converting {series_uid} to NIfTI: {e}")
+
+            if as_zip:
+                _log.info(f"Zipping series {series_uid}...")
+                zip_path = series_folder + ".zip"
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    for root, dirs, files in os.walk(series_folder):
+                        for file in files:
+                            zipf.write(os.path.join(root, file), os.path.relpath(os.path.join(root, file), os.path.join(series_folder, '..')))
+                shutil.rmtree(series_folder)
+
     else:
         _log.warning("No data found to download.")
         return None
@@ -514,7 +564,6 @@ def getSimpleSearch(
         params.append(isoToDate)
 
     if minStudies > 0:
-        # Number of studies a patient has
         where_clauses.append("PatientID IN (SELECT PatientID FROM index GROUP BY PatientID HAVING COUNT(DISTINCT StudyInstanceUID) >= ?)")
         params.append(minStudies)
 
