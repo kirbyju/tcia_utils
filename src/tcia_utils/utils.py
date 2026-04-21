@@ -9,6 +9,33 @@ logging.basicConfig(
     level=logging.INFO
 )
 
+_proxies = None
+
+
+def set_proxy(proxies: dict):
+    """
+    Sets a global proxy configuration for all tcia_utils modules.
+
+    Example:
+    proxies = {
+        'http': 'http://10.10.1.10:3128',
+        'https': 'http://10.10.1.10:1080',
+    }
+    set_proxy(proxies)
+    """
+    global _proxies
+    _proxies = proxies
+    _log.info(f"Global proxy set to: {_proxies}")
+
+
+def get_proxy():
+    """
+    Returns the current global proxy configuration.
+    """
+    global _proxies
+    return _proxies
+
+
 def searchDf(search_term, dataframe=None, column_name=None):
     """
     This function searches for a term or a list of terms in a specified dataframe and column.

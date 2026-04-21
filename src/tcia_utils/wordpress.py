@@ -7,6 +7,7 @@ import logging
 from tcia_utils.utils import searchDf
 from tcia_utils.utils import remove_html_tags
 from tcia_utils.utils import copy_df_cols
+from tcia_utils.utils import get_proxy
 
 _log = logging.getLogger(__name__)
 logging.basicConfig(
@@ -58,7 +59,7 @@ def getQuery(endpoint, per_page, format="", file_name=None, fields=None, ids=Non
     
     # Make a GET request to the API endpoint with the parameters
     _log.info('Requesting %s', url)
-    response = requests.get(url, params=params)
+    response = requests.get(url, params=params, proxies=get_proxy())
     
     # Check if the request was successful
     if response.status_code == 200:
@@ -69,7 +70,7 @@ def getQuery(endpoint, per_page, format="", file_name=None, fields=None, ids=Non
         while 'next' in response.links.keys():
             next_url = response.links['next']['url']
             _log.info('Requesting %s', next_url)
-            response = requests.get(next_url)
+            response = requests.get(next_url, proxies=get_proxy())
             if response.status_code == 200:
                 data.extend(response.json())
             else:
@@ -201,7 +202,8 @@ def update_download_file_column(data, max_workers=10):
         try:
             response = requests.get(
                 f'https://cancerimagingarchive.net/api/wp/v2/media/{media_id}',
-                timeout=10
+                timeout=10,
+                proxies=get_proxy()
             )
             if response.status_code == 200:
                 media_data = response.json()

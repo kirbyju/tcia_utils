@@ -5,6 +5,7 @@ import time
 import logging
 from tcia_utils.utils import searchDf
 from tcia_utils.utils import copy_df_cols
+from tcia_utils.utils import get_proxy
 
 
 _log = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ def getDoi(format = ""):
     _log.info(f'Calling... {datacite_url} with parameters {options}')
 
     try:
-        data = requests.get(datacite_url, headers = datacite_headers, params = options)
+        data = requests.get(datacite_url, headers = datacite_headers, params = options, proxies=get_proxy())
         data.raise_for_status()
 
         # check for empty results and format output
@@ -312,7 +313,7 @@ def getDerivedDois(dois, format='df'):
             'query': query,
             'rows': 1000  # Adjust as needed for pagination
         }
-        response = requests.get(base_url, params=params)
+        response = requests.get(base_url, params=params, proxies=get_proxy())
 
         if response.status_code == 200:
             data = response.json()
@@ -386,7 +387,7 @@ def getGithubMentions(token, delay=10, resume_from=None):
 
         try:
             # Make the request to the GitHub API
-            response = requests.get(url, headers=headers)
+            response = requests.get(url, headers=headers, proxies=get_proxy())
 
             # Check if the request was successful
             if response.status_code == 200:
