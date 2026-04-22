@@ -440,37 +440,67 @@ def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
     Set input_type = "manifest" to pass the path of a TCIA, CSV/TSV or s5cmd manifest file.
     """
     client = get_client()
-    uids = []
+    series_uids = []
     s5cmd_manifest = None
 
     if input_type == "list":
-        uids = series_data
+        series_uids = series_data
     elif input_type == "df":
-        uids = series_data['SeriesInstanceUID'].tolist()
+        series_uids = series_data['SeriesInstanceUID'].tolist()
     elif isinstance(series_data, str):
         processed = _processManifest(series_data)
         if isinstance(processed, str): # s5cmd path
             s5cmd_manifest = processed
         else:
-            uids = processed
+            series_uids = processed
     else:
-        uids = [item['SeriesInstanceUID'] for item in series_data]
+        series_uids = [item['SeriesInstanceUID'] for item in series_data]
 
-    if number > 0 and uids:
-        uids = uids[:number]
+    # Ensure the root directory exists
+    try:
+        if not os.path.exists(path):
+            os.makedirs(path)
+            _log.info(f"Directory '{path}' created successfully.")
+        else:
+            _log.info(f"Directory '{path}' already exists.")
+    except OSError as e:
+        _log.error(f"Failed to create directory '{path}': {e}")
+        return None
+
+    # Identify series to download vs. already existing
+    existing_files = set(os.listdir(path))
+    uids_to_download = []
+    previously_downloaded_uids = []
+
+    if not s5cmd_manifest:
+        for seriesUID in series_uids:
+            if seriesUID not in existing_files:
+                uids_to_download.append(seriesUID)
+            else:
+                _log.warning(f"Series {seriesUID} already downloaded.")
+                previously_downloaded_uids.append(seriesUID)
+
+        # Apply 'number' limit if specified
+        if number > 0:
+            uids_to_download = uids_to_download[:number]
+
+        _log.info(f"Found {len(previously_downloaded_uids)} previously downloaded series.")
+        _log.info(f"Attempting to download {len(uids_to_download)} new series.")
 
     if s5cmd_manifest:
         _log.info(f"Downloading from s5cmd manifest {s5cmd_manifest} to {path}...")
         client.download_from_manifest(manifestFile=s5cmd_manifest, downloadDir=path)
-    elif uids:
-        _log.info(f"Downloading {len(uids)} series to {path}...")
-        client.download_dicom_series(seriesInstanceUID=uids, downloadDir=path)
-    else:
+    elif uids_to_download:
+        _log.info(f"Downloading {len(uids_to_download)} series to {path}...")
+        client.download_dicom_series(seriesInstanceUID=uids_to_download, downloadDir=path)
+    elif not previously_downloaded_uids:
         _log.warning("No data found to download.")
         return None
 
-    if format == "df" and uids:
-        return getSeriesList(uids)
+    if format in ["df", "csv"]:
+        all_uids = previously_downloaded_uids + uids_to_download
+        if all_uids:
+            return getSeriesList(all_uids, format=format)
     return None
 
 def downloadImage(seriesUID: str, sopUID: str, path: str = "idcDownload"):
