@@ -30,6 +30,7 @@ def get_client():
 # Mapping IDC columns to NBIA columns
 COLUMN_MAPPING = {
     'collection_id': 'Collection',
+    'analysis_result_id': 'AnalysisResult',
     'PatientID': 'PatientID',
     'SeriesInstanceUID': 'SeriesInstanceUID',
     'StudyInstanceUID': 'StudyInstanceUID',
@@ -44,7 +45,8 @@ COLUMN_MAPPING = {
     'instanceCount': 'ImageCount',
     'license_short_name': 'LicenseName',
     'source_DOI': 'DataDescriptionURI',
-    'series_size_MB': 'FileSize'
+    'series_size_MB': 'FileSize',
+    'count': 'Count'
 }
 
 def format_output(df: pd.DataFrame, format: str = "json", max_rows: int = 20):
@@ -68,65 +70,198 @@ def format_output(df: pd.DataFrame, format: str = "json", max_rows: int = 20):
     else: # default json
         return df.to_dict(orient='records')
 
-def getCollections(format: str = ""):
+def _apply_common_filters(query: str, params: list,
+                        collection: str = "", analysisResult: str = "", doi: str = "",
+                        age: str = "", sex: str = "", studyDesc: str = "",
+                        license: str = "", modality: str = "", bodyPart: str = "",
+                        manufacturer: str = "", seriesDesc: str = ""):
+    if collection:
+        query += " AND collection_id ILIKE ?"
+        params.append(collection)
+    if analysisResult:
+        query += " AND analysis_result_id ILIKE ?"
+        params.append(analysisResult)
+    if doi:
+        query += " AND source_DOI ILIKE ?"
+        params.append(doi)
+    if age:
+        query += " AND PatientAge ILIKE ?"
+        params.append(age)
+    if sex:
+        query += " AND PatientSex ILIKE ?"
+        params.append(sex)
+    if studyDesc:
+        query += " AND StudyDescription ILIKE ?"
+        params.append(studyDesc)
+    if license:
+        query += " AND license_short_name ILIKE ?"
+        params.append(license)
+    if modality:
+        query += " AND Modality ILIKE ?"
+        params.append(modality)
+    if bodyPart:
+        query += " AND BodyPartExamined ILIKE ?"
+        params.append(bodyPart)
+    if manufacturer:
+        query += " AND Manufacturer ILIKE ?"
+        params.append(manufacturer)
+    if seriesDesc:
+        query += " AND SeriesDescription ILIKE ?"
+        params.append(seriesDesc)
+    return query, params
+
+def getCollections(analysisResult: str = "", doi: str = "", age: str = "", sex: str = "",
+                   studyDesc: str = "", license: str = "", modality: str = "",
+                   bodyPart: str = "", manufacturer: str = "", seriesDesc: str = "",
+                   format: str = ""):
+    """
+    Gets a list of collections.
+    Allows filtering by analysis result, DOI, patient age, patient sex,
+    study description, license, modality, body part, manufacturer, and series description.
+    """
     client = get_client()
-    collections = client.get_collections()
-    df = pd.DataFrame(collections, columns=['collection_id'])
+    query = "SELECT DISTINCT collection_id FROM index WHERE 1=1"
+    params = []
+    query, params = _apply_common_filters(
+        query, params, analysisResult=analysisResult, doi=doi, age=age, sex=sex,
+        studyDesc=studyDesc, license=license, modality=modality, bodyPart=bodyPart,
+        manufacturer=manufacturer, seriesDesc=seriesDesc)
+
+    df = client._duckdb_conn.execute(query, params).df()
+    return format_output(df, format=format)
+
+def getAnalysisResults(collection: str = "", doi: str = "", age: str = "", sex: str = "",
+                       studyDesc: str = "", license: str = "", modality: str = "",
+                       bodyPart: str = "", manufacturer: str = "", seriesDesc: str = "",
+                       format: str = ""):
+    """
+    Gets a list of analysis results.
+    Allows filtering by collection, DOI, patient age, patient sex,
+    study description, license, modality, body part, manufacturer, and series description.
+    """
+    client = get_client()
+    query = "SELECT DISTINCT analysis_result_id FROM index WHERE 1=1"
+    params = []
+    query, params = _apply_common_filters(
+        query, params, collection=collection, doi=doi, age=age, sex=sex,
+        studyDesc=studyDesc, license=license, modality=modality, bodyPart=bodyPart,
+        manufacturer=manufacturer, seriesDesc=seriesDesc)
+
+    df = client._duckdb_conn.execute(query, params).df()
+    df = df[df['analysis_result_id'].notna()]
     return format_output(df, format=format)
 
 def getBodyPart(collection: str = "", modality: str = "", format: str = ""):
+    """
+    Gets Body Part Examined metadata.
+    Allows filtering by collection and modality.
+    """
     client = get_client()
     query = "SELECT DISTINCT BodyPartExamined FROM index WHERE 1=1"
     params = []
     if collection:
-        query += " AND collection_id = ?"
+        query += " AND collection_id ILIKE ?"
         params.append(collection)
     if modality:
-        query += " AND Modality = ?"
+        query += " AND Modality ILIKE ?"
         params.append(modality)
 
     df = client._duckdb_conn.execute(query, params).df()
     return format_output(df, format=format)
 
+def getBodyPartCounts(collection: str = "", modality: str = "", format: str = ""):
+    """
+    Gets counts of Body Part metadata.
+    Allows filtering by collection and modality.
+    """
+    client = get_client()
+    query = "SELECT BodyPartExamined, COUNT(DISTINCT SeriesInstanceUID) as count FROM index WHERE 1=1"
+    params = []
+    if collection:
+        query += " AND collection_id ILIKE ?"
+        params.append(collection)
+    if modality:
+        query += " AND Modality ILIKE ?"
+        params.append(modality)
+    query += " GROUP BY BodyPartExamined"
+    df = client._duckdb_conn.execute(query, params).df()
+    return format_output(df, format=format)
+
 def getModality(collection: str = "", bodyPart: str = "", format: str = ""):
+    """
+    Gets Modalities metadata.
+    Allows filtering by collection and bodyPart.
+    """
     client = get_client()
     query = "SELECT DISTINCT Modality FROM index WHERE 1=1"
     params = []
     if collection:
-        query += " AND collection_id = ?"
+        query += " AND collection_id ILIKE ?"
         params.append(collection)
     if bodyPart:
-        query += " AND BodyPartExamined = ?"
+        query += " AND BodyPartExamined ILIKE ?"
         params.append(bodyPart)
     df = client._duckdb_conn.execute(query, params).df()
     return format_output(df, format=format)
 
+def getModalityCounts(collection: str = "", bodyPart: str = "", format: str = ""):
+    """
+    Gets counts of Modality metadata.
+    Allows filtering by collection and bodyPart.
+    """
+    client = get_client()
+    query = "SELECT Modality, COUNT(DISTINCT SeriesInstanceUID) as count FROM index WHERE 1=1"
+    params = []
+    if collection:
+        query += " AND collection_id ILIKE ?"
+        params.append(collection)
+    if bodyPart:
+        query += " AND BodyPartExamined ILIKE ?"
+        params.append(bodyPart)
+    query += " GROUP BY Modality"
+    df = client._duckdb_conn.execute(query, params).df()
+    return format_output(df, format=format)
+
 def getPatient(collection: str = "", format: str = ""):
+    """
+    Gets Patient metadata.
+    Allows filtering by collection.
+    """
     client = get_client()
     query = "SELECT DISTINCT collection_id, PatientID, PatientSex, PatientAge FROM index WHERE 1=1"
     params = []
     if collection:
-        query += " AND collection_id = ?"
+        query += " AND collection_id ILIKE ?"
         params.append(collection)
     df = client._duckdb_conn.execute(query, params).df()
     return format_output(df, format=format)
 
 def getPatientByCollectionAndModality(collection: str, modality: str, format: str = ""):
+    """
+    Requires specifying collection and modality.
+    Gets Patient IDs.
+    Returns a list of patient IDs.
+    """
     client = get_client()
-    query = "SELECT DISTINCT PatientID FROM index WHERE collection_id = ? AND Modality = ?"
+    query = "SELECT DISTINCT PatientID FROM index WHERE collection_id ILIKE ? AND Modality ILIKE ?"
     params = [collection, modality]
     df = client._duckdb_conn.execute(query, params).df()
     return format_output(df, format=format)
 
 def getStudy(collection: str, patientId: str = "", studyUid: str = "", format: str = ""):
+    """
+    Gets Study (visit/timepoint) metadata.
+    Requires a collection parameter.
+    Optional: patientId, studyUid, format
+    """
     client = get_client()
-    query = "SELECT DISTINCT collection_id, PatientID, StudyInstanceUID, StudyDate, StudyDescription FROM index WHERE collection_id = ?"
+    query = "SELECT DISTINCT collection_id, PatientID, StudyInstanceUID, StudyDate, StudyDescription FROM index WHERE collection_id ILIKE ?"
     params = [collection]
     if patientId:
-        query += " AND PatientID = ?"
+        query += " AND PatientID ILIKE ?"
         params.append(patientId)
     if studyUid:
-        query += " AND StudyInstanceUID = ?"
+        query += " AND StudyInstanceUID ILIKE ?"
         params.append(studyUid)
     df = client._duckdb_conn.execute(query, params).df()
     return format_output(df, format=format)
@@ -134,38 +269,53 @@ def getStudy(collection: str, patientId: str = "", studyUid: str = "", format: s
 def getSeries(collection: str = "", patientId: str = "", studyUid: str = "", seriesUid: str = "",
               modality: str = "", bodyPart: str = "", manufacturer: str = "", manufacturerModel: str = "",
               format: str = ""):
+    """
+    Gets Series (scan) metadata.
+    Allows filtering by collection, patient ID, study UID,
+    series UID, modality, body part, manufacturer & model.
+    """
     client = get_client()
     query = "SELECT * FROM index WHERE 1=1"
     params = []
     if collection:
-        query += " AND collection_id = ?"
+        query += " AND collection_id ILIKE ?"
         params.append(collection)
     if patientId:
-        query += " AND PatientID = ?"
+        query += " AND PatientID ILIKE ?"
         params.append(patientId)
     if studyUid:
-        query += " AND StudyInstanceUID = ?"
+        query += " AND StudyInstanceUID ILIKE ?"
         params.append(studyUid)
     if seriesUid:
-        query += " AND SeriesInstanceUID = ?"
+        query += " AND SeriesInstanceUID ILIKE ?"
         params.append(seriesUid)
     if modality:
-        query += " AND Modality = ?"
+        query += " AND Modality ILIKE ?"
         params.append(modality)
     if bodyPart:
-        query += " AND BodyPartExamined = ?"
+        query += " AND BodyPartExamined ILIKE ?"
         params.append(bodyPart)
     if manufacturer:
-        query += " AND Manufacturer = ?"
+        query += " AND Manufacturer ILIKE ?"
         params.append(manufacturer)
     if manufacturerModel:
-        query += " AND ManufacturerModelName = ?"
+        query += " AND ManufacturerModelName ILIKE ?"
         params.append(manufacturerModel)
 
     df = client._duckdb_conn.execute(query, params).df()
     return format_output(df, format=format)
 
 def getSeriesList(uids: List[str], format: str = "df"):
+    """
+    Retrieve metadata for a list of series.
+
+    Args:
+        uids (List[str]): List of unique identifiers (series UIDs) to query.
+        format (str, optional): Format of the output. Defaults to "df".
+
+    Returns:
+        Optional[pd.DataFrame]: A DataFrame containing the series metadata.
+    """
     client = get_client()
     if not uids:
         return format_output(pd.DataFrame(), format=format)
@@ -175,6 +325,9 @@ def getSeriesList(uids: List[str], format: str = "df"):
     return format_output(df, format=format)
 
 def getSopInstanceUids(seriesUid: str, format: str = ""):
+    """
+    Gets SOP Instance UIDs from a specific series/scan.
+    """
     client = get_client()
     try:
         urls = client.get_series_file_URLs(seriesUid)
@@ -201,18 +354,43 @@ def getSopInstanceUids(seriesUid: str, format: str = ""):
     return []
 
 def getManufacturer(collection: str = "", modality: str = "", bodyPart: str = "", format: str = ""):
+    """
+    Gets manufacturer metadata.
+    Allows filtering by collection, body part & modality.
+    """
     client = get_client()
     query = "SELECT DISTINCT Manufacturer, ManufacturerModelName FROM index WHERE 1=1"
     params = []
     if collection:
-        query += " AND collection_id = ?"
+        query += " AND collection_id ILIKE ?"
         params.append(collection)
     if modality:
-        query += " AND Modality = ?"
+        query += " AND Modality ILIKE ?"
         params.append(modality)
     if bodyPart:
-        query += " AND BodyPartExamined = ?"
+        query += " AND BodyPartExamined ILIKE ?"
         params.append(bodyPart)
+    df = client._duckdb_conn.execute(query, params).df()
+    return format_output(df, format=format)
+
+def getManufacturerCounts(collection: str = "", modality: str = "", bodyPart: str = "", format: str = ""):
+    """
+    Gets counts of Manufacturer metadata.
+    Allows filtering by collection, body part and modality.
+    """
+    client = get_client()
+    query = "SELECT Manufacturer, COUNT(DISTINCT SeriesInstanceUID) as count FROM index WHERE 1=1"
+    params = []
+    if collection:
+        query += " AND collection_id ILIKE ?"
+        params.append(collection)
+    if modality:
+        query += " AND Modality ILIKE ?"
+        params.append(modality)
+    if bodyPart:
+        query += " AND BodyPartExamined ILIKE ?"
+        params.append(bodyPart)
+    query += " GROUP BY Manufacturer"
     df = client._duckdb_conn.execute(query, params).df()
     return format_output(df, format=format)
 
@@ -252,45 +430,90 @@ def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
                    input_type: str = "",
                    format: str = "",
                    max_workers: int = 10):
+    """
+    Ingests a set of seriesUids and downloads them.
+    By default, series_data expects JSON containing "SeriesInstanceUID" elements.
+    Set number = n to download the first n series if you don't want the full dataset.
+    Saves to idcDownload folder in current directory if no path is specified.
+    Set input_type = "list" to pass a list of Series UIDs instead of JSON.
+    Set input_type = "df" to pass a dataframe that contains a "SeriesInstanceUID" column.
+    Set input_type = "manifest" to pass the path of a TCIA, CSV/TSV or s5cmd manifest file.
+    """
     client = get_client()
-    uids = []
+    series_uids = []
     s5cmd_manifest = None
 
     if input_type == "list":
-        uids = series_data
+        series_uids = series_data
     elif input_type == "df":
-        uids = series_data['SeriesInstanceUID'].tolist()
+        series_uids = series_data['SeriesInstanceUID'].tolist()
     elif isinstance(series_data, str):
         processed = _processManifest(series_data)
         if isinstance(processed, str): # s5cmd path
             s5cmd_manifest = processed
         else:
-            uids = processed
+            series_uids = processed
     else:
-        uids = [item['SeriesInstanceUID'] for item in series_data]
+        series_uids = [item['SeriesInstanceUID'] for item in series_data]
 
-    if number > 0 and uids:
-        uids = uids[:number]
+    # Ensure the root directory exists
+    try:
+        if not os.path.exists(path):
+            os.makedirs(path)
+            _log.info(f"Directory '{path}' created successfully.")
+        else:
+            _log.info(f"Directory '{path}' already exists.")
+    except OSError as e:
+        _log.error(f"Failed to create directory '{path}': {e}")
+        return None
+
+    # Identify series to download vs. already existing
+    existing_files = set(os.listdir(path))
+    uids_to_download = []
+    previously_downloaded_uids = []
+
+    if not s5cmd_manifest:
+        for seriesUID in series_uids:
+            if seriesUID not in existing_files:
+                uids_to_download.append(seriesUID)
+            else:
+                _log.warning(f"Series {seriesUID} already downloaded.")
+                previously_downloaded_uids.append(seriesUID)
+
+        # Apply 'number' limit if specified
+        if number > 0:
+            uids_to_download = uids_to_download[:number]
+
+        _log.info(f"Found {len(previously_downloaded_uids)} previously downloaded series.")
+        _log.info(f"Attempting to download {len(uids_to_download)} new series.")
 
     if s5cmd_manifest:
         _log.info(f"Downloading from s5cmd manifest {s5cmd_manifest} to {path}...")
         client.download_from_manifest(manifestFile=s5cmd_manifest, downloadDir=path)
-    elif uids:
-        _log.info(f"Downloading {len(uids)} series to {path}...")
-        client.download_dicom_series(seriesInstanceUID=uids, downloadDir=path)
-    else:
+    elif uids_to_download:
+        _log.info(f"Downloading {len(uids_to_download)} series to {path}...")
+        client.download_dicom_series(seriesInstanceUID=uids_to_download, downloadDir=path)
+    elif not previously_downloaded_uids:
         _log.warning("No data found to download.")
         return None
 
-    if format == "df" and uids:
-        return getSeriesList(uids)
+    if format in ["df", "csv"]:
+        all_uids = previously_downloaded_uids + uids_to_download
+        if all_uids:
+            return getSeriesList(all_uids, format=format)
     return None
 
 def downloadImage(seriesUID: str, sopUID: str, path: str = "idcDownload"):
+    """
+    Downloads a DICOM image using the provided SeriesInstanceUID and SOPInstanceUID.
+    """
     client = get_client()
     client.download_dicom_instance(sopInstanceUID=sopUID, downloadDir=path)
 
 def getDicomTags(seriesUid: str, format: str = "df"):
+    """
+    Retrieves DICOM tag metadata for a given Series UID.
+    """
     client = get_client()
     try:
         urls = client.get_series_file_URLs(seriesUid)
@@ -325,6 +548,10 @@ def getDicomTags(seriesUid: str, format: str = "df"):
     return None
 
 def getSegRefSeries(uid: str):
+    """
+    Gets DICOM tag metadata for a given SEG/RTSTRUCT series UID (scan)
+    and looks up the corresponding original/reference series UID.
+    """
     client = get_client()
     try:
         client.fetch_index('seg_index')
@@ -377,6 +604,9 @@ def idcOhifViewer(data: Union[pd.DataFrame, List[dict]], max_rows: int = 500) ->
     return HTML(html_output)
 
 def getCollectionDescriptions(format = ""):
+    """
+    Gets descriptions of collections and their DOIs.
+    """
     client = get_client()
     try:
         client.fetch_index('collections_index')
@@ -388,6 +618,10 @@ def getCollectionDescriptions(format = ""):
     return None
 
 def reportDataSummary(series_data, input_type="", report_type = "", format=""):
+    """
+    This function summarizes the input series_data by reporting
+    on the various attributes like Collections, Modalities, etc.
+    """
     uids = []
     if input_type == "list":
         uids = series_data
@@ -444,9 +678,15 @@ def reportDataSummary(series_data, input_type="", report_type = "", format=""):
     return summary
 
 def reportCollectionSummary(series_data, input_type="", format=""):
+    """
+    Generate a summary report about Collections from series metadata.
+    """
     return reportDataSummary(series_data, input_type, report_type="collection", format=format)
 
 def reportDoiSummary(series_data, input_type="", format=""):
+    """
+    Generate a summary report about DOIs from series metadata.
+    """
     return reportDataSummary(series_data, input_type, report_type="doi", format=format)
 
 def getSimpleSearch(
@@ -465,7 +705,29 @@ def getSimpleSearch(
     sortDirection = 'ascending',
     sortField = 'subject',
     format = ""):
+    """
+    All parameters are optional.
+    Takes the same parameters as the SimpleSearch GUI.
+    Use more parameters to narrow the number of subjects received.
 
+    collections: list[str]   -- The DICOM collections of interest to you
+    species: list[str]       -- Filter collections by species.
+    modalities: list[str]    -- Filter collections by modality
+    modalityAnded: bool      -- If true, only return subjects with all requested modalities, as opposed to any
+    minStudies: int          -- The minimum number of studies a patient must have to be included in the results
+    manufacturers: list[str] -- Imaging device manufacturers, e.g. SIEMENS
+    bodyParts: list[str]     -- Body parts of interest, e.g. CHEST, ABDOMEN
+    fromDate: str            -- First cutoff date, in YYYY/MM/DD format.
+    toDate: str              -- Second cutoff date, in YYYY/MM/DD format.
+    patients: list[str]      -- Patients to include in the output
+    start: int               -- Start of returned series page. Defaults to 0.
+    size: int                -- Size of returned series page. Defaults to 10.
+    sortDirection            -- 'ascending' or 'descending'. Defaults to 'ascending'.
+    sortField                -- 'subject', 'studies', 'series', or 'collection'. Defaults to 'subject'.
+    format: str              -- Defaults to JSON. Can be set to "uids" to return a python list of
+                                Series Instance UIDs or "manifest" to save a manifest file.
+                                "manifest_text" can be used to return the manifest content as text.
+    """
     client = get_client()
 
     query = "SELECT * FROM index"
@@ -603,18 +865,6 @@ def getDoiMetadata(*args, **kwargs):
 
 def getCollectionPatientCounts(*args, **kwargs):
     warnings.warn("getCollectionPatientCounts is not supported in the IDC module.", UserWarning)
-    return None
-
-def getModalityCounts(*args, **kwargs):
-    warnings.warn("getModalityCounts is not supported in the IDC module.", UserWarning)
-    return None
-
-def getBodyPartCounts(*args, **kwargs):
-    warnings.warn("getBodyPartCounts is not supported in the IDC module.", UserWarning)
-    return None
-
-def getManufacturerCounts(*args, **kwargs):
-    warnings.warn("getManufacturerCounts is not supported in the IDC module.", UserWarning)
     return None
 
 def reportDicomTags(*args, **kwargs):
