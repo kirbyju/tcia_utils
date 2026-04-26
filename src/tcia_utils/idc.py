@@ -426,18 +426,22 @@ def _processManifest(manifest_path: str) -> Union[List[str], str]:
 
 def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
                    number: int = 0,
-                   path: str = "idcDownload",
+                   path: str = "tciaDownload",
                    input_type: str = "",
                    format: str = "",
+                   template: str = "flat",
+                   use_sync: bool = True,
                    max_workers: int = 10):
     """
     Ingests a set of seriesUids and downloads them.
     By default, series_data expects JSON containing "SeriesInstanceUID" elements.
     Set number = n to download the first n series if you don't want the full dataset.
-    Saves to idcDownload folder in current directory if no path is specified.
+    Saves to tciaDownload folder in current directory if no path is specified.
     Set input_type = "list" to pass a list of Series UIDs instead of JSON.
     Set input_type = "df" to pass a dataframe that contains a "SeriesInstanceUID" column.
     Set input_type = "manifest" to pass the path of a TCIA, CSV/TSV or s5cmd manifest file.
+    Set template = "flat" (default), "nested", or a custom idc-index dirTemplate.
+    Set use_sync = True (default) to use s5cmd sync for efficient downloading.
     """
     client = get_client()
     series_uids = []
@@ -456,10 +460,18 @@ def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
     else:
         series_uids = [item['SeriesInstanceUID'] for item in series_data]
 
+    # Map template to dirTemplate
+    if template == "flat":
+        dir_template = "%SeriesInstanceUID"
+    elif template == "nested":
+        dir_template = "%collection_id/%PatientID/%StudyInstanceUID/%Modality_%SeriesInstanceUID"
+    else:
+        dir_template = template
+
     # Ensure the root directory exists
     try:
         if not os.path.exists(path):
-            os.makedirs(path)
+            os.makedirs(path, exist_ok=True)
             _log.info(f"Directory '{path}' created successfully.")
         else:
             _log.info(f"Directory '{path}' already exists.")
@@ -468,19 +480,48 @@ def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
         return None
 
     # Identify series to download vs. already existing
-    existing_files = set(os.listdir(path))
     uids_to_download = []
     previously_downloaded_uids = []
 
     if not s5cmd_manifest:
-        for seriesUID in series_uids:
-            if seriesUID not in existing_files:
-                uids_to_download.append(seriesUID)
-            else:
-                _log.warning(f"Series {seriesUID} already downloaded.")
-                previously_downloaded_uids.append(seriesUID)
+        # For non-flat templates, we need metadata to determine the directory paths
+        if dir_template != "%SeriesInstanceUID":
+            _log.info("Fetching metadata to identify existing series...")
+            df_metadata = getSeriesList(series_uids, format="df")
+            if df_metadata.empty:
+                _log.warning("No metadata found for provided series UIDs.")
+                return None
 
-        # Apply 'number' limit if specified
+            # Re-map columns back to IDC internal names for path formatting
+            REVERSE_MAPPING = {v: k for k, v in COLUMN_MAPPING.items()}
+            df_metadata = df_metadata.rename(columns=REVERSE_MAPPING)
+
+            for _, row in df_metadata.iterrows():
+                seriesUID = row['SeriesInstanceUID']
+                # Construct path relative to 'path' using dir_template
+                rel_path = dir_template
+                for key in ['PatientID', 'collection_id', 'Modality', 'StudyInstanceUID', 'SeriesInstanceUID']:
+                    placeholder = f"%{key}"
+                    if placeholder in rel_path:
+                        rel_path = rel_path.replace(placeholder, str(row.get(key, "")))
+
+                full_series_path = os.path.join(path, rel_path)
+                if os.path.exists(full_series_path) and os.listdir(full_series_path):
+                    _log.warning(f"Series {seriesUID} already downloaded at {rel_path}.")
+                    previously_downloaded_uids.append(seriesUID)
+                else:
+                    uids_to_download.append(seriesUID)
+        else:
+            # Flat template: directory names are just SeriesInstanceUID
+            for seriesUID in series_uids:
+                full_series_path = os.path.join(path, seriesUID)
+                if os.path.exists(full_series_path) and os.listdir(full_series_path):
+                    _log.warning(f"Series {seriesUID} already downloaded.")
+                    previously_downloaded_uids.append(seriesUID)
+                else:
+                    uids_to_download.append(seriesUID)
+
+        # Apply 'number' limit to NEW series if specified
         if number > 0:
             uids_to_download = uids_to_download[:number]
 
@@ -489,10 +530,16 @@ def downloadSeries(series_data: Union[str, pd.DataFrame, List[str]],
 
     if s5cmd_manifest:
         _log.info(f"Downloading from s5cmd manifest {s5cmd_manifest} to {path}...")
-        client.download_from_manifest(manifestFile=s5cmd_manifest, downloadDir=path)
+        client.download_from_manifest(manifestFile=s5cmd_manifest,
+                                     downloadDir=path,
+                                     dirTemplate=dir_template,
+                                     use_s5cmd_sync=use_sync)
     elif uids_to_download:
         _log.info(f"Downloading {len(uids_to_download)} series to {path}...")
-        client.download_dicom_series(seriesInstanceUID=uids_to_download, downloadDir=path)
+        client.download_dicom_series(seriesInstanceUID=uids_to_download,
+                                    downloadDir=path,
+                                    dirTemplate=dir_template,
+                                    use_s5cmd_sync=use_sync)
     elif not previously_downloaded_uids:
         _log.warning("No data found to download.")
         return None
