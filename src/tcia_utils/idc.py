@@ -744,6 +744,8 @@ def getSimpleSearch(
     manufacturers  = [],
     fromDate = "",
     toDate = "",
+    releasedAfter = "",
+    releasedBefore = "",
     patients = [],
     minStudies: int = 0,
     modalityAnded = False,
@@ -764,8 +766,10 @@ def getSimpleSearch(
     minStudies: int          -- The minimum number of studies a patient must have to be included in the results
     manufacturers: list[str] -- Imaging device manufacturers, e.g. SIEMENS
     bodyParts: list[str]     -- Body parts of interest, e.g. CHEST, ABDOMEN
-    fromDate: str            -- First cutoff date, in YYYY/MM/DD format.
-    toDate: str              -- Second cutoff date, in YYYY/MM/DD format.
+    fromDate: str            -- First study date cutoff, in YYYY/MM/DD format.
+    toDate: str              -- Second study date cutoff, in YYYY/MM/DD format.
+    releasedAfter: str       -- First IDC release date cutoff, in YYYY/MM/DD format.
+    releasedBefore: str      -- Second IDC release date cutoff, in YYYY/MM/DD format.
     patients: list[str]      -- Patients to include in the output
     start: int               -- Start of returned series page. Defaults to 0.
     size: int                -- Size of returned series page. Defaults to 10.
@@ -822,6 +826,18 @@ def getSimpleSearch(
         isoToDate = toDate.replace("/", "-")
         where_clauses.append("StudyDate <= ?")
         params.append(isoToDate)
+
+    if releasedAfter or releasedBefore:
+        client.fetch_index('version_metadata_index')
+        client.sql_query("SELECT 1 FROM version_metadata_index LIMIT 1")
+        if releasedAfter:
+            isoReleasedAfter = releasedAfter.replace("/", "-")
+            where_clauses.append("series_init_idc_version IN (SELECT idc_version FROM version_metadata_index WHERE version_timestamp >= ?)")
+            params.append(isoReleasedAfter)
+        if releasedBefore:
+            isoReleasedBefore = releasedBefore.replace("/", "-")
+            where_clauses.append("series_init_idc_version IN (SELECT idc_version FROM version_metadata_index WHERE version_timestamp <= ?)")
+            params.append(isoReleasedBefore)
 
     if minStudies > 0:
         # Number of studies a patient has
@@ -887,24 +903,131 @@ def makeSeriesReport(*args, **kwargs):
     return None
 
 def reportSeriesSubmissionDate(*args, **kwargs):
-    warnings.warn("reportSeriesSubmissionDate is not supported in the IDC module.", UserWarning)
+    warnings.warn("reportSeriesSubmissionDate is not supported in the IDC module. Use reportSeriesReleaseDate instead.", UserWarning)
     return None
 
-def reportSeriesReleaseDate(*args, **kwargs):
-    warnings.warn("reportSeriesReleaseDate is not supported in the IDC module.", UserWarning)
-    return None
+def reportSeriesReleaseDate(series_data, input_type="", chart_width=1024, chart_height=768):
+    """
+    Visualizes the release/publication timeline of the series by IDC version.
+    """
+    client = get_client()
+    client.fetch_index('version_metadata_index')
+    client.sql_query("SELECT 1 FROM version_metadata_index LIMIT 1")
 
-def getNewPatientsInCollection(*args, **kwargs):
-    warnings.warn("getNewPatientsInCollection is not supported in the IDC module.", UserWarning)
-    return None
+    uids = []
+    if input_type == "list":
+        uids = series_data
+    elif input_type == "df":
+        uids = series_data['SeriesInstanceUID'].tolist()
+    elif isinstance(series_data, str):
+        processed = _processManifest(series_data)
+        if isinstance(processed, list):
+            uids = processed
+        else:
+            _log.warning("Cannot generate report from s5cmd manifest path.")
+            return None
+    else:
+        uids = [item['SeriesInstanceUID'] for item in series_data]
 
-def getNewStudiesInPatient(*args, **kwargs):
-    warnings.warn("getNewStudiesInPatient is not supported in the IDC module.", UserWarning)
-    return None
+    df = getSeriesList(uids, format="df")
 
-def getUpdatedSeries(*args, **kwargs):
-    warnings.warn("getUpdatedSeries is not supported in the IDC module.", UserWarning)
-    return None
+    # Map back to IDC internal names for joining
+    REVERSE_MAPPING = {v: k for k, v in COLUMN_MAPPING.items()}
+    df_internal = df.rename(columns=REVERSE_MAPPING)
+
+    # Join with version metadata
+    versions = client._duckdb_conn.execute("SELECT * FROM version_metadata_index").df()
+    df_internal = df_internal.merge(versions, left_on='series_init_idc_version', right_on='idc_version')
+
+    df_internal['version_timestamp'] = pd.to_datetime(df_internal['version_timestamp'])
+
+    # Map back to NBIA names for consistency in report
+    df_report = df_internal.rename(columns=COLUMN_MAPPING)
+
+    # Group by 'Collection' and 'version_timestamp'
+    daily_data = df_report.groupby(['Collection', 'version_timestamp'])['SeriesInstanceUID'].nunique().reset_index()
+    daily_data['CumulativeCount'] = daily_data.groupby('Collection')['SeriesInstanceUID'].cumsum()
+
+    fig = px.line(
+        daily_data,
+        x='version_timestamp',
+        y='CumulativeCount',
+        color='Collection',
+        labels={'CumulativeCount': 'Total Series', 'version_timestamp': 'Release Date'},
+        title='Cumulative Total Series Over Time by Collection (IDC Release Date)',
+        markers=True
+    )
+
+    fig.update_layout(width=chart_width, height=chart_height)
+    fig.show()
+
+def getNewPatientsInCollection(collection: str, date: str, format: str = ""):
+    """
+    Gets "new" patient metadata.
+    Requires specifying a collection and release date (YYYY/MM/DD).
+    """
+    client = get_client()
+    client.fetch_index('version_metadata_index')
+    client.sql_query("SELECT 1 FROM version_metadata_index LIMIT 1")
+
+    # Convert YYYY/MM/DD to YYYY-MM-DD for DuckDB
+    iso_date = date.replace("/", "-")
+
+    query = """
+    SELECT DISTINCT collection_id, PatientID, PatientSex, PatientAge
+    FROM index
+    WHERE collection_id ILIKE ?
+    AND series_init_idc_version IN (
+        SELECT idc_version FROM version_metadata_index WHERE version_timestamp >= ?
+    )
+    """
+    df = client._duckdb_conn.execute(query, [collection, iso_date]).df()
+    return format_output(df, format=format)
+
+def getNewStudiesInPatient(collection: str, patientId: str, date: str, format: str = ""):
+    """
+    Gets "new" study metadata.
+    Requires specifying collection, patient ID and date (YYYY/MM/DD).
+    """
+    client = get_client()
+    client.fetch_index('version_metadata_index')
+    client.sql_query("SELECT 1 FROM version_metadata_index LIMIT 1")
+
+    iso_date = date.replace("/", "-")
+
+    query = """
+    SELECT DISTINCT collection_id, PatientID, StudyInstanceUID, StudyDate, StudyDescription
+    FROM index
+    WHERE collection_id ILIKE ?
+    AND PatientID ILIKE ?
+    AND series_init_idc_version IN (
+        SELECT idc_version FROM version_metadata_index WHERE version_timestamp >= ?
+    )
+    """
+    df = client._duckdb_conn.execute(query, [collection, patientId, iso_date]).df()
+    return format_output(df, format=format)
+
+def getUpdatedSeries(date: str, format: str = ""):
+    """
+    Gets "new" or "revised" series metadata since a given date (YYYY/MM/DD).
+    """
+    client = get_client()
+    client.fetch_index('version_metadata_index')
+    client.sql_query("SELECT 1 FROM version_metadata_index LIMIT 1")
+
+    iso_date = date.replace("/", "-")
+
+    query = """
+    SELECT * FROM index
+    WHERE series_init_idc_version IN (
+        SELECT idc_version FROM version_metadata_index WHERE version_timestamp >= ?
+    )
+    OR series_revised_idc_version IN (
+        SELECT idc_version FROM version_metadata_index WHERE version_timestamp >= ?
+    )
+    """
+    df = client._duckdb_conn.execute(query, [iso_date, iso_date]).df()
+    return format_output(df, format=format)
 
 def getDoiMetadata(*args, **kwargs):
     warnings.warn("getDoiMetadata is not supported in the IDC module.", UserWarning)
