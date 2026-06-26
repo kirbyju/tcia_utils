@@ -688,11 +688,16 @@ def reportDataSummary(series_data, input_type="", report_type = "", format=""):
 
     if report_type == "doi":
         group = "DataDescriptionURI"
+        column = "Collection"
+        columnGrouped = "Collections"
     else:
         group = "Collection"
+        column = "DataDescriptionURI"
+        columnGrouped = "DOIs"
 
     # Aggregation
     summary = df.groupby(group).agg({
+        column: lambda x: list(x.dropna().unique()),
         'Modality': 'unique',
         'LicenseName': 'unique',
         'Manufacturer': 'unique',
@@ -705,6 +710,7 @@ def reportDataSummary(series_data, input_type="", report_type = "", format=""):
     }).reset_index()
 
     summary.rename(columns={
+        column: columnGrouped,
         'PatientID': 'Subjects',
         'StudyInstanceUID': 'Studies',
         'SeriesInstanceUID': 'Series',

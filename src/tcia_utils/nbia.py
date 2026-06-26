@@ -214,6 +214,14 @@ def queryData(
             return df
         else:
             # This handles format == "json"
+            # Convert FileSize from bytes to MB in JSON output
+            if isinstance(data, list):
+                for item in data:
+                    if isinstance(item, dict) and "FileSize" in item:
+                        try:
+                            item["FileSize"] = float(item["FileSize"]) / (1024 * 1024)
+                        except (ValueError, TypeError):
+                            pass
             return data
 
     except requests.exceptions.RequestException as err:
@@ -529,6 +537,9 @@ def getSeriesList(
     }
     df.rename(columns=column_mapping, inplace=True)
 
+    # Convert FileSize from bytes to MB
+    if 'FileSize' in df.columns:
+        df['FileSize'] = pd.to_numeric(df['FileSize'], errors='coerce') / (1024 * 1024)
 
     if csv_filename:
         df.to_csv(f"{csv_filename}.csv", index=False)
@@ -1348,7 +1359,12 @@ def formatSeriesInput(series_data, input_type, api_url):
     for num_col in numeric_columns:
         if num_col in df.columns and df[num_col].notna().any():
             try:
-                df[num_col] = pd.to_numeric(df[num_col], errors='coerce')
+                # If column is already float, it's likely already converted to MB
+                if df[num_col].dtype != 'float64':
+                    df[num_col] = pd.to_numeric(df[num_col], errors='coerce')
+                    # Convert FileSize from bytes to MB
+                    if num_col == 'FileSize':
+                        df[num_col] = df[num_col] / (1024 * 1024)
             except Exception as e:
                 _log.warning(f"Could not convert {num_col} to numeric: {e}")
 
@@ -1484,11 +1500,11 @@ def reportDataSummary(series_data, input_type="", report_type = "", api_url = ""
                             'StudyInstanceUID nunique': 'Studies',
                             'SeriesInstanceUID nunique': 'Series',
                             'ImageCount sum': 'Images',
-                            'FileSize sum': 'File Size'}
+                            'FileSize sum': 'File Size MB'}
                             , inplace=True)
 
-    # Create Disk Space column and convert bytes to MB/GB/TB/PB
-    grouped['Disk Space'] = grouped['File Size'].apply(format_disk_space)
+    # Create Disk Space column and convert MB to B/kB/MB/GB/TB/PB
+    grouped['Disk Space'] = (grouped['File Size MB'] * 1024 * 1024).apply(format_disk_space)
 
     try:
         # Extract unique submission dates per Collection
@@ -1520,7 +1536,7 @@ def reportDataSummary(series_data, input_type="", report_type = "", api_url = ""
                         'Manufacturer unique', 'BodyPartExamined unique'], inplace=True)
 
     # Reorder the columns
-    grouped = grouped[[group, columnGrouped, 'Licenses', 'Subjects', 'Studies', 'Series', 'Images', 'File Size', 'Disk Space',
+    grouped = grouped[[group, columnGrouped, 'Licenses', 'Subjects', 'Studies', 'Series', 'Images', 'File Size MB', 'Disk Space',
             'Body Parts', 'Modalities',  'Manufacturers', 'Min DateReleased', 'Max DateReleased', 'UniqueDateReleased']]
 
     if report_type == "doi":
@@ -1568,7 +1584,7 @@ def reportDataSummary(series_data, input_type="", report_type = "", api_url = ""
                             (studies, 'Studies'),
                             (series, 'Series'),
                             (images, 'Images'),
-                            (size, 'File Size (Bytes)')]
+                            (size, 'File Size MB')]
 
         # Iterate through the pairs and call create_pie_chart if data is greater than 0
         for data, label in data_label_pairs:
