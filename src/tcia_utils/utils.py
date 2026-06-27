@@ -128,15 +128,15 @@ def format_disk_space_binary(size_in_bytes):
     I.e. Mebibytes (MiB) reported in Windows.
     """
     if size_in_bytes < 1024 ** 2:
-        return f'{size_in_bytes / 1024:.2f} KB'
+        return f'{size_in_bytes / 1024:.2f} KiB'
     elif size_in_bytes < 1024 ** 3:
-        return f'{size_in_bytes / (1024 ** 2):.2f} MB'
+        return f'{size_in_bytes / (1024 ** 2):.2f} MiB'
     elif size_in_bytes < 1024 ** 4:
-        return f'{size_in_bytes / (1024 ** 3):.2f} GB'
+        return f'{size_in_bytes / (1024 ** 3):.2f} GiB'
     elif size_in_bytes < 1024 ** 5:
-        return f'{size_in_bytes / (1024 ** 4):.2f} TB'
+        return f'{size_in_bytes / (1024 ** 4):.2f} TiB'
     else:
-        return f'{size_in_bytes / (1024 ** 5):.2f} PB'
+        return f'{size_in_bytes / (1024 ** 5):.2f} PiB'
         
 
 def format_disk_space(size_in_bytes):
