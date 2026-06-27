@@ -718,7 +718,8 @@ def reportDataSummary(series_data, input_type="", report_type = "", format=""):
         'FileSizeMiB': 'File Size MiB'
     }, inplace=True)
 
-    summary['Disk Space'] = (summary['File Size MiB'] * 1024 * 1024).apply(format_disk_space_binary)
+    summary['Formatted File Size'] = (summary['File Size MiB'] * 1024 * 1024).apply(format_disk_space_binary)
+    summary['File Size MiB'] = summary['File Size MiB'].round(2)
 
     if format == 'chart':
         for metric in ['Subjects', 'Studies', 'Series', 'Images']:
