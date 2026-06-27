@@ -6,7 +6,7 @@ from idc_index import IDCClient
 from IPython.display import HTML
 import os
 import plotly.express as px
-from tcia_utils.utils import format_disk_space
+from tcia_utils.utils import format_disk_space, format_disk_space_binary
 from tcia_utils.utils import get_proxy
 import csv
 import warnings
@@ -45,7 +45,7 @@ COLUMN_MAPPING = {
     'instanceCount': 'ImageCount',
     'license_short_name': 'LicenseName',
     'source_DOI': 'DataDescriptionURI',
-    'series_size_MB': 'FileSize',
+    'series_size_MB': 'FileSizeMiB',
     'count': 'Count'
 }
 
@@ -706,7 +706,7 @@ def reportDataSummary(series_data, input_type="", report_type = "", format=""):
         'StudyInstanceUID': 'nunique',
         'SeriesInstanceUID': 'nunique',
         'ImageCount': 'sum',
-        'FileSize': 'sum'
+        'FileSizeMiB': 'sum'
     }).reset_index()
 
     summary.rename(columns={
@@ -715,10 +715,10 @@ def reportDataSummary(series_data, input_type="", report_type = "", format=""):
         'StudyInstanceUID': 'Studies',
         'SeriesInstanceUID': 'Series',
         'ImageCount': 'Images',
-        'FileSize': 'File Size MB'
+        'FileSizeMiB': 'File Size MiB'
     }, inplace=True)
 
-    summary['Disk Space'] = (summary['File Size MB'] * 1024 * 1024).apply(format_disk_space)
+    summary['Disk Space'] = (summary['File Size MiB'] * 1024 * 1024).apply(format_disk_space_binary)
 
     if format == 'chart':
         for metric in ['Subjects', 'Studies', 'Series', 'Images']:
