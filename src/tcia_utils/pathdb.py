@@ -6,6 +6,7 @@ import numpy as np
 import logging
 from tcia_utils.utils import searchDf
 from tcia_utils.utils import copy_df_cols
+from tcia_utils.utils import get_proxy
 import os
 from urllib.parse import urlparse
 import concurrent.futures
@@ -30,7 +31,7 @@ def getCollections(query = "", format = ""):
     extracted_data = []
     url = base_url + 'collections?_format=json'
     _log.info(f'Calling... {url}')
-    response = requests.get(url)
+    response = requests.get(url, proxies=get_proxy())
     if response.status_code == 200:
         data = response.json()
 
@@ -113,7 +114,7 @@ def getImages(query, format=""):
         while True:
             paginated_url = f"{url}&page={page}" if '?' in url else f"{url}?page={page}"
             _log.info(f'Calling... {paginated_url}')
-            response = requests.get(paginated_url)
+            response = requests.get(paginated_url, proxies=get_proxy())
 
             if response.status_code == 200:
                 data = response.json()
@@ -217,7 +218,7 @@ def _download_image(image_info, path):
 
         filepath = os.path.join(path, filename)
 
-        response = requests.get(image_url, stream=True, allow_redirects=True)
+        response = requests.get(image_url, stream=True, allow_redirects=True, proxies=get_proxy())
         response.raise_for_status()
 
         with open(filepath, "wb") as f:

@@ -9,6 +9,33 @@ logging.basicConfig(
     level=logging.INFO
 )
 
+_proxies = None
+
+
+def set_proxy(proxies: dict):
+    """
+    Sets a global proxy configuration for all tcia_utils modules.
+
+    Example:
+    proxies = {
+        'http': 'http://10.10.1.10:3128',
+        'https': 'http://10.10.1.10:1080',
+    }
+    set_proxy(proxies)
+    """
+    global _proxies
+    _proxies = proxies
+    _log.info(f"Global proxy set to: {_proxies}")
+
+
+def get_proxy():
+    """
+    Returns the current global proxy configuration.
+    """
+    global _proxies
+    return _proxies
+
+
 def searchDf(search_term, dataframe=None, column_name=None):
     """
     This function searches for a term or a list of terms in a specified dataframe and column.
@@ -101,15 +128,15 @@ def format_disk_space_binary(size_in_bytes):
     I.e. Mebibytes (MiB) reported in Windows.
     """
     if size_in_bytes < 1024 ** 2:
-        return f'{size_in_bytes / 1024:.2f} KB'
+        return f'{size_in_bytes / 1024:.2f} KiB'
     elif size_in_bytes < 1024 ** 3:
-        return f'{size_in_bytes / (1024 ** 2):.2f} MB'
+        return f'{size_in_bytes / (1024 ** 2):.2f} MiB'
     elif size_in_bytes < 1024 ** 4:
-        return f'{size_in_bytes / (1024 ** 3):.2f} GB'
+        return f'{size_in_bytes / (1024 ** 3):.2f} GiB'
     elif size_in_bytes < 1024 ** 5:
-        return f'{size_in_bytes / (1024 ** 4):.2f} TB'
+        return f'{size_in_bytes / (1024 ** 4):.2f} TiB'
     else:
-        return f'{size_in_bytes / (1024 ** 5):.2f} PB'
+        return f'{size_in_bytes / (1024 ** 5):.2f} PiB'
         
 
 def format_disk_space(size_in_bytes):
@@ -135,13 +162,7 @@ def remove_html_tags(text):
     """
     Helper function to convert HTML to plain text.
     """
-    if not text or not isinstance(text, str):
-        return text
-    # Check if text actually contains HTML tags to avoid MarkupResemblesLocatorWarning
-    if '<' in text and '>' in text:
-        soup = BeautifulSoup(text, 'html.parser')
-        plain_text = soup.get_text().strip()
-        clean_text = unidecode(plain_text)  # Apply unidecode to remove or replace non-ASCII characters
-        return clean_text
-    else:
-        return text
+    soup = BeautifulSoup(text, 'html.parser')
+    plain_text = soup.get_text().strip()
+    clean_text = unidecode(plain_text)  # Apply unidecode to remove or replace non-ASCII characters
+    return clean_text
