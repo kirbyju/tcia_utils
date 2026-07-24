@@ -1,4 +1,5 @@
 import warnings
+from . import nbia
 from .nbia import *
 
 warnings.warn(
@@ -7,3 +8,6 @@ warnings.warn(
     DeprecationWarning,
     stacklevel=2,
 )
+
+def __getattr__(name: str):
+    return getattr(nbia, name)

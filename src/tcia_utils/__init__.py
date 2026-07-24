@@ -4,3 +4,4 @@ from . import pathdb
 from . import utils
 from . import wordpress
 from . import idc
+from . import crdc
