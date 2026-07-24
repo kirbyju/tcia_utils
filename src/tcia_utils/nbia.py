@@ -119,6 +119,272 @@ def setApiUrl(endpoint, api_url = "nbia"):
 
     return base_url
 
+def getToken(user: str = "", pw: str = "", api_url: str = "", return_values: bool = False) -> Union[tuple, None]:
+    """
+    Retrieves an access token for API authorization.
+    tcia_utils manages tokens with global variables so you do not need to pass them to other functions.
+    "return_values = True" can be used if you want to manage/use the tokens with other code outside of tcia_utils.
+
+    Parameters:
+        user (str): The username. Use "nbia_guest" for anonymous access.
+        pw (str): The password. If not provided, the function prompts for input.
+        api_url (str): API server identifier. Use "nlst" for the NLST server.
+        return_values (bool): If True, returns token details as a tuple. Defaults to False.
+
+    Returns:
+        tuple or int:
+            - If return_values is True, returns a tuple:
+                (API call headers (dict), Access token (str), Token expiration time (datetime),
+                 Refresh token (str), ID token (str)).
+            - If return_values is False, returns 200 to indicate success.
+    """
+    global token_exp_time, api_call_headers, access_token, refresh_token, id_token
+    global nlst_token_exp_time, nlst_api_call_headers, nlst_access_token, nlst_refresh_token, nlst_id_token
+
+    # specify user/pw unless nbia_guest is being used for accessing Advanced API anonymously
+    if user != "":
+        userName = user
+    else:
+        print("Enter User: ")
+        userName = input()
+    # set password for non-guest logins
+    if userName == "nbia_guest":
+        passWord = "ItsBetweenUAndMe" # this guest account password is documented in the public API guide
+    elif pw == "":
+        passWord = getpass.getpass(prompt='Enter Password: ')
+    else:
+        passWord = pw
+
+    # request API token
+    try:
+        params = {'client_id': 'NBIA',
+                  'username': user,
+                  'password': pw,
+                  'grant_type': 'password',
+                 }
+
+        if api_url == "nlst":
+            token_url = "https://nlst.cancerimagingarchive.net/nbia-api/services/oauth/token"
+        else:
+            token_url = "https://services.cancerimagingarchive.net/nbia-api/services/oauth/token"
+        data = requests.post(token_url, data=params)
+        data.raise_for_status()
+        tmp_access_token = data.json()["access_token"]
+        expires_in = data.json()["expires_in"]
+        tmp_id_token = data.json()["id_token"]
+        # track expiration status/time
+        current_time = datetime.now()
+        tmp_token_exp_time = current_time + timedelta(seconds=expires_in)
+        tmp_api_call_headers = {'Authorization': 'Bearer ' + tmp_access_token}
+        tmp_refresh_token = data.json()["refresh_token"]
+
+        # Store tokens separately for each server
+        if api_url == "nlst":
+            nlst_access_token = tmp_access_token
+            nlst_token_exp_time = tmp_token_exp_time
+            nlst_api_call_headers = tmp_api_call_headers
+            nlst_refresh_token = tmp_refresh_token
+            nlst_id_token = tmp_id_token
+            _log.info(f'Success - Token saved to global nlst_api_call_headers variable and expires at {nlst_token_exp_time}')
+        else:
+            access_token = tmp_access_token
+            token_exp_time = tmp_token_exp_time
+            api_call_headers = tmp_api_call_headers
+            refresh_token = tmp_refresh_token
+            id_token = tmp_id_token
+            _log.info(f'Success - Token saved to global api_call_headers variable and expires at {token_exp_time}')
+        # Return results based on `return_values` flag
+        if return_values:
+            return tmp_api_call_headers, tmp_access_token, tmp_token_exp_time, tmp_refresh_token, tmp_id_token
+        else:
+            return None
+    # handle errors
+    except requests.exceptions.RequestException as err:
+        return log_request_exception(err)
+        raise StopExecution
+
+
+def refreshToken(api_url: str = "primary", return_values: bool = False) -> Union[tuple, None]:
+    """
+    Refreshes security tokens to extend access time for APIs that require authorization.
+
+    Parameters:
+        api_url (str): API server identifier. Use "nlst" for the NLST server.
+        return_values (bool): If True, returns refreshed token details as a tuple. Defaults to False.
+
+    Returns:
+        tuple or None:
+            - If return_values is True, returns a tuple:
+                (API call headers (dict), Access token (str), Token expiration time (datetime),
+                 Refresh token (str), ID token (str)).
+            - If return_values is False, returns None.
+    """
+    global token_exp_time, api_call_headers, access_token, refresh_token, id_token
+    global nlst_token_exp_time, nlst_api_call_headers, nlst_access_token, nlst_refresh_token, nlst_id_token
+
+    # determine which token to refresh
+    try:
+        if api_url == "nlst":
+            tmp_token = nlst_refresh_token
+        else:
+            tmp_token = refresh_token
+    except NameError:
+        _log.error("No token found. Create one using getToken().")
+        raise StopExecution
+
+    # refresh token request
+    try:
+        params = {
+            'client_id': 'nbia',
+            'grant_type': 'refresh_token',
+            'refresh_token': tmp_token
+        }
+
+        if api_url == "nlst":
+            token_url = "https://keycloak.dbmi.cloud/auth/realms/TCIA/protocol/openid-connect/token"
+        else:
+            token_url = "https://keycloak-stg.dbmi.cloud/auth/realms/TCIA/protocol/openid-connect/token"
+        response = requests.post(token_url, data=params)
+        response.raise_for_status()
+        data = response.json()
+        tmp_access_token = data.get("access_token")
+        expires_in = data.get("expires_in")
+        tmp_id_token = data.get("id_token")
+
+        if not tmp_access_token or not expires_in:
+            _log.error("Failed to refresh access token.")
+
+        # track expiration status/time
+        current_time = datetime.now()
+        tmp_token_exp_time = current_time + timedelta(seconds=expires_in)
+        tmp_api_call_headers = {'Authorization': 'Bearer ' + tmp_access_token}
+        tmp_refresh_token = data.get("refresh_token")
+
+        # Store tokens separately for each server
+        if api_url == "nlst":
+            nlst_access_token = tmp_access_token
+            nlst_token_exp_time = tmp_token_exp_time
+            nlst_api_call_headers = tmp_api_call_headers
+            nlst_refresh_token = tmp_refresh_token
+            nlst_id_token = tmp_id_token
+            _log.info(f'Success - Token refreshed for nlst_api_call_headers variable and expires at {nlst_token_exp_time}')
+        else:
+            access_token = tmp_access_token
+            token_exp_time = tmp_token_exp_time
+            api_call_headers = tmp_api_call_headers
+            refresh_token = tmp_refresh_token
+            id_token = tmp_id_token
+            _log.info(f'Success - Token refreshed for api_call_headers variable and expires at {token_exp_time}')
+        # Return results based on `return_values` flag
+        if return_values:
+            return tmp_api_call_headers, tmp_access_token, tmp_token_exp_time, tmp_refresh_token, tmp_id_token
+        else:
+            return None
+
+    # handle errors
+    except requests.exceptions.RequestException as err:
+        return log_request_exception(err)
+        raise StopExecution
+
+
+def makeCredentialFile(user = "", pw = ""):
+    """
+    Creates a credential file to use with NBIA Data Retriever.
+    Interactive prompts are provided for user/pw if they're not specified as parameters.
+    The credential file is a text file that passes the user's credentials in the following format:
+        userName = YourUserName
+        passWord = YourPassword
+        Both parameters are case-sensitive.
+    Additional documentation:
+        https://wiki.cancerimagingarchive.net/x/2QKPBQ
+        https://github.com/kirbyju/TCIA_Notebooks/blob/main/TCIA_Linux_Data_Retriever_App.ipynb
+    """
+    # set user name and password
+    if user == "":
+        print("Enter User: ")
+        userName = input()
+    else:
+        userName = user
+    if pw == "":
+        passWord = getpass.getpass(prompt = 'Enter Password: ')
+    else:
+        passWord = pw
+
+    # create credential file to use with NBIA Data Retriever
+    lines = ['userName=' + userName, 'passWord=' + passWord]
+    with open('credentials.txt', 'w') as f:
+        f.write('\n'.join(lines))
+    _log.info("Credential file for NBIA Data Retriever saved: credentials.txt")
+
+
+def queryData(
+    endpoint: str,
+    options: dict,
+    api_url: str,
+    format: str = "json",
+    method: str = "GET",
+    param: Optional[dict] = None
+) -> Optional[Union[dict, pd.DataFrame]]:
+    """
+    Sends an HTTP request to the specified endpoint and formats the response.
+
+    Args:
+        endpoint (str): The API endpoint to query.
+        options (dict): Query parameters for GET requests.
+        api_url (str): Base URL of the API.
+        format (str): Format of the output. Options are "json", "df" (DataFrame), or "csv". Defaults to "json".
+        method (str): HTTP method to use. Options are "GET" or "POST". Defaults to "GET".
+        param (Optional[dict]): Form data for POST requests. Defaults to None.
+
+    Returns:
+        Optional[Union[dict, pd.DataFrame]]: The API response in the requested format, or None if an error occurs.
+
+    Raises:
+        requests.exceptions.RequestException: If the request fails with an HTTP error.
+    """
+    base_url = setApiUrl(endpoint, api_url)
+    url = f"{base_url}{endpoint}"
+    response = None
+
+    try:
+        headers = nlst_api_call_headers if api_url == "nlst" else api_call_headers
+
+        if method.upper() == "POST":
+            _log.info(f'Calling {endpoint} with parameters {param}')
+            response = requests.post(url, headers=headers, data=param)
+        else:
+            _log.info(f'Calling {endpoint} with parameters {options}')
+            response = requests.get(url, params=options, headers=headers)
+
+        response.raise_for_status()  # Raise an HTTPError for bad responses (4xx, 5xx)
+
+        if not response.content.strip():
+            _log.info("No results found.")
+            return None
+
+        # Attempt to parse the JSON response
+        try:
+            data = response.json()
+        except ValueError:
+            _log.error(f"Failed to decode JSON from response. Response text: {response.text}")
+            return None
+
+        # Format the response
+        if format.lower() == "df":
+            return pd.DataFrame(data)
+        elif format.lower() == "csv":
+            df = pd.DataFrame(data)
+            csv_filename = f"{endpoint}_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.csv"
+            df.to_csv(csv_filename, index=False)
+            _log.info(f"CSV saved to: {csv_filename}")
+            return df
+        else:
+            return data
+
+    except requests.exceptions.RequestException as err:
+        log_request_exception(err)  # Log the error
+        return None  # Explicitly return None to indicate failure
+
 
 def queryData(
     endpoint: str,
