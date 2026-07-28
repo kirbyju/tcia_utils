@@ -18,6 +18,7 @@ from tcia_utils.utils import searchDf
 from tcia_utils.utils import copy_df_cols
 from tcia_utils.utils import format_disk_space
 from tcia_utils.utils import remove_html_tags
+from tcia_utils.utils import get_proxy
 from tcia_utils.datacite import getDoi
 from IPython.display import HTML
 
@@ -153,10 +154,10 @@ def queryData(
     try:
         if method.upper() == "POST":
             _log.info(f'Calling {endpoint} with parameters {param}')
-            response = requests.post(url, data=param)
+            response = requests.post(url, data=param, proxies=get_proxy())
         else:
             _log.info(f'Calling {endpoint} with parameters {options}')
-            response = requests.get(url, params=options)
+            response = requests.get(url, params=options, proxies=get_proxy())
 
         response.raise_for_status()
 
@@ -485,7 +486,7 @@ def getSeriesList(
         url = f"{base_url}{endpoint}"
 
         try:
-            response = requests.post(url, data=param)
+            response = requests.post(url, data=param, proxies=get_proxy())
             response.raise_for_status()
 
             if response and not response.content.strip():
@@ -630,7 +631,7 @@ def _download_and_unzip_series(seriesUID, path, api_url, downloadOptions, as_zip
         data_url = base_url + downloadOptions + seriesUID
 
         _log.info(f"Downloading... {data_url}")
-        data = requests.get(data_url)
+        data = requests.get(data_url, proxies=get_proxy())
 
         if data.status_code == 200:
             if as_zip:
@@ -800,7 +801,7 @@ def downloadImage(seriesUID: str, sopUID: str, path: Optional[str] = "", api_url
         if not os.path.isfile(file_path):
             data_url = f"{base_url}getSingleImage?SeriesInstanceUID={seriesUID}&SOPInstanceUID={sopUID}"
             _log.info(f"Downloading... {data_url}")
-            data = requests.get(data_url)
+            data = requests.get(data_url, proxies=get_proxy())
 
             if data.status_code == 200:
                 os.makedirs(path_tmp, exist_ok=True)
@@ -1159,7 +1160,7 @@ def getSimpleSearch(
 
     # get data & handle any request.post() errors
     try:
-        metadata = requests.post(url, data = options)
+        metadata = requests.post(url, data = options, proxies=get_proxy())
         metadata.raise_for_status()
 
         # check for empty results and format output

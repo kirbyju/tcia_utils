@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from tcia_utils.utils import searchDf
 from tcia_utils.utils import remove_html_tags
 from tcia_utils.utils import copy_df_cols
+from tcia_utils.utils import get_proxy
 
 _log = logging.getLogger(__name__)
 logging.basicConfig(
@@ -79,7 +80,7 @@ def getQuery(endpoint, per_page, format="", file_name=None, fields=None, ids=Non
     
     # Make a GET request to the API endpoint with the parameters
     _log.info('Requesting %s', url)
-    response = requests.get(url, params=params)
+    response = requests.get(url, params=params, proxies=get_proxy())
     
     # Check if the request was successful
     if response.status_code == 200:
@@ -98,7 +99,7 @@ def getQuery(endpoint, per_page, format="", file_name=None, fields=None, ids=Non
                 def fetch_page(page_num):
                     page_params = params.copy()
                     page_params['page'] = page_num
-                    res = requests.get(url, params=page_params)
+                    res = requests.get(url, params=page_params, proxies=get_proxy())
                     if res.status_code == 200:
                         return page_num, res.json().get('results', [])
                     else:
@@ -121,7 +122,7 @@ def getQuery(endpoint, per_page, format="", file_name=None, fields=None, ids=Non
             while 'next' in response.links.keys():
                 next_url = response.links['next']['url']
                 _log.info('Requesting %s', next_url)
-                response = requests.get(next_url)
+                response = requests.get(next_url, proxies=get_proxy())
                 if response.status_code == 200:
                     data.extend(response.json())
                 else:
