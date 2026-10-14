@@ -325,3 +325,13 @@ def test_nonretryable_4xx_and_5xx_stop_after_one_attempt():
             with pytest.raises(Exception):
                 tc._transport.request_json("GET", "/v2/ready")
         assert len(calls) == 1
+
+
+@pytest.mark.parametrize("path", [
+    "/v2/datacite/dois/../../../outside", "/v2/datasets/..",
+    "/v2/datasets/%2e%2e", "/v2/datacite/dois/10.1234/a/../b",
+])
+def test_dot_segments_cannot_escape_route_boundary(path):
+    with client(lambda request: pytest.fail("Invalid route must not issue HTTP")) as tc:
+        with pytest.raises(InvalidRequestError, match="dot path segments"):
+            tc._transport.request_json("GET", path)

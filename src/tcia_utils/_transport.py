@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 import httpx
 
@@ -62,6 +62,12 @@ class Transport:
             raise InvalidRequestError("GET routes do not accept a JSON body")
         if method == "POST" and (params is not None or json_body is None):
             raise InvalidRequestError("POST searches require a JSON body and no URL parameters")
+        # httpx normalizes dot segments before sending. Encoded identifiers must
+        # never make that normalization escape the intended API route.
+        if any(segment in {".", ".."} for segment in unquote(path).split("/")):
+            raise InvalidRequestError("Route identifiers must not contain dot path segments")
+        if not httpx.URL(self.base_url + path).path.startswith("/v2/"):
+            raise InvalidRequestError("Request must remain within TCIA V2 routes")
         # The currently mapped POST routes are searches. No transfer/write route is accepted.
         if method == "POST" and not path.endswith("/search"):
             raise InvalidRequestError("POST is supported only for V2 searches")
