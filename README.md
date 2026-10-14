@@ -1,33 +1,34 @@
-# Overview
-The [tcia_utils](https://pypi.org/project/tcia-utils/) package contains functions to simplify common tasks one might perform when interacting with The Cancer Imaging Archive (TCIA) via Jupyter/Python. Learn more about TCIA and its open-access datasets at https://www.cancerimagingarchive.net/.  Please be sure to comply with the [TCIA Data Usage Policy](https://wiki.cancerimagingarchive.net/x/c4hF).
+# TCIA Utils 4.0
 
-[![Downloads](https://static.pepy.tech/personalized-badge/tcia-utils?period=month&units=international_system&left_color=blue&right_color=grey&left_text=Downloads%20/%20Month)](https://pepy.tech/project/tcia-utils)
+TCIA Utils is a Python client for discovering TCIA datasets, participants, clinical evidence, available data, citations, and verified analytical publications. It uses the shared TCIA V2 REST service. A researcher can start with a question about a dataset without choosing the underlying catalog or storage system.
 
-# Installation
-```
-pip install tcia_utils
-```
+Version `4.0.0a1` is a source candidate. The published `tcia_utils` package may still be 3.x. Build and install this candidate in a separate environment before running the examples:
 
-# Usage
-
-To import functions related to Wordpress, which holds metadata for TCIA datasets:
-```
-from tcia_utils import wordpress
+```sh
+python -m pip install build
+python -m build
+python -m pip install dist/tcia_utils-4.0.0a1-py3-none-any.whl
 ```
 
-To import functions related to the NBIA software, which holds TCIA's DICOM radiology data:
-```
-from tcia_utils import nbia
+The client requires Python 3.11 or newer and `httpx`. Notebook dependencies are in [examples/requirements.txt](examples/requirements.txt). The built wheel is the package used for notebook verification; an editable checkout is not required.
+
+Provide the URL of a TCIA V2 REST host that has a ready installed bundle. The client does not choose a host or make a request during import or construction.
+
+```python
+from tcia_utils import TCIAClient
+
+with TCIAClient(base_url="https://<TCIA-REST-host>") as tcia:
+    service = tcia.status()
+    page = tcia.search_datasets(query="lung", limit=10)
+    for dataset in page.items:
+        print(dataset["dataset_type"], dataset["short_title"], dataset.get("doi"))
+    print(page.completeness.state, service.provenance.release_fingerprint)
 ```
 
-To import functions related to the PathDB software, which holds TCIA's histopathology data:
-```
-from tcia_utils import pathdb
-```
+Searches return one `Page` at a time. Call `page.next_page()` or iterate `page.iter_pages()` when more results are needed. Detail calls return a `Result` containing the service's named fields and notes. Both expose observed release provenance and completeness. `partial` means more cursor pages are available; `unknown` means the route has no exhaustive cursor or contains a bounded sublist. An empty successful page is a real zero-match result. An unavailable service raises `ServiceUnavailableError`.
 
-To import functions related to Datacite, which holds information about citations and Digital Object Identifiers (DOIs) for TCIA datasets:
-```
-from tcia_utils import datacite
-```
+Use [the task-oriented guide](docs/v4/user-guide.md) for methods, evidence scope, selection exports, and tool handoffs. The [migration guide](MIGRATION.md) explains the 3.x API change; [troubleshooting](docs/v4/troubleshooting.md) covers setup and response errors. The five canonical [notebooks](examples/notebooks) teach discovery, public DICOM handoff to `idc-index`, non-DICOM and annotations, controlled public metadata, and participant/clinical evidence. Their default executed cells inspect metadata only.
 
-Example notebooks demonstrating tcia_utils functionality can be found at https://github.com/kirbyju/TCIA_Notebooks.
+Visible TCIA Collection and Analysis Result records establish dataset publication. DataCite metadata and publication metrics enrich those records but do not establish publication by themselves. Public metadata about controlled data does not grant payload access. For public DICOM series detail and viewer URLs, use `idc-index` directly. Selection export prepares route-specific manifests for TCIA Data Retriever; it never transfers imaging payloads.
+
+TCIA data use remains subject to the [TCIA Data Usage Policy](https://www.cancerimagingarchive.net/data-usage-policies-and-restrictions/).
