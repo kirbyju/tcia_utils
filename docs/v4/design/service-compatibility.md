@@ -10,7 +10,7 @@ The client should inspect `/v2/ready` and `/v2/bundle` for release fingerprint, 
 
 ## Observed hosted state
 
-Bounded public metadata probes on 2026-10-14 observed the hosted V2 API at version `0.4.0`, installed `research_detail` profile, and metadata release fingerprint `a74b80068740d823657379be97e704e6db5229424a731de47397aa534213ff29`. Dataset, citation, publication, participant search/detail, coverage, controlled-dataset, controlled-file, annotation-download, and an empty clinical-conflict probe returned HTTP 200. The four nonempty asset/clinical routes above returned HTTP 500. These probes are route samples, not an exhaustive validation of all filters or records. Their statuses are captured in the bounded T03 route-behavior evidence outside this repository. Hosted behavior remains unverified after the source repair until the service is deployed and probed again.
+Bounded public metadata probes on 2026-10-14 observed the hosted V2 API at version `0.4.0`, installed `research_detail` profile, and metadata release fingerprint `a74b80068740d823657379be97e704e6db5229424a731de47397aa534213ff29`. Dataset, citation, publication, participant search/detail, coverage, controlled-dataset, controlled-file, annotation-download, and an empty clinical-conflict probe returned HTTP 200. The four nonempty asset/clinical routes above returned HTTP 500. These probes are route samples, not an exhaustive validation of all filters or records. The bounded [route observations](hosted-route-observation.json) preserve request paths and statuses; the assembled [client smoke report](client-live-smoke.json) records method-level results. Hosted behavior remains unverified after the source repair until the service is deployed and probed again.
 
 ## Deliberate phase-1 limits
 

@@ -18,10 +18,10 @@ Only the coordinator updates this table. Task cards intentionally do not duplica
 | [T06](tasks/T06-implement-participant-and-clinical-evidence-access.md) | Implement participant and clinical evidence access | Done | T03, T04 | worker3 | Integrated `7c0b6e5`; identity, clinical evidence and wire mappings validated. |
 | [T07](tasks/T07-implement-available-data-and-controlled-metadata-discovery.md) | Implement available data and controlled metadata discovery | Done | T03, T04 | coordinator | Availability client `43be895`; eight feature tests and bounded client live checks passed. |
 | [T08](tasks/T08-implement-selection-exports-and-tool-handoffs.md) | Implement selection exports and tool handoffs | Done | T03, T04 | worker2 | Integrated `8451cb9`; 13 export checks plus combined workflow. |
-| [T09](tasks/T09-integrate-the-flat-public-api-and-complete-workflows.md) | Integrate the flat public API and complete workflows | Review | T05, T06, T07, T08 | coordinator | Flat facade assembled; 92 combined offline tests passed; wheel validation next. |
-| [T10](tasks/T10-write-and-verify-the-research-notebooks-and-user-guide.md) | Write and verify the research notebooks and user guide | Active | T09 | worker1 | Five notebooks and beginner documentation on integrated facade. |
-| [T11](tasks/T11-add-package-and-ci-validation-gates.md) | Add package and CI validation gates | Active | T04 | worker2 | CI preparation integrated; final distribution and notebook checks next. |
-| [T12](tasks/T12-review-the-integrated-4.0-candidate-and-prepare-release-handoff.md) | Review the integrated 4.0 candidate and prepare release handoff | Waiting | T09, T10, T11 | — | — |
+| [T09](tasks/T09-integrate-the-flat-public-api-and-complete-workflows.md) | Integrate the flat public API and complete workflows | Done | T05, T06, T07, T08 | coordinator | Flat facade integrated; 101 tests passed from clean wheel and source-archive installs on Python 3.11–3.13. Review fixes `d7286bd`, `f62f256` accepted. |
+| [T10](tasks/T10-write-and-verify-the-research-notebooks-and-user-guide.md) | Write and verify the research notebooks and user guide | Done | T09 | worker1 | Integrated `74dab24`, `f0a27ca`; five built-wheel fixture and bounded live executions, guide and migration docs reviewed. Live failures remain explicit. |
+| [T11](tasks/T11-add-package-and-ci-validation-gates.md) | Add package and CI validation gates | Done | T04 | worker2 | Integrated `cbe158f`; final wheel/sdist each passed 101 tests on Python 3.11, exact CI notebook command passed 5/5. Prior unchanged core matrix passed on 3.11–3.13. Hosted CI has not run. |
+| [T12](tasks/T12-review-the-integrated-4.0-candidate-and-prepare-release-handoff.md) | Review the integrated 4.0 candidate and prepare release handoff | Done | T09, T10, T11 | worker3 | Independent review integrated `918ba97`; code/notebook review and actual Data Retriever parser checks accepted. Release remains no-go against the observed host; see release-readiness report. |
 | [T13](tasks/T13-assess-which-expert-interfaces-are-worth-maintaining.md) | Assess which expert interfaces are worth maintaining | Deferred | T12 | — | — |
 
 Statuses: **Ready** (dependencies accepted), **Waiting** (prerequisites outstanding), **Active**, **Review**, **Done**, **Blocked** (state the concrete blocker), and **Deferred**. Waiting is not a failure. A task marked Done has accepted deliverables; this never implies package publication or service deployment.
@@ -62,10 +62,8 @@ Phase 1 does not repair the 3.x release, preserve every old import, recreate idc
 - Required hosted service capabilities are verified before the hosted notebooks are advertised as working.
 - An independent review distinguishes validated source/builds from deployed services and published packages.
 
-## Current planning checkpoint
+## Delivery checkpoint
 
-The installed TCIA query skill was updated and live-verified as 2026.10.14.1 earlier in this chat. The planning checkout still has pre-existing CRDC edits and is not the v4 integration baseline. T01 verified the published baseline and preserved the original checkout. Implementation is tracked below.
+The installed TCIA query skill was updated and live-verified as `2026.10.14.1`. The new client is a local `4.0.0a1` source candidate on branch `codex/tcia-utils-v4`. The separately validated server repair is on `codex/v4-client-service-compatibility` in the query-skill repository. Neither branch has been pushed, published, or deployed. No imaging payload was transferred.
 
-## Active coordination checkpoint
-
-The canonical implementation board is this file in the isolated integration worktree. The original checkout retains the planning snapshot; its source edits remain untouched. T01 was accepted after review of baseline provenance, the documentation-only commit, and the worker preservation checks. Local commits support integration; push, publication, deployment, and imaging transfers remain outside the execution authorization.
+This file is the canonical implementation board. The original checkout retains its earlier planning snapshot and pre-existing CRDC edits. The [user guide](user-guide.md), [notebook evidence](design/notebook-validation.md), [package validation](design/validation-report.md), and [release review](design/release-readiness.md) provide the handoff. The four failing hosted routes must be repaired and verified with nonempty calls before the full hosted workflows are advertised as working. T13 expert-interface assessment remains deferred.
