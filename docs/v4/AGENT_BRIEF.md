@@ -2,7 +2,7 @@
 
 Implement a clean Python client for TCIA research workflows. Researchers should discover datasets, participants, clinical evidence, available data, citations, and publications without selecting TCIA's underlying software. The package consumes the shared TCIA REST contract; it does not reproduce the metadata ingestion pipeline or require an LLM account.
 
-This brief and the task cards describe future implementation work. Creating this backlog does not start implementation or authorize publication or deployment.
+The user has authorized local implementation with a coordinator and up to three GPT-6 Sol medium agents. The coordinator dispatches task cards after accepting prerequisites. This authorization does not include publication or deployment.
 
 ## Accepted product decisions
 

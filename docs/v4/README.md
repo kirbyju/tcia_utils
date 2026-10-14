@@ -1,6 +1,6 @@
 # TCIA Utils 4.0 implementation backlog
 
-Create a focused Python client for the shared TCIA REST service, with reliable selection exports and notebooks that hand off to existing retrieval/imaging tools. This backlog records the scope agreed on 2026-10-14. It contains 12 phase-1 tasks and one deferred phase-2 assessment. No implementation agents have been dispatched by creating this list.
+Create a focused Python client for the shared TCIA REST service, with reliable selection exports and notebooks that hand off to existing retrieval/imaging tools. This backlog records the scope agreed on 2026-10-14. It contains 12 phase-1 tasks and one deferred phase-2 assessment. Implementation is now authorized and coordinated in the originating Codex chat. All implementation agents are explicitly configured as GPT-6 Sol with medium reasoning.
 
 The product brief is [AGENT_BRIEF.md](AGENT_BRIEF.md). Each task card includes scope, ownership, dependencies, acceptance criteria, validation, and a reusable delegation prompt. These files are repository documentation and should travel with the implementation workspace.
 
@@ -10,8 +10,8 @@ Only the coordinator updates this table. Task cards intentionally do not duplica
 
 | Task | Deliverable | Status | Dependencies | Owner | Workspace and evidence |
 |---|---|---|---|---|---|
-| [T01](tasks/T01-establish-the-isolated-v4-baseline.md) | Establish the isolated v4 baseline | Ready | — | — | — |
-| [T02](tasks/T02-define-the-public-api-and-endpoint-contract.md) | Define the public API and endpoint contract | Ready | — | — | — |
+| [T01](tasks/T01-establish-the-isolated-v4-baseline.md) | Establish the isolated v4 baseline | Done | — | worker1 | Accepted baseline `bde9c995`; original CRDC checkout preserved. |
+| [T02](tasks/T02-define-the-public-api-and-endpoint-contract.md) | Define the public API and endpoint contract | Active | — | worker2 | Isolated worker2 checkout at `bde9c995`. |
 | [T03](tasks/T03-resolve-required-shared-service-gaps.md) | Resolve required shared service gaps | Waiting | T02 | — | — |
 | [T04](tasks/T04-build-the-client-foundation.md) | Build the client foundation | Waiting | T01, T02 | — | — |
 | [T05](tasks/T05-implement-dataset-discovery-and-research-citations.md) | Implement dataset discovery and research citations | Waiting | T03, T04 | — | — |
@@ -65,3 +65,7 @@ Phase 1 does not repair the 3.x release, preserve every old import, recreate idc
 ## Current planning checkpoint
 
 The installed TCIA query skill was updated and live-verified as 2026.10.14.1 earlier in this chat. The planning checkout still has pre-existing CRDC edits and is not the v4 integration baseline. T01 must verify current Git/publication state before setup. The backlog itself changes documentation only.
+
+## Active coordination checkpoint
+
+The canonical implementation board is this file in the isolated integration worktree. The original checkout retains the planning snapshot; its source edits remain untouched. T01 was accepted after review of baseline provenance, the documentation-only commit, and the worker preservation checks. Local commits support integration; push, publication, deployment, and imaging transfers remain outside the execution authorization.
