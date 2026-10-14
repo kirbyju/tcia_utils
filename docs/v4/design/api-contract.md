@@ -1,6 +1,6 @@
 # TCIA Utils 4.0 phase-1 API contract
 
-Status: proposed for coordinator acceptance under T02. This is a source and hosted-route contract, not evidence that a 4.0 package exists or has been published.
+Status: accepted by the coordinator under T02. This is a source and hosted-route contract, not evidence that a 4.0 package exists or has been published.
 
 ## Evidence and boundaries
 

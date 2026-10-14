@@ -11,16 +11,16 @@ Only the coordinator updates this table. Task cards intentionally do not duplica
 | Task | Deliverable | Status | Dependencies | Owner | Workspace and evidence |
 |---|---|---|---|---|---|
 | [T01](tasks/T01-establish-the-isolated-v4-baseline.md) | Establish the isolated v4 baseline | Done | — | worker1 | Accepted baseline `bde9c995`; original CRDC checkout preserved. |
-| [T02](tasks/T02-define-the-public-api-and-endpoint-contract.md) | Define the public API and endpoint contract | Active | — | worker2 | Isolated worker2 checkout at `bde9c995`. |
-| [T03](tasks/T03-resolve-required-shared-service-gaps.md) | Resolve required shared service gaps | Waiting | T02 | — | — |
-| [T04](tasks/T04-build-the-client-foundation.md) | Build the client foundation | Waiting | T01, T02 | — | — |
+| [T02](tasks/T02-define-the-public-api-and-endpoint-contract.md) | Define the public API and endpoint contract | Done | — | worker2 | Contract accepted and integrated as `314de23`; 21 HTTP mappings and eight synthetic fixtures checked. |
+| [T03](tasks/T03-resolve-required-shared-service-gaps.md) | Resolve required shared service gaps | Active | T02 | worker3 | Isolated query-skill service repair at `7b49c1e`; both asset response schemas under review. |
+| [T04](tasks/T04-build-the-client-foundation.md) | Build the client foundation | Active | T01, T02 | worker1 | Worker1 at `314de23`; shared HTTP/result foundation. |
 | [T05](tasks/T05-implement-dataset-discovery-and-research-citations.md) | Implement dataset discovery and research citations | Waiting | T03, T04 | — | — |
 | [T06](tasks/T06-implement-participant-and-clinical-evidence-access.md) | Implement participant and clinical evidence access | Waiting | T03, T04 | — | — |
 | [T07](tasks/T07-implement-available-data-and-controlled-metadata-discovery.md) | Implement available data and controlled metadata discovery | Waiting | T03, T04 | — | — |
 | [T08](tasks/T08-implement-selection-exports-and-tool-handoffs.md) | Implement selection exports and tool handoffs | Waiting | T03, T04 | — | — |
 | [T09](tasks/T09-integrate-the-flat-public-api-and-complete-workflows.md) | Integrate the flat public API and complete workflows | Waiting | T05, T06, T07, T08 | — | — |
 | [T10](tasks/T10-write-and-verify-the-research-notebooks-and-user-guide.md) | Write and verify the research notebooks and user guide | Waiting | T09 | — | — |
-| [T11](tasks/T11-add-package-and-ci-validation-gates.md) | Add package and CI validation gates | Waiting | T04 | — | — |
+| [T11](tasks/T11-add-package-and-ci-validation-gates.md) | Add package and CI validation gates | Active | T04 | worker2 | Preparing independent CI/packaging gates; integrated validation waits for T04. |
 | [T12](tasks/T12-review-the-integrated-4.0-candidate-and-prepare-release-handoff.md) | Review the integrated 4.0 candidate and prepare release handoff | Waiting | T09, T10, T11 | — | — |
 | [T13](tasks/T13-assess-which-expert-interfaces-are-worth-maintaining.md) | Assess which expert interfaces are worth maintaining | Deferred | T12 | — | — |
 
@@ -64,7 +64,7 @@ Phase 1 does not repair the 3.x release, preserve every old import, recreate idc
 
 ## Current planning checkpoint
 
-The installed TCIA query skill was updated and live-verified as 2026.10.14.1 earlier in this chat. The planning checkout still has pre-existing CRDC edits and is not the v4 integration baseline. T01 must verify current Git/publication state before setup. The backlog itself changes documentation only.
+The installed TCIA query skill was updated and live-verified as 2026.10.14.1 earlier in this chat. The planning checkout still has pre-existing CRDC edits and is not the v4 integration baseline. T01 verified the published baseline and preserved the original checkout. Implementation is tracked below.
 
 ## Active coordination checkpoint
 
