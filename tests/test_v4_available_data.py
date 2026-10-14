@@ -6,11 +6,9 @@ import httpx
 import pytest
 
 from tcia_utils import TCIAClient, InvalidRequestError, ProtocolError, ServiceUnavailableError
-from tcia_utils._available_data import AvailableDataMixin
 
 
-class AvailabilityClient(TCIAClient, AvailableDataMixin):
-    pass
+AvailabilityClient = TCIAClient
 
 
 def make_client(payload, *, caps=None):

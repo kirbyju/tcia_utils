@@ -9,11 +9,9 @@ import httpx
 import pytest
 
 from tcia_utils import InvalidRequestError, ProtocolError, ServiceUnavailableError, TCIAClient
-from tcia_utils._clinical import ClinicalMixin
 
 
-class ClinicalClient(TCIAClient, ClinicalMixin):
-    pass
+ClinicalClient = TCIAClient
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "v4"

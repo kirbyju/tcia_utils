@@ -6,15 +6,11 @@ import csv
 from dataclasses import dataclass
 import json
 from pathlib import Path
-import sys
 
 import pytest
 
 
-# T08 is developed independently of T04's composition root. T09 imports the
-# module through the package after facade integration.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src" / "tcia_utils"))
-from _selection import export_selection, select  # noqa: E402
+from tcia_utils._selection import export_selection, select
 
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "v4"

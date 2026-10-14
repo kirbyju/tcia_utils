@@ -6,11 +6,9 @@ import httpx
 import pytest
 
 from tcia_utils import InvalidRequestError, ProtocolError, ServiceUnavailableError, TCIAClient
-from tcia_utils._citations import CitationMethods
 
 
-class CitationClient(CitationMethods, TCIAClient):
-    pass
+CitationClient = TCIAClient
 
 
 def make_client(payload, calls, *, datacite=True, publications=True):

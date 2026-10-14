@@ -11,6 +11,12 @@ import httpx
 from ._errors import InvalidRequestError, ProtocolError, ServiceUnavailableError
 from ._results import Completeness, Page, Provenance, Result, ServiceStatus
 from ._transport import Transport
+from ._datasets import DatasetMethods
+from ._citations import CitationMethods
+from ._participants import ParticipantsMixin
+from ._clinical import ClinicalMixin
+from ._available_data import AvailableDataMixin
+from ._selection import select, export_selection
 
 
 _CAPABILITIES = (
@@ -30,8 +36,11 @@ def _identity_matches(first: Provenance, later: Provenance) -> None:
         raise ProtocolError("Service release or installed profile changed during pagination")
 
 
-class TCIAClient:
+class TCIAClient(DatasetMethods, CitationMethods, ParticipantsMixin, ClinicalMixin, AvailableDataMixin):
     """Reusable synchronous client for a configured TCIA V2 REST host."""
+
+    select = staticmethod(select)
+    export_selection = staticmethod(export_selection)
 
     def __init__(
         self,

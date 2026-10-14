@@ -20,7 +20,7 @@ def _limit(value: int) -> None:
 
 
 def _strings(value: Sequence[str], name: str) -> list[str]:
-    if isinstance(value, (str, bytes)) or not isinstance(value, Sequence) or not all(
+    if isinstance(value, (str, bytes)) or not isinstance(value, Sequence) or not value or not all(
         isinstance(item, str) and item.strip() for item in value
     ):
         raise InvalidRequestError(f"{name} must be a sequence of nonempty strings")

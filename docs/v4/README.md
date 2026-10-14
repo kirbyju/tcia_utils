@@ -13,14 +13,14 @@ Only the coordinator updates this table. Task cards intentionally do not duplica
 | [T01](tasks/T01-establish-the-isolated-v4-baseline.md) | Establish the isolated v4 baseline | Done | — | worker1 | Accepted baseline `bde9c995`; original CRDC checkout preserved. |
 | [T02](tasks/T02-define-the-public-api-and-endpoint-contract.md) | Define the public API and endpoint contract | Done | — | worker2 | Contract accepted and integrated as `314de23`; 21 HTTP mappings and eight synthetic fixtures checked. |
 | [T03](tasks/T03-resolve-required-shared-service-gaps.md) | Resolve required shared service gaps | Done | T02 | worker3 | Service fix `99b7dbd`, 49 tests passed; source accepted. Four hosted routes still require deployment and recheck. |
-| [T04](tasks/T04-build-the-client-foundation.md) | Build the client foundation | Active | T01, T02 | worker1 | Worker1 at `314de23`; shared HTTP/result foundation. |
-| [T05](tasks/T05-implement-dataset-discovery-and-research-citations.md) | Implement dataset discovery and research citations | Waiting | T03, T04 | — | — |
-| [T06](tasks/T06-implement-participant-and-clinical-evidence-access.md) | Implement participant and clinical evidence access | Active | T03, T04 | worker3 | Participant and clinical mixins; validation awaits T04. |
-| [T07](tasks/T07-implement-available-data-and-controlled-metadata-discovery.md) | Implement available data and controlled metadata discovery | Active | T03, T04 | coordinator | Available-data mixin; validation awaits T04. |
-| [T08](tasks/T08-implement-selection-exports-and-tool-handoffs.md) | Implement selection exports and tool handoffs | Active | T03, T04 | worker2 | Offline selection and export implementation; validation awaits T04. |
-| [T09](tasks/T09-integrate-the-flat-public-api-and-complete-workflows.md) | Integrate the flat public API and complete workflows | Waiting | T05, T06, T07, T08 | — | — |
-| [T10](tasks/T10-write-and-verify-the-research-notebooks-and-user-guide.md) | Write and verify the research notebooks and user guide | Waiting | T09 | — | — |
-| [T11](tasks/T11-add-package-and-ci-validation-gates.md) | Add package and CI validation gates | Active | T04 | worker2 | Preparing independent CI/packaging gates; integrated validation waits for T04. |
+| [T04](tasks/T04-build-the-client-foundation.md) | Build the client foundation | Done | T01, T02 | worker1 | Foundation accepted (`55443b1`, `69c38ff`); 23 offline checks and distribution inspection. |
+| [T05](tasks/T05-implement-dataset-discovery-and-research-citations.md) | Implement dataset discovery and research citations | Done | T03, T04 | worker1 | Integrated `0a05c6d`, `882ae81`; reviewed endpoint and filter behavior. |
+| [T06](tasks/T06-implement-participant-and-clinical-evidence-access.md) | Implement participant and clinical evidence access | Done | T03, T04 | worker3 | Integrated `7c0b6e5`; identity, clinical evidence and wire mappings validated. |
+| [T07](tasks/T07-implement-available-data-and-controlled-metadata-discovery.md) | Implement available data and controlled metadata discovery | Done | T03, T04 | coordinator | Availability client `43be895`; eight feature tests and bounded client live checks passed. |
+| [T08](tasks/T08-implement-selection-exports-and-tool-handoffs.md) | Implement selection exports and tool handoffs | Done | T03, T04 | worker2 | Integrated `8451cb9`; 13 export checks plus combined workflow. |
+| [T09](tasks/T09-integrate-the-flat-public-api-and-complete-workflows.md) | Integrate the flat public API and complete workflows | Review | T05, T06, T07, T08 | coordinator | Flat facade assembled; 92 combined offline tests passed; wheel validation next. |
+| [T10](tasks/T10-write-and-verify-the-research-notebooks-and-user-guide.md) | Write and verify the research notebooks and user guide | Active | T09 | worker1 | Five notebooks and beginner documentation on integrated facade. |
+| [T11](tasks/T11-add-package-and-ci-validation-gates.md) | Add package and CI validation gates | Active | T04 | worker2 | CI preparation integrated; final distribution and notebook checks next. |
 | [T12](tasks/T12-review-the-integrated-4.0-candidate-and-prepare-release-handoff.md) | Review the integrated 4.0 candidate and prepare release handoff | Waiting | T09, T10, T11 | — | — |
 | [T13](tasks/T13-assess-which-expert-interfaces-are-worth-maintaining.md) | Assess which expert interfaces are worth maintaining | Deferred | T12 | — | — |
 

@@ -9,11 +9,9 @@ import httpx
 import pytest
 
 from tcia_utils import InvalidRequestError, ProtocolError, ServiceUnavailableError, TCIAClient
-from tcia_utils._participants import ParticipantsMixin
 
 
-class ParticipantClient(TCIAClient, ParticipantsMixin):
-    pass
+ParticipantClient = TCIAClient
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "v4"

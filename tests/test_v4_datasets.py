@@ -9,11 +9,9 @@ import httpx
 import pytest
 
 from tcia_utils import InvalidRequestError, NotFoundError, ServiceUnavailableError, TCIAClient
-from tcia_utils._datasets import DatasetMethods
 
 
-class DatasetClient(DatasetMethods, TCIAClient):
-    pass
+DatasetClient = TCIAClient
 
 
 def make_client(responses, calls):

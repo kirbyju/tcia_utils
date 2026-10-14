@@ -50,3 +50,7 @@ exclude = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/tcia_utils"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_v4_*.py"]
