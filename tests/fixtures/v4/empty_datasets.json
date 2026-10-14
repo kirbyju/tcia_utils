@@ -1,0 +1,9 @@
+{
+  "datasets": [],
+  "count": 0,
+  "limit": 25,
+  "has_more": false,
+  "truncated": false,
+  "next_cursor": null,
+  "note": "Only visible TCIA WordPress records are returned."
+}
