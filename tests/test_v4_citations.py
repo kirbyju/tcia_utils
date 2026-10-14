@@ -118,3 +118,13 @@ def test_unavailable_optional_capability_stops_before_data_route():
         with pytest.raises(ServiceUnavailableError):
             tc.search_citations()
     assert all(call.url.path in {"/v2/ready", "/v2/bundle"} for call in calls)
+
+
+def test_empty_citation_filters_do_not_widen_search():
+    calls = []
+    with make_client({}, calls) as tc:
+        with pytest.raises(InvalidRequestError):
+            tc.search_citations(dois=[])
+        with pytest.raises(InvalidRequestError):
+            tc.search_publications(dataset_dois=[" "])
+    assert calls == []

@@ -143,3 +143,19 @@ def test_missing_and_unavailable_are_not_empty():
         with make_client({"/v2/datasets/MISSING": response}, calls) as tc:
             with pytest.raises(error):
                 tc.get_dataset("MISSING")
+
+
+@pytest.mark.parametrize("operation", [
+    lambda tc: tc.search_datasets(short_titles=[]),
+    lambda tc: tc.search_datasets(short_titles=[" "]),
+    lambda tc: tc.search_datasets(dataset_type="unknown"),
+    lambda tc: tc.search_datasets(has_external_clinical_resource="false"),
+    lambda tc: tc.list_downloads("EXAMPLE", access_levels=[]),
+    lambda tc: tc.list_downloads("EXAMPLE", requires_annotations=1),
+])
+def test_invalid_filters_do_not_silently_widen_query(operation):
+    calls = []
+    with make_client({}, calls) as tc:
+        with pytest.raises(InvalidRequestError):
+            operation(tc)
+    assert calls == []

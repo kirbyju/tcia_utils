@@ -22,9 +22,12 @@ def _filters(**values: Any) -> dict[str, Any]:
     for key, value in values.items():
         if value is None:
             continue
+        if key in {"has_external_clinical_resource", "requires_annotations"} and not isinstance(value, bool):
+            raise InvalidRequestError(f"{key} must be a boolean")
         if key.endswith("s") and key not in {"has_external_clinical_resource", "requires_annotations"}:
-            if isinstance(value, (str, bytes)) or not isinstance(value, Sequence) or not all(isinstance(item, str) for item in value):
-                raise InvalidRequestError(f"{key} must be a sequence of strings")
+            if (isinstance(value, (str, bytes)) or not isinstance(value, Sequence) or
+                not value or not all(isinstance(item, str) and item.strip() for item in value)):
+                raise InvalidRequestError(f"{key} must be a nonempty sequence of nonblank strings")
             value = list(value)
         result[key] = value
     return result
@@ -44,6 +47,8 @@ class DatasetMethods:
         has_external_clinical_resource: bool | None = None, doi: str | None = None,
         limit: int = 25, cursor: str | None = None,
     ) -> Page[dict[str, Any]]:
+        if dataset_type not in {"both", "collection", "analysis_result"}:
+            raise InvalidRequestError("dataset_type must be both, collection, or analysis_result")
         body = _filters(
             query=query, short_titles=short_titles, dataset_type=dataset_type,
             access_levels=access_levels, modalities=modalities, data_types=data_types,
