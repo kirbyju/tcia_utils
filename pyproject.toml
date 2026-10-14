@@ -1,34 +1,25 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.26"]
 build-backend = "hatchling.build"
 
 [project]
 name = "tcia_utils"
-version = "3.3.5"
-authors = [
-  { name="Justin Kirby", email="justin.kirby@nih.gov" },
-]
-description = "A package to simplify common tasks one might perform when interacting with The Cancer Imaging Archive (TCIA) via Jupyter/Python."
+version = "4.0.0a1"
+authors = [{ name="Justin Kirby", email="justin.kirby@nih.gov" }]
+description = "A small Python client for TCIA research discovery and evidence."
 readme = "README.md"
-requires-python = ">=3.9"
+license = "Apache-2.0"
+requires-python = ">=3.11"
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
 ]
 
-dependencies = [
-  "unidecode",
-  "bs4",
-  "requests",
-  "pandas",
-  "tqdm",
-  "plotly",
-  "IPython",
-  "idc-index",
-  "pydicom",
-  "requests"
-]
+dependencies = ["httpx>=0.27,<1"]
 
 [project.urls]
 "Homepage" = "https://github.com/kirbyju/tcia_utils"
@@ -36,6 +27,26 @@ dependencies = [
 
 [project.optional-dependencies]
 test = [
-    "pytest",
-    "pytest-mock",
+    "pytest>=8",
+    "build>=1",
 ]
+tables = ["pandas>=2"]
+examples = ["pandas>=2", "idc-index", "nbformat>=5"]
+
+[tool.hatch.build]
+exclude = [
+  "/src/tcia_utils/datacite.py",
+  "/src/tcia_utils/idc.py",
+  "/src/tcia_utils/nbia.py",
+  "/src/tcia_utils/nbia_v4.py",
+  "/src/tcia_utils/pathdb.py",
+  "/src/tcia_utils/utils.py",
+  "/src/tcia_utils/wordpress.py",
+  "/tests/test_idc.py",
+  "/tests/test_idc_download_fix.py",
+  "/tests/test_nbia.py",
+  "/tests/test_nbia_v4.py",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tcia_utils"]
