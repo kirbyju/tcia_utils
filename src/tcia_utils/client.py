@@ -119,7 +119,7 @@ class TCIAClient:
         body = self._transport.request_json(method, path, params=params, json_body=json_body)
         for name, kind in required_fields.items():
             _field(body, name, kind)
-        if "count" in body or "limit" in body:
+        if "limit" in body:
             count = _field(body, "count", int)
             response_limit = _field(body, "limit", int)
             if count < 0 or response_limit < 1 or count > response_limit:
@@ -127,6 +127,8 @@ class TCIAClient:
             record_lists = [body[name] for name, kind in required_fields.items() if kind is list]
             if len(record_lists) == 1 and count != len(record_lists[0]):
                 raise ProtocolError("Bounded result count does not match records")
+        elif "count" in body and _field(body, "count", int) < 0:
+            raise ProtocolError("Detail result has an invalid count")
         notes: list[str] = []
         for name in note_keys:
             value = body.get(name)

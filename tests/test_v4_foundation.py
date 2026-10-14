@@ -224,6 +224,23 @@ def test_bounded_result_is_unknown_and_rejects_bad_envelopes():
                        required_fields={"files": list, "count": int, "limit": int})
 
 
+def test_detail_count_does_not_imply_a_limit():
+    ready, bundle = identity()
+    payload = {"participant": {"participant_key": "collection:EXAMPLE:0007"},
+               "identifiers": [], "count": 1, "identity_scope": "dataset"}
+
+    def handler(request):
+        if request.url.path.endswith("ready"):
+            return httpx.Response(200, json=ready)
+        return httpx.Response(200, json=bundle if request.url.path.endswith("bundle") else payload)
+
+    with client(handler) as tc:
+        result = tc._result("GET", "/v2/participants/collection%3AEXAMPLE%3A0007",
+                            required_fields={"participant": dict, "identifiers": list,
+                                             "count": int, "identity_scope": str}, bounded=False)
+        assert result.data["count"] == 1
+
+
 def test_empty_success_is_distinct_from_unavailable():
     ready, bundle = identity()
 
