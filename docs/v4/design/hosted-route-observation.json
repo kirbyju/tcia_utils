@@ -257,6 +257,34 @@
         "public_dicom_annotation_detail"
       ],
       "has_more": null
+    },
+    {
+      "method_name": "list_controlled_files",
+      "path": "/v2/controlled-access/A091105/files?limit=1",
+      "status": 200,
+      "count": 0,
+      "keys": [
+        "short_title",
+        "files",
+        "count",
+        "limit",
+        "controlled_access_policy_url",
+        "warning"
+      ]
+    },
+    {
+      "method_name": "list_controlled_files",
+      "path": "/v2/controlled-access/CMB-PCA/files?limit=1",
+      "status": 200,
+      "count": 1,
+      "keys": [
+        "short_title",
+        "files",
+        "count",
+        "limit",
+        "controlled_access_policy_url",
+        "warning"
+      ]
     }
   ]
 }
