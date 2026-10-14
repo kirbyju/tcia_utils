@@ -29,6 +29,7 @@ class CitationMethods:
         return self._page(
             "GET", "/v2/datacite/dois", "dois", params=params,
             limit=limit, cursor=cursor, max_limit=200, capability="datacite_metadata",
+            required_fields={"metrics_note": str},
         )
 
     def get_citation(self, doi: str, *, style: str = "apa") -> Result[dict[str, Any]]:
@@ -62,7 +63,7 @@ class CitationMethods:
         return self._page(
             "GET", "/v2/publications/verified-use", "publications", params=params,
             limit=limit, cursor=cursor, max_limit=200,
-            capability="verified_analytical_publications",
+            capability="verified_analytical_publications", required_fields={"verification_note": str},
         )
 
     def get_impact(self, short_title: str, *, publication_limit: int = 25) -> Result[dict[str, Any]]:

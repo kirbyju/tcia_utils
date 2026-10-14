@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timezone
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 import httpx
 
@@ -160,6 +160,8 @@ class TCIAClient(DatasetMethods, CitationMethods, ParticipantsMixin, ClinicalMix
         cursor: str | None = None,
         max_limit: int,
         capability: str | None = None,
+        required_fields: Mapping[str, type | tuple[type, ...]] | None = None,
+        validate_response: Callable[[dict[str, Any]], None] | None = None,
     ) -> Page[dict[str, Any]]:
         if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= max_limit:
             raise InvalidRequestError(f"limit must be between 1 and {max_limit}")
@@ -190,6 +192,10 @@ class TCIAClient(DatasetMethods, CitationMethods, ParticipantsMixin, ClinicalMix
             items = _field(body, item_key, list)
             if not all(isinstance(item, dict) for item in items):
                 raise ProtocolError(f"Invalid {item_key} records")
+            for name, kind in (required_fields or {}).items():
+                _field(body, name, kind)
+            if validate_response is not None:
+                validate_response(body)
             count = _field(body, "count", int)
             response_limit = _field(body, "limit", int)
             has_more = _field(body, "has_more", bool)

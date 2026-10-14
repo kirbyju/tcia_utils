@@ -38,12 +38,19 @@ class AvailableDataMixin:
                                 data_categories=None, data_types=None, file_formats=None,
                                 geometry_statuses=None, data_domains=None, limit=100, cursor=None):
         """Inspect linked asset summaries; public series detail remains with IDC."""
+        def validate(body):
+            if body.get("participant_key") != participant_key or any(
+                row.get("participant_key") not in {None, participant_key} for row in body["assets"]
+            ):
+                raise ProtocolError("Asset response has inconsistent participant identity")
+
         return self._page(
             "GET", f"/v2/participants/{_segment(participant_key)}/assets", "assets",
             params=_params(access_levels=access_levels, data_categories=data_categories,
                            data_types=data_types, file_formats=file_formats,
                            geometry_statuses=geometry_statuses, data_domains=data_domains),
             limit=limit, cursor=cursor, max_limit=500, capability="participant_search",
+            required_fields={"participant_key": str}, validate_response=validate,
         )
 
     def search_public_assets(self, *, short_titles=None, participant_id=None,
@@ -91,7 +98,7 @@ class AvailableDataMixin:
                               file_types=None, body_part=None, participant_id=None, patient_id=None,
                               has_drs_uri=None, limit=50):
         """Inspect a bounded public inventory; returned locations do not grant access."""
-        return self._available_bounded(
+        result = self._available_bounded(
             f"/v2/controlled-access/{_segment(short_title)}/files", "files",
             params=_params(route_systems=route_systems, modalities=modalities, file_types=file_types,
                            body_part=body_part, participant_id=participant_id, patient_id=patient_id,
@@ -99,6 +106,12 @@ class AvailableDataMixin:
             fields={"short_title": str, "controlled_access_policy_url": str, "warning": str},
             capability="controlled_access_detail", notes=("warning",),
         )
+        if result.data["short_title"].casefold() != short_title.casefold() or any(
+            not isinstance(row.get("short_title"), str) or row["short_title"].casefold() != short_title.casefold()
+            for row in result.data["files"]
+        ):
+            raise ProtocolError("Controlled-file response has inconsistent dataset identity")
+        return result
 
     def search_annotation_downloads(self, *, query=None, short_titles=None, modalities=None,
                                     access_levels=None, limit=25):

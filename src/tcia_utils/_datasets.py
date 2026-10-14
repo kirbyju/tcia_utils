@@ -58,7 +58,8 @@ class DatasetMethods:
             has_external_clinical_resource=has_external_clinical_resource, doi=doi,
         )
         return self._page("POST", "/v2/datasets/search", "datasets",
-                          json_body=body, limit=limit, cursor=cursor, max_limit=200)
+                          json_body=body, limit=limit, cursor=cursor, max_limit=200,
+                          required_fields={"note": str})
 
     def get_dataset(self, short_title: str) -> Result[dict[str, Any]]:
         result = self._result(
@@ -104,4 +105,5 @@ class DatasetMethods:
         return self._page(
             "GET", f"/v2/datasets/{_segment(short_title, 'short_title')}/downloads",
             "downloads", params=params, limit=limit, cursor=cursor, max_limit=200,
+            required_fields={"short_title": str},
         )

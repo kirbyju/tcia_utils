@@ -93,3 +93,28 @@ def test_annotation_signal_does_not_become_source_relationship():
         result = client.search_annotation_downloads(limit=1)
         assert result.completeness.state == "unknown"
         assert result.data["public_dicom_annotation_detail"] == {"route": "IDC"}
+
+
+def test_participant_assets_reject_cross_participant_response():
+    payload = {"participant_key": "OTHER", "assets": [{"participant_key": "OTHER"}],
+               "count": 1, "limit": 1, "has_more": False, "truncated": False, "next_cursor": None}
+    with make_client(payload)[0] as client, pytest.raises(ProtocolError, match="participant identity"):
+        client.list_participant_assets("EXPECTED", limit=1)
+
+
+def test_controlled_files_reject_wrong_dataset():
+    payload = {"short_title": "OTHER", "files": [], "count": 0, "limit": 1,
+               "warning": "", "controlled_access_policy_url": "https://example.test/policy"}
+    with make_client(payload)[0] as client, pytest.raises(ProtocolError, match="dataset identity"):
+        client.list_controlled_files("EXPECTED", limit=1)
+
+
+def test_following_participant_asset_pages_preserve_requested_identity():
+    payload = {"participant_key": "EXPECTED", "assets": [{"participant_key": "EXPECTED"}],
+               "count": 1, "limit": 1, "has_more": True, "truncated": True, "next_cursor": "next"}
+    with make_client(payload)[0] as client:
+        page = client.list_participant_assets("EXPECTED", limit=1)
+        payload.update(participant_key="OTHER", assets=[{"participant_key": "OTHER"}],
+                       has_more=False, truncated=False, next_cursor=None)
+        with pytest.raises(ProtocolError, match="participant identity"):
+            page.next_page()

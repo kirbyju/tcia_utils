@@ -126,3 +126,21 @@ def test_empty_citation_filters_do_not_widen_search():
         with pytest.raises(InvalidRequestError):
             tc.search_publications(dataset_dois=[" "])
     assert calls == []
+
+
+def test_citation_page_requires_metrics_provenance_note():
+    payload = {"dois": [], "count": 0, "limit": 25, "has_more": False,
+               "truncated": False, "next_cursor": None}
+    with make_client(payload, []) as tc, pytest.raises(ProtocolError, match="metrics_note"):
+        tc.search_citations()
+
+
+def test_following_citation_pages_also_require_metrics_note():
+    payload = {"dois": [{"doi": "10.1/example"}], "count": 1, "limit": 1,
+               "has_more": True, "truncated": True, "next_cursor": "next", "metrics_note": "Events only"}
+    with make_client(payload, []) as tc:
+        page = tc.search_citations(limit=1)
+        payload.pop("metrics_note")
+        payload.update(dois=[], count=0, has_more=False, truncated=False, next_cursor=None)
+        with pytest.raises(ProtocolError, match="metrics_note"):
+            page.next_page()
