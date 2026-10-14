@@ -1,0 +1,92 @@
+name: Validate TCIA Utils v4
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+  workflow_call:
+    inputs:
+      require_notebooks:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  offline-tests:
+    name: Offline tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install v4 core and test dependencies
+        run: python -m pip install -e '.[test]'
+      - name: Run offline v4 tests
+        run: python -m pytest -q tests/test_v4_*.py
+
+  distributions:
+    name: Build and install distributions
+    needs: offline-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Build wheel and source distribution
+        run: |
+          python -m pip install build
+          python -m build
+      - name: Inspect package contents and core dependencies
+        run: python tools/check_v4_distribution.py dist
+      - name: Install and import wheel in a clean environment
+        run: |
+          python -m venv wheel-venv
+          wheel-venv/bin/python -m pip install dist/*.whl
+          wheel-venv/bin/python -c 'from tcia_utils import TCIAClient; assert TCIAClient.__name__ == "TCIAClient"'
+      - name: Install and import source distribution in a clean environment
+        run: |
+          python -m venv sdist-venv
+          sdist-venv/bin/python -m pip install dist/*.tar.gz
+          sdist-venv/bin/python -c 'from tcia_utils import TCIAClient; assert TCIAClient.__name__ == "TCIAClient"'
+
+  examples:
+    name: Optional examples and notebook structure
+    needs: offline-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install example dependencies separately
+        run: python -m pip install -e '.[examples]'
+      - name: Check optional imports
+        run: python -c 'import idc_index, nbformat, pandas'
+      - name: Validate notebook files without executing them
+        run: |
+          python tools/validate_v4_notebooks.py examples/notebooks
+          if [ "${{ inputs.require_notebooks }}" = "true" ]; then
+            python tools/validate_v4_notebooks.py examples/notebooks --require-count 5
+          fi
+      - name: Execute deterministic offline notebook variants
+        run: |
+          if [ -f tools/run_v4_notebooks_offline.py ]; then
+            python tools/run_v4_notebooks_offline.py examples/notebooks
+          elif [ -d examples/notebooks ] || [ "${{ inputs.require_notebooks }}" = "true" ]; then
+            echo "T10 offline notebook runner is required with the notebooks and for publication" >&2
+            exit 1
+          else
+            echo "T10 offline notebook runner pending"
+          fi
