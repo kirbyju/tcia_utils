@@ -1,6 +1,10 @@
 # TCIA Utils v4 service compatibility
 
-T03 validates the accepted [phase-1 contract](api-contract.md) against the shared TCIA REST/MCP service. The local service repair is commit `99b7dbd` in `tcia-query-skill`, with skill hash manifest version `2026.10.14.2`. It is a source change only: it has not been published, installed, or deployed. The TCIA Utils client must keep source validation separate from the state of its configured host.
+T03 validates the accepted [phase-1 contract](api-contract.md) against the shared TCIA REST/MCP service. **Post-deployment check, 2026-10-15:** participant assets, public non-DICOM assets, and clinical facts now return nonempty successful results through both REST and MCP. Both interfaces match the published metadata fingerprint `a74b80068740d823657379be97e704e6db5229424a731de47397aa534213ff29`.
+
+Clinical subjects still fail because their nested resolved-source metadata contains source IDs, lineage, evidence scope, and inference flags rejected by the original model. The producer also emits structured conflict values. Follow-up [commit `195feae`](https://github.com/kirbyju/tcia-query-skill/commit/195feaef9673ecf5d84fd86904ef8fb99f15ed49) preserves both nested shapes and retains legacy string conflicts. It passed 51 server tests, including an actual-producer REST/MCP regression, seven skill-contract tests, the version check for `2026.10.15.3`, and [hosted CI](https://github.com/kirbyju/tcia-query-skill/actions/runs/38738707353). It is pushed to `main` and requires another production update/restart, followed by a nonempty clinical-subject probe. Full hosted compatibility remains pending.
+
+The original local repair `99b7dbd` was rebased and pushed as `c9780cd`. The observations and local checks below retain the 2026-10-14 pre-deployment evidence; they do not supersede the update above.
 
 ## Required service behavior
 
