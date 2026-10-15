@@ -1,4 +1,8 @@
-# Notebook validation, 2026-10-14
+# Notebook validation
+
+**2026-10-15 post-deployment update:** all five live metadata notebooks passed again against the installed `4.0.0a1` wheel, with zero unavailable-route messages. The [current live report](notebook-live-validation-2026-10-15.json) supersedes the hosted failure observations below. No imaging payloads were transferred.
+
+## Original 2026-10-14 validation
 
 The five canonical notebooks were executed from the built `4.0.0a1` wheel in an isolated Python 3.13 examples environment. The environment used `idc-index` 0.13.0, IDC index data 25.0.0 (reported by IDC as `v25`), and pandas 3.0.6. The [fixture report](notebook-fixture-validation.json) records five successful synthetic runs. Fixture mode uses an in-memory HTTP transport, labels its output **SYNTHETIC FIXTURE MODE**, and re-raises client errors so a changed API cannot silently pass.
 

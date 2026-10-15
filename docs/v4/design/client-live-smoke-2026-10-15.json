@@ -1,0 +1,123 @@
+{
+  "observed_at_utc": "2026-10-15T13:05:15.423022+00:00",
+  "client_source_basis": "installed 4.0.0a1 wheel; runtime matches 29f1538",
+  "service_base_url": "https://tcia.duckdns.org",
+  "release_fingerprint": "a74b80068740d823657379be97e704e6db5229424a731de47397aa534213ff29",
+  "scope": "One bounded metadata-only request per remote public method; zero payload transfers. This does not prove all records or filters work.",
+  "results": [
+    {
+      "method": "status",
+      "result": "ok",
+      "completeness": "complete"
+    },
+    {
+      "method": "search_datasets",
+      "result": "ok",
+      "completeness": "complete",
+      "count": 1
+    },
+    {
+      "method": "get_dataset",
+      "result": "ok",
+      "completeness": "unknown"
+    },
+    {
+      "method": "get_access",
+      "result": "ok",
+      "completeness": "unknown"
+    },
+    {
+      "method": "list_downloads",
+      "result": "ok",
+      "completeness": "complete",
+      "count": 1
+    },
+    {
+      "method": "search_citations",
+      "result": "ok",
+      "completeness": "complete",
+      "count": 1
+    },
+    {
+      "method": "get_citation",
+      "result": "ok",
+      "completeness": "complete"
+    },
+    {
+      "method": "search_publications",
+      "result": "ok",
+      "completeness": "partial",
+      "count": 1
+    },
+    {
+      "method": "get_impact",
+      "result": "ok",
+      "completeness": "unknown"
+    },
+    {
+      "method": "search_participants",
+      "result": "ok",
+      "completeness": "partial",
+      "count": 1
+    },
+    {
+      "method": "get_participant",
+      "result": "ok",
+      "completeness": "complete",
+      "count": 1
+    },
+    {
+      "method": "list_participant_assets",
+      "result": "ok",
+      "completeness": "partial",
+      "count": 1
+    },
+    {
+      "method": "get_coverage",
+      "result": "ok",
+      "completeness": "complete"
+    },
+    {
+      "method": "list_clinical_subjects",
+      "result": "ok",
+      "completeness": "unknown",
+      "count": 1
+    },
+    {
+      "method": "list_clinical_facts",
+      "result": "ok",
+      "completeness": "unknown",
+      "count": 1
+    },
+    {
+      "method": "list_clinical_conflicts",
+      "result": "ok",
+      "completeness": "unknown",
+      "count": 0
+    },
+    {
+      "method": "search_public_assets",
+      "result": "ok",
+      "completeness": "partial",
+      "count": 1
+    },
+    {
+      "method": "search_controlled_datasets",
+      "result": "ok",
+      "completeness": "unknown",
+      "count": 1
+    },
+    {
+      "method": "list_controlled_files",
+      "result": "ok",
+      "completeness": "unknown",
+      "count": 1
+    },
+    {
+      "method": "search_annotation_downloads",
+      "result": "ok",
+      "completeness": "unknown",
+      "count": 1
+    }
+  ]
+}
