@@ -22,11 +22,11 @@ Install optional examples independently from the built wheel:
 python -m venv examples-venv
 examples-venv/bin/python -m pip install 'dist/tcia_utils-4.0.0a1-py3-none-any.whl[examples]'
 examples-venv/bin/python -c 'import idc_index, nbformat, pandas'
-examples-venv/bin/python tools/validate_v4_notebooks.py examples/notebooks
-examples-venv/bin/python tools/run_v4_notebooks_offline.py examples/notebooks
+examples-venv/bin/python tools/validate_v4_notebooks.py notebook-examples/tcia_utils_v4
+examples-venv/bin/python tools/run_v4_notebooks_offline.py notebook-examples/tcia_utils_v4
 ```
 
-The structure hook never executes cells. Before T10, a missing `examples/notebooks` directory is reported as pending on branch/PR checks; once it exists, the hook requires at least five valid notebooks with code cells. CI invokes `tools/run_v4_notebooks_offline.py` when T10 supplies it, and fails if the notebook directory exists without the runner. That runner must execute deterministic fixture variants and assert zero payload calls; T10 owns it and the separately labeled, bounded metadata-only live smoke check. The publishing workflow calls validation with `require_notebooks=true`, so a release tag fails if the five notebooks or offline runner are absent. Transfer cells must remain opt-in. After T09/T10 integration, rerun all commands and inspect the notebook report for package/service/IDC versions, credentials, private paths, and unintended payload calls.
+The examples job reads `examples/notebooks.json`, validates its repository, immutable commit, directory, count, and package version, then checks out TCIA_Notebooks into `notebook-examples`. It validates exactly five canonical notebooks and executes their fixture variants against the installed wheel. The tutorial commit must be pushed before package CI can fetch it. Transfer cells remain opt-in; record package/service/IDC versions and inspect notebook output for unintended payload calls.
 
 ## GitHub Actions gates
 

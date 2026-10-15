@@ -12,11 +12,11 @@ Teach the new client through small, readable research workflows and explicit han
 
 ## Work and boundaries
 
-Create five notebooks: dataset discovery/citations; selecting public DICOM identifiers and using idc-index directly for detail/preview; non-DICOM imaging and annotations; controlled public metadata with manifest preparation; participant/clinical/imaging availability selection. Use small public examples and explain source scope, missing evidence, and access limits when they affect choices. All default executable cells remain metadata-only; real transfer examples are nonexecuting or explicitly opt-in. Add a quickstart, installation guide, task-oriented API documentation, migration guidance for 3.x users, and troubleshooting. Choose one canonical home for notebooks in the v4 repo and use links from TCIA_Notebooks rather than duplicate maintained copies.
+Create five notebooks: dataset discovery/citations; selecting public DICOM identifiers and using idc-index directly for detail/preview; non-DICOM imaging and annotations; controlled public metadata with manifest preparation; participant/clinical/imaging availability selection. Use small public examples and explain source scope, missing evidence, and access limits when they affect choices. All default executable cells remain metadata-only; real transfer examples are nonexecuting or explicitly opt-in. Add a quickstart, installation guide, task-oriented API documentation, migration guidance for 3.x users, and troubleshooting. Per the 2026-10-15 user decision, maintain canonical notebooks in TCIA_Notebooks/tcia_utils_v4 and link from the package repository. Keep the package CI bound to an immutable tutorial revision.
 
 ## Deliverables and ownership
 
-Notebooks under the T02/T09-agreed examples directory, updated primary README/user docs, pinned or constrained reproducible example environment, and a notebook validation report. Coordinate any TCIA_Notebooks change separately; do not alter historical workshop notebooks wholesale.
+Notebooks under TCIA_Notebooks/tcia_utils_v4, updated primary README/user docs, pinned or constrained reproducible example environment, and a notebook validation report. Coordinate any TCIA_Notebooks change separately; do not alter historical workshop notebooks wholesale.
 
 ## Acceptance criteria
 

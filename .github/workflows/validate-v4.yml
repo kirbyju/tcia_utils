@@ -72,6 +72,27 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+      - name: Read the pinned tutorial revision
+        id: notebooks
+        run: |
+          python - <<'PYCODE'
+          import json, os, re, tomllib
+          from pathlib import Path
+          pin = json.loads(Path("examples/notebooks.json").read_text())
+          package = tomllib.loads(Path("pyproject.toml").read_text())["project"]
+          assert pin["repository"] == "kirbyju/TCIA_Notebooks"
+          assert re.fullmatch(r"[0-9a-f]{40}", pin["ref"])
+          assert pin["directory"] == "tcia_utils_v4" and pin["notebook_count"] == 5
+          assert pin["package_version"] == package["version"]
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"ref={pin['ref']}\n")
+          PYCODE
+      - name: Check out canonical tutorials
+        uses: actions/checkout@v4
+        with:
+          repository: kirbyju/TCIA_Notebooks
+          ref: ${{ steps.notebooks.outputs.ref }}
+          path: notebook-examples
       - name: Build and install wheel with example dependencies
         run: |
           python -m pip install build
@@ -81,19 +102,7 @@ jobs:
           examples-venv/bin/python -m pip install "${wheel}[examples]"
       - name: Check optional imports
         run: examples-venv/bin/python -c 'import idc_index, nbformat, pandas, tcia_utils; print(tcia_utils.__file__)'
-      - name: Validate notebook files without executing them
-        run: |
-          examples-venv/bin/python tools/validate_v4_notebooks.py examples/notebooks
-          if [ "${{ inputs.require_notebooks }}" = "true" ]; then
-            examples-venv/bin/python tools/validate_v4_notebooks.py examples/notebooks --require-count 5
-          fi
+      - name: Validate the five tutorial notebooks
+        run: examples-venv/bin/python tools/validate_v4_notebooks.py notebook-examples/tcia_utils_v4 --require-count 5
       - name: Execute deterministic offline notebook variants
-        run: |
-          if [ -f tools/run_v4_notebooks_offline.py ]; then
-            examples-venv/bin/python tools/run_v4_notebooks_offline.py examples/notebooks
-          elif [ -d examples/notebooks ] || [ "${{ inputs.require_notebooks }}" = "true" ]; then
-            echo "T10 offline notebook runner is required with the notebooks and for publication" >&2
-            exit 1
-          else
-            echo "T10 offline notebook runner pending"
-          fi
+        run: examples-venv/bin/python tools/run_v4_notebooks_offline.py notebook-examples/tcia_utils_v4

@@ -14,4 +14,4 @@ The client needs an explicit TCIA V2 REST `base_url`. `status()` reports its obs
 
 Start a migration by calling `search_datasets()`, then inspect `get_dataset()` and `list_downloads()` before choosing records. Use `search_participants()` and clinical methods only where the service reports the corresponding capability. Keep each result's provenance and completeness when saving an analysis. A `Page` covers one requested page; use explicit cursor iteration for more. Bounded clinical and controlled routes report `unknown` completeness even if their returned count is below the limit.
 
-Existing workshop notebooks under `TCIA_Notebooks` remain historical examples of older APIs. The five maintained 4.0 notebooks live under [`examples/notebooks`](examples/notebooks) in this repository and use the built 4.0 package.
+Existing workshop notebooks under `TCIA_Notebooks` remain historical examples of older APIs. The five maintained 4.0 notebooks live under [TCIA_Notebooks/tcia_utils_v4](https://github.com/kirbyju/TCIA_Notebooks/tree/main/tcia_utils_v4) and use the installed 4.0 package.

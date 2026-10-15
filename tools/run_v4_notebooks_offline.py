@@ -21,7 +21,7 @@ from nbclient import NotebookClient
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOKS = ROOT / "examples" / "notebooks"
+NOTEBOOKS = ROOT / "notebook-examples" / "tcia_utils_v4"
 EXPECTED = (
     "01_discover_datasets_citations.ipynb",
     "02_public_dicom_idc.ipynb",

@@ -2,7 +2,7 @@
 
 ## Install and connect
 
-The 4.0.0a1 source candidate requires Python 3.11 or newer. Build the wheel and install it in a fresh environment as shown in the [README](../../README.md). Install `tcia_utils[tables]` only if you want pandas conversion; the core client imports no pandas, notebooks, or imaging libraries. The [notebook environment](../../examples/requirements.txt) pins the separately tested example tools.
+The 4.0.0a1 source candidate requires Python 3.11 or newer. Build the wheel and install it in a fresh environment as shown in the [README](../../README.md). Install `tcia_utils[tables]` only if you want pandas conversion; the core client imports no pandas, notebooks, or imaging libraries. The [notebook environment](https://github.com/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/requirements.txt) pins the separately tested example tools.
 
 Set an explicit `base_url` for a TCIA V2 REST host. `TCIAClient` does not select a host, authenticate, transfer files, or contact the network until a method is called. Close it with a `with` block or `close()`.
 
@@ -55,6 +55,6 @@ Use `search_citations()` and `get_citation(doi, style="apa")` for DataCite metad
 
 Data Retriever CSVs have exactly one recognized route column: `SeriesInstanceUID`, `imageUrl`, or `drs_uri`. Public and controlled selections, and different routes, go to separate files. A `source_url` is not automatically a deliverable `imageUrl`. Controlled `drs_uri` is public metadata; actual retrieval requires separate authorization. An Aspera package/path handoff has its own format only when exact package/path fields are present. Selection cannot invent `.tcia` files, signed URLs, missing DICOM UIDs, or source-image relationships. Include source images only after an explicit selection choice.
 
-For public DICOM detail, use `idc-index` directly with an evidenced dataset DOI or reviewed patient identifier. Query IDC for series identifiers and viewer URLs, check IDC coverage independently, then supply verified `SeriesInstanceUID` values to a selection. TCIA Utils does not promise series UID discovery from the current REST asset DTO and does not wrap the full `idc-index` API. See the [public DICOM notebook](../../examples/notebooks/02_public_dicom_idc.ipynb) for the direct handoff.
+For public DICOM detail, use `idc-index` directly with an evidenced dataset DOI or reviewed patient identifier. Query IDC for series identifiers and viewer URLs, check IDC coverage independently, then supply verified `SeriesInstanceUID` values to a selection. TCIA Utils does not promise series UID discovery from the current REST asset DTO and does not wrap the full `idc-index` API. See the [public DICOM notebook](https://github.com/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/02_public_dicom_idc.ipynb) for the direct handoff.
 
-The five maintained notebooks under [`examples/notebooks`](../../examples/notebooks) contain explicit synthetic fixture and bounded live metadata modes. Executable default cells do not call a downloader. Live success depends on the configured hosted service and IDC availability; a fixture run demonstrates code and data shape only.
+The five maintained notebooks under [TCIA_Notebooks/tcia_utils_v4](https://github.com/kirbyju/TCIA_Notebooks/tree/main/tcia_utils_v4) contain explicit synthetic fixture and bounded live metadata modes. Executable default cells do not call a downloader. Live success depends on the configured hosted service and IDC availability; a fixture run demonstrates code and data shape only.

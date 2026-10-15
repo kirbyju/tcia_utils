@@ -10,7 +10,7 @@ python -m build
 python -m pip install dist/tcia_utils-4.0.0a1-py3-none-any.whl
 ```
 
-The client requires Python 3.11 or newer and `httpx`. Notebook dependencies are in [examples/requirements.txt](examples/requirements.txt). The built wheel is the package used for notebook verification; an editable checkout is not required.
+The client requires Python 3.11 or newer and `httpx`. Notebook dependencies are in [the tutorial requirements](https://github.com/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/requirements.txt). The built wheel is the package used for notebook verification; an editable checkout is not required.
 
 Provide the URL of a TCIA V2 REST host that has a ready installed bundle. The client does not choose a host or make a request during import or construction.
 
@@ -27,7 +27,7 @@ with TCIAClient(base_url="https://<TCIA-REST-host>") as tcia:
 
 Searches return one `Page` at a time. Call `page.next_page()` or iterate `page.iter_pages()` when more results are needed. Detail calls return a `Result` containing the service's named fields and notes. Both expose observed release provenance and completeness. `partial` means more cursor pages are available; `unknown` means the route has no exhaustive cursor or contains a bounded sublist. An empty successful page is a real zero-match result. Failures raise typed `TCIAError` subclasses: for example, `ServiceUnavailableError` for a missing capability or HTTP 503, `HTTPResponseError` for HTTP 500, and `TransportError` for a connection failure.
 
-Use [the task-oriented guide](docs/v4/user-guide.md) for methods, evidence scope, selection exports, and tool handoffs. The [migration guide](MIGRATION.md) explains the 3.x API change; [troubleshooting](docs/v4/troubleshooting.md) covers setup and response errors. The five canonical [notebooks](examples/notebooks) teach discovery, public DICOM handoff to `idc-index`, non-DICOM and annotations, controlled public metadata, and participant/clinical evidence. Their default executed cells inspect metadata only.
+Use [the task-oriented guide](docs/v4/user-guide.md) for methods, evidence scope, selection exports, and tool handoffs. The [migration guide](MIGRATION.md) explains the 3.x API change; [troubleshooting](docs/v4/troubleshooting.md) covers setup and response errors. The five canonical [notebooks](https://github.com/kirbyju/TCIA_Notebooks/tree/main/tcia_utils_v4) teach discovery, public DICOM handoff to `idc-index`, non-DICOM and annotations, controlled public metadata, and participant/clinical evidence. Their default executed cells inspect metadata only.
 
 This source candidate is not yet release-ready. The [service compatibility review](docs/v4/design/service-compatibility.md) records required deployed capabilities. In a bounded live check on October 14, 2026, the observed host returned HTTP 500 for participant assets, public non-DICOM assets, clinical subjects, and clinical facts; see the [client smoke report](docs/v4/design/client-live-smoke.json) and [notebook validation](docs/v4/design/notebook-validation.md). Fixture notebook success does not establish hosted support for those routes.
 
