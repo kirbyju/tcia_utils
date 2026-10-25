@@ -31,7 +31,7 @@ test = [
     "build>=1",
 ]
 tables = ["pandas>=2"]
-examples = ["pandas>=2,<4", "idc-index>=0.13,<1", "nbformat>=5,<6", "nbclient>=0.11,<1", "ipykernel>=7,<8"]
+examples = ["pandas>=2,<4", "idc-index>=0.13,<1", "nbformat>=5,<6", "nbclient>=0.11,<1", "ipykernel>=7,<8", "nibabel>=5,<6"]
 
 [tool.hatch.build]
 exclude = [

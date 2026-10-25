@@ -26,7 +26,7 @@ examples-venv/bin/python tools/validate_v4_notebooks.py notebook-examples/tcia_u
 examples-venv/bin/python tools/run_v4_notebooks_offline.py notebook-examples/tcia_utils_v4
 ```
 
-The examples job reads `examples/notebooks.json`, validates its repository, immutable commit, directory, count, and package version, then checks out TCIA_Notebooks into `notebook-examples`. It validates exactly five canonical notebooks and executes their fixture variants against the installed wheel. The tutorial commit must be pushed before package CI can fetch it. Transfer cells remain opt-in; record package/service/IDC versions and inspect notebook output for unintended payload calls.
+The examples job reads `examples/notebooks.json`, validates its repository, immutable commit, directory, count, and package version, then checks out TCIA_Notebooks into `notebook-examples`. It validates exactly one standalone workshop notebook and executes it against an explicitly labeled recording of public metadata with the installed wheel. Nine focused example tests cover dataset-scoped identity, clinical caps, same-study CT/SEG selection, credential-path handling, manifest validation, and NIfTI grid comparison. The tutorial commit must be pushed before package CI can fetch it. Transfer cells remain opt-in; record package/service versions and inspect notebook output for unintended payload calls.
 
 ## GitHub Actions gates
 

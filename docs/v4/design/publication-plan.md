@@ -1,6 +1,6 @@
 # Coordinated GitHub and PyPI publication plan
 
-Prepared 2026-10-15. The recommended first release is `4.0.0a1`. PyPI currently
+Updated 2026-10-25. The recommended first release is `4.0.0a1`. PyPI currently
 serves stable `3.3.5`, and neither PyPI nor GitHub tags contain a v4 release.
 Normal pip installs continue to prefer stable releases; researchers can opt in
 with `python -m pip install tcia_utils==4.0.0a1` after publication. Before a later
@@ -12,15 +12,16 @@ stable 4.0 release, review older tutorial dependency pins and migration guidance
   The original CRDC checkout and its uncommitted files were preserved.
 - Tutorials: branch `codex/tcia-utils-v4-notebooks` in TCIA_Notebooks, based on
   its current main. The original notebook checkout and downloads were preserved.
-- Canonical tutorials: `TCIA_Notebooks/tcia_utils_v4`, including helper,
-  synthetic fixture data, requirements, generator, and five notebooks.
+- Canonical workshop: `TCIA_Notebooks/tcia_utils_v4`, one standalone notebook,
+  requirements, generator, recorded public-metadata regression fixture, and
+  maintainer-only validation tools. The old five drafts have been superseded.
 - Package CI reads `examples/notebooks.json` and checks out tutorial commit
-  `4f93716eb3bd9de97df0974255826664e0eed2bc`. Maintained copies were removed from
+  `1214330acee1914b81cdc3ba4e8272bf916fd29a`. Maintained copies were removed from
   the package. The tutorial commit must be pushed before package CI can fetch it.
-- Tutorial execution passed 5/5 fixtures and 5/5 bounded live variants from the
-  relocated folder. All 101 package tests, build/archive checks, pin/version
-  checks and workflow YAML parsing passed locally. The rebuilt wheel's runtime
-  module bytes match the previously clean-install-tested candidate.
+- The single workshop passed live public-metadata execution and offline replay
+  against the installed candidate wheel on Python 3.13. Nine focused notebook
+  tests and all 101 installed-wheel package tests passed locally. The workflow
+  still requires hosted checks before publication.
 - The four required hosted routes and MCP equivalents are verified. The earlier
   deployment blocker is resolved. This preparation does not publish the package.
 
@@ -30,7 +31,7 @@ stable 4.0 release, review older tutorial dependency pins and migration guidance
    and open its v4 PR. No release tag is created in this step. Package CI can
    then retrieve the exact tutorial commit even while its PR is pending.
 2. Require the package's hosted Python 3.11–3.13 checks, installed wheel/sdist
-   checks, and five notebook fixture executions to pass. Review the API break,
+   checks, and the single workshop replay plus its focused example tests to pass. Review the API break,
    migration notes, cross-repository pin, package contents, and preview version.
    Confirm the PyPI Trusted Publisher still matches owner `kirbyju`, repository
    `tcia_utils`, workflow `publish.yml`, and environment `pypi`.
@@ -46,17 +47,30 @@ stable 4.0 release, review older tutorial dependency pins and migration guidance
    artifacts and release/migration notes to the GitHub prerelease.
 5. Merge/promote the tutorial PR with installation instructions for the now
    available preview. Remove its temporary unpublished-preview notice. If that
-   changes notebook/support code, advance the package's tutorial pin before the
+   changes notebook code, advance the package's tutorial pin before the
    next release. Keep links between both repositories current.
 
-## Tutorial usability follow-up
+## Workshop usability and remaining platform limits
 
-The prepared notebooks run from the complete folder. They are not yet validated
-as independently downloadable Colab notebooks because they import `_support.py`
-and load local fixture files. Before advertising single-notebook Colab links,
-add and test a versioned bootstrap or simplify the public notebooks so they can
-run independently. Existing tutorials and pending IDC/CRDC work are outside this
-relocation; they have not been rewritten.
+As of 2026-10-25 the five drafts are replaced by one standalone, conversational
+workshop. It has no learner-side helper/fixture dependency, uses real public
+metadata by default, and includes explicit opt-in transfer cells. Local Jupyter
+execution is verified; a hosted Colab runtime remains untested. The preview is
+still unpublished on PyPI (stable 3.3.5; no 4.x versions observed 2026-10-25).
+
+CMB-GEC has three imaging download groups. Two have official Data Retriever
+manifests. Its public tissue-slide package still needs the collection download
+link; the CLI cannot complete that group. All 251 public DICOM manifest series
+are present in the Data Retriever main-branch metadata checked at
+`5474a701d2d9cc09aa95cacdecc30a7b8c0cfc71`. This is metadata coverage evidence,
+not proof of a released binary or a successful image transfer.
+
+The NIfTI API exposes indexed files and geometry status but no per-file transfer
+route; inspected detailed geometry objects are empty. The workshop includes
+published package links and an optional local NIfTI header comparison. Clinical
+coverage and exact CT/SEG references remain explicit review boundaries. These
+limitations must stay visible in preview documentation. No image payloads or
+controlled credentials were used in validation.
 
 ## Publishing configuration evidence
 

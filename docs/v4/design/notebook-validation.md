@@ -1,3 +1,29 @@
+**2026-10-25 replacement workshop:** the user requested one conversational,
+standalone notebook for junior data scientists. The five drafts described below
+are superseded by `TCIA_Dataset_and_Participant_Queries.ipynb`, pinned through
+`examples/notebooks.json` to TCIA_Notebooks commit
+`1214330acee1914b81cdc3ba4e8272bf916fd29a`.
+
+The replacement passed live metadata execution and offline replay using the
+installed 4.0.0a1 wheel on Python 3.13.7. Nine focused tests passed. Its default
+CT/diagnosis cohort contains 17 dataset-scoped participant records across CMB-GEC
+and CMB-LCA; the brain MR query links 2,261 NIfTI segmentation files to 1,106
+participant records. The controlled example identifies 137 CT/SEG participant-
+study pairs and exports a two-file subset for one of them. These are metadata
+observations, not deduplicated people or verified source-series references.
+
+The observed release fingerprint was
+`171f50880bb668eae21dd505a8de71bb68e4bd4a840966c378528c762a70fbe2`.
+The notebook has no learner-side helper or fixture dependency. A maintainer-only
+cassette replays recorded public metadata, with all transfer subprocesses blocked.
+No image payloads or credentials were used; hosted Colab was not tested. The
+CMB-GEC tissue-slide group still needs its collection download link, and the
+NIfTI API does not expose per-file transfers or populated detailed geometry for
+the inspected files. The canonical notebook repository contains the dated live,
+replay, and download-identifier coverage reports.
+
+---
+
 # Notebook validation
 
 **2026-10-15 post-deployment update:** all five live metadata notebooks passed again against the installed `4.0.0a1` wheel, with zero unavailable-route messages. The [current live report](notebook-live-validation-2026-10-15.json) supersedes the hosted failure observations below. No imaging payloads were transferred.

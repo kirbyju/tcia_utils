@@ -82,7 +82,7 @@ jobs:
           package = tomllib.loads(Path("pyproject.toml").read_text())["project"]
           assert pin["repository"] == "kirbyju/TCIA_Notebooks"
           assert re.fullmatch(r"[0-9a-f]{40}", pin["ref"])
-          assert pin["directory"] == "tcia_utils_v4" and pin["notebook_count"] == 5
+          assert pin["directory"] == "tcia_utils_v4" and pin["notebook_count"] == 1
           assert pin["package_version"] == package["version"]
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:
               output.write(f"ref={pin['ref']}\n")
@@ -99,10 +99,12 @@ jobs:
           python -m build --wheel
           python -m venv examples-venv
           wheel=$(find dist -name '*.whl' -print -quit)
-          examples-venv/bin/python -m pip install "${wheel}[examples]"
+          examples-venv/bin/python -m pip install "${wheel}[examples]" pytest
       - name: Check optional imports
         run: examples-venv/bin/python -c 'import idc_index, nbformat, pandas, tcia_utils; print(tcia_utils.__file__)'
-      - name: Validate the five tutorial notebooks
-        run: examples-venv/bin/python tools/validate_v4_notebooks.py notebook-examples/tcia_utils_v4 --require-count 5
-      - name: Execute deterministic offline notebook variants
+      - name: Validate the guided workshop notebook
+        run: examples-venv/bin/python tools/validate_v4_notebooks.py notebook-examples/tcia_utils_v4 --require-count 1
+      - name: Check cohort, credential-path, and geometry examples
+        run: examples-venv/bin/python -m pytest -q notebook-examples/tools/test_workshop.py
+      - name: Execute deterministic offline notebook variant
         run: examples-venv/bin/python tools/run_v4_notebooks_offline.py notebook-examples/tcia_utils_v4
