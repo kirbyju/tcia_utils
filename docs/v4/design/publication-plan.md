@@ -1,6 +1,6 @@
 # Coordinated GitHub and PyPI publication plan
 
-Updated 2026-10-25. The recommended first release is `4.0.0a1`. PyPI currently
+Updated 2026-10-27. The recommended first release is `4.0.0a1`. PyPI currently
 serves stable `3.3.5`, and neither PyPI nor GitHub tags contain a v4 release.
 Normal pip installs continue to prefer stable releases; researchers can opt in
 with `python -m pip install tcia_utils==4.0.0a1` after publication. Before a later
@@ -16,7 +16,7 @@ stable 4.0 release, review older tutorial dependency pins and migration guidance
   requirements, generator, recorded public-metadata regression fixture, and
   maintainer-only validation tools. The old five drafts have been superseded.
 - Package CI reads `examples/notebooks.json` and checks out tutorial commit
-  `1214330acee1914b81cdc3ba4e8272bf916fd29a`. Maintained copies were removed from
+  `ea2cdf81a65f15ad84feb2d0663da683c68bc08c`. Maintained copies were removed from
   the package. The tutorial commit must be pushed before package CI can fetch it.
 - The single workshop passed live public-metadata execution and offline replay
   against the installed candidate wheel on Python 3.13. Nine focused notebook
@@ -83,3 +83,9 @@ and [pip prerelease selection](https://pip.pypa.io/en/stable/cli/pip_install/#pr
 
 No package/notebook branch push, PR, merge to GitHub main, release tag, GitHub
 Release, or PyPI upload has occurred during this preparation.
+
+The October 27 notebook revision adds a Colab badge targeting the preview branch
+and explains explicit alpha installation. Its executable cells are unchanged;
+nine notebook checks and offline replay passed. The badge requires the notebook
+branch to be pushed, and its PyPI installation requires publishing `4.0.0a1`.
+Neither action was performed while adding the badge.
