@@ -1,3 +1,11 @@
+**October 27 publication run:** the user authorized publication of the notebook
+and `4.0.0a1` to GitHub/PyPI for community testing. The release notebook now
+installs the exact alpha by default, links Colab to main, and has fresh offline
+and live metadata validation. The package pins notebook commit `e0993c13365eda298a0f82d3245b305c89efe5d9`.
+GitHub CI must pass before tagging; tag publication, PyPI installation, and
+post-release verification remain separate evidence. The older preparation notes
+below retain their dates and do not establish current publication state.
+
 # Coordinated GitHub and PyPI publication plan
 
 Updated 2026-10-27. The recommended first release is `4.0.0a1`. PyPI currently

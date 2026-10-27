@@ -2,7 +2,7 @@
 
 ## Install and connect
 
-The 4.0.0a1 source candidate requires Python 3.11 or newer. Build the wheel and install it in a fresh environment as shown in the [README](../../README.md). Install `tcia_utils[tables]` only if you want pandas conversion; the core client imports no pandas, notebooks, or imaging libraries. The [notebook environment](https://github.com/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/requirements.txt) pins the separately tested example tools.
+The 4.0.0a1 alpha requires Python 3.11 or newer. Install the exact preview in a fresh environment as shown in the [README](../../README.md). Install `tcia_utils[tables]` only if you want pandas conversion; the core client imports no pandas, notebooks, or imaging libraries. The [notebook environment](https://github.com/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/requirements.txt) pins the separately tested example tools.
 
 Set an explicit `base_url` for a TCIA V2 REST host. `TCIAClient` does not select a host, authenticate, transfer files, or contact the network until a method is called. Close it with a `with` block or `close()`.
 
