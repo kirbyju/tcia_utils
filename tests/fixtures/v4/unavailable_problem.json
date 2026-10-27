@@ -1,0 +1,8 @@
+{
+  "type": "https://github.com/kirbyju/tcia-query-skill/problems/service_unavailable",
+  "title": "Service Unavailable",
+  "status": 503,
+  "detail": "Required snapshot artifacts are unavailable.",
+  "code": "service_unavailable",
+  "retryable": true
+}

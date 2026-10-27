@@ -1,0 +1,290 @@
+{
+  "observed_at": "2026-10-14",
+  "release_fingerprint": "a74b80068740d823657379be97e704e6db5229424a731de47397aa534213ff29",
+  "note": "Bounded metadata-only behavior probes, no payloads; status 200 does not prove all records or query variants work.",
+  "results": [
+    {
+      "method_name": "status",
+      "path": "/v2/ready",
+      "status": 200,
+      "count": null,
+      "keys": [
+        "status",
+        "release_fingerprint",
+        "release_tag",
+        "installed_profile",
+        "capabilities"
+      ],
+      "has_more": null
+    },
+    {
+      "method_name": "bundle",
+      "path": "/v2/bundle",
+      "status": 200,
+      "count": null,
+      "keys": [
+        "v2_bundle_manifest_exists",
+        "v2_install_state_exists",
+        "count_policy",
+        "v2_bundle",
+        "v2_bundle_error",
+        "v2_install",
+        "v2_install_state_error",
+        "v2_capabilities"
+      ],
+      "has_more": null
+    },
+    {
+      "method_name": "search_datasets",
+      "path": "/v2/datasets/search",
+      "status": 200,
+      "count": 1,
+      "keys": [
+        "count",
+        "limit",
+        "has_more",
+        "truncated",
+        "next_cursor",
+        "datasets",
+        "note"
+      ],
+      "has_more": false
+    },
+    {
+      "method_name": "get_dataset",
+      "path": "/v2/datasets/4D-Lung",
+      "status": 200,
+      "count": null,
+      "keys": [
+        "datasets",
+        "current_downloads",
+        "related_analysis_results",
+        "caveats"
+      ],
+      "has_more": null
+    },
+    {
+      "method_name": "get_access",
+      "path": "/v2/datasets/4D-Lung/access",
+      "status": 200,
+      "count": null,
+      "keys": [
+        "dataset",
+        "download_groups",
+        "controlled_access_policy_url",
+        "notes"
+      ],
+      "has_more": null
+    },
+    {
+      "method_name": "list_downloads",
+      "path": "/v2/datasets/4D-Lung/downloads?limit=1",
+      "status": 200,
+      "count": 1,
+      "keys": [
+        "count",
+        "limit",
+        "has_more",
+        "truncated",
+        "next_cursor",
+        "short_title",
+        "downloads"
+      ],
+      "has_more": false
+    },
+    {
+      "method_name": "get_impact",
+      "path": "/v2/datasets/4D-Lung/impact?publication_limit=1",
+      "status": 200,
+      "count": null,
+      "keys": [
+        "impacts",
+        "verified_publications",
+        "publication_limit",
+        "notes"
+      ],
+      "has_more": null
+    },
+    {
+      "method_name": "get_coverage",
+      "path": "/v2/datasets/4D-Lung/participant-coverage",
+      "status": 200,
+      "count": null,
+      "keys": [
+        "short_title",
+        "dataset_type",
+        "participant_count",
+        "unlinked_dataset_assets",
+        "participant_link_issues",
+        "sources",
+        "coverage_complete"
+      ],
+      "has_more": null
+    },
+    {
+      "method_name": "search_citations",
+      "path": "/v2/datacite/dois?short_titles=4D-Lung&limit=1",
+      "status": 200,
+      "count": 1,
+      "keys": [
+        "count",
+        "limit",
+        "has_more",
+        "truncated",
+        "next_cursor",
+        "dois",
+        "metrics_note"
+      ],
+      "has_more": false
+    },
+    {
+      "method_name": "get_citation",
+      "path": "/v2/datacite/dois/10.7937/k9/tcia.2016.eln8ygle",
+      "status": 200,
+      "count": null,
+      "keys": [
+        "record",
+        "provenance_note"
+      ],
+      "has_more": null
+    },
+    {
+      "method_name": "search_publications",
+      "path": "/v2/publications/verified-use?short_titles=4D-Lung&limit=1",
+      "status": 200,
+      "count": 1,
+      "keys": [
+        "count",
+        "limit",
+        "has_more",
+        "truncated",
+        "next_cursor",
+        "publications",
+        "verification_note"
+      ],
+      "has_more": true
+    },
+    {
+      "method_name": "search_participants",
+      "path": "/v2/participants/search",
+      "status": 200,
+      "count": 1,
+      "keys": [
+        "count",
+        "limit",
+        "has_more",
+        "truncated",
+        "next_cursor",
+        "participants",
+        "identity_scope",
+        "public_dicom_detail_route"
+      ],
+      "has_more": true
+    },
+    {
+      "method_name": "get_participant",
+      "path": "/v2/participants/participant_45febe7a4a882ff28cb94b0e",
+      "status": 200,
+      "count": 1,
+      "keys": [
+        "participant",
+        "identifiers",
+        "count",
+        "identity_scope"
+      ],
+      "has_more": null
+    },
+    {
+      "method_name": "list_participant_assets",
+      "path": "/v2/participants/participant_45febe7a4a882ff28cb94b0e/assets?limit=1",
+      "status": 500
+    },
+    {
+      "method_name": "list_clinical_subjects",
+      "path": "/v2/clinical/4D-Lung/subjects?limit=1",
+      "status": 500
+    },
+    {
+      "method_name": "list_clinical_facts",
+      "path": "/v2/clinical/4D-Lung/facts?limit=1",
+      "status": 500
+    },
+    {
+      "method_name": "list_clinical_conflicts",
+      "path": "/v2/clinical/4D-Lung/conflicts?limit=1",
+      "status": 200,
+      "count": 0,
+      "keys": [
+        "short_title",
+        "dataset_types",
+        "conflicts",
+        "count",
+        "limit",
+        "note"
+      ],
+      "has_more": null
+    },
+    {
+      "method_name": "search_public_assets",
+      "path": "/v2/public-non-dicom/assets?limit=1",
+      "status": 500
+    },
+    {
+      "method_name": "search_controlled_datasets",
+      "path": "/v2/controlled-access/datasets?limit=1",
+      "status": 200,
+      "count": 1,
+      "keys": [
+        "datasets",
+        "count",
+        "limit",
+        "controlled_access_policy_url",
+        "note"
+      ],
+      "has_more": null
+    },
+    {
+      "method_name": "search_annotation_downloads",
+      "path": "/v2/dicom/annotation-downloads?limit=1",
+      "status": 200,
+      "count": 1,
+      "keys": [
+        "downloads",
+        "count",
+        "limit",
+        "routing_note",
+        "scope",
+        "public_dicom_annotation_detail"
+      ],
+      "has_more": null
+    },
+    {
+      "method_name": "list_controlled_files",
+      "path": "/v2/controlled-access/A091105/files?limit=1",
+      "status": 200,
+      "count": 0,
+      "keys": [
+        "short_title",
+        "files",
+        "count",
+        "limit",
+        "controlled_access_policy_url",
+        "warning"
+      ]
+    },
+    {
+      "method_name": "list_controlled_files",
+      "path": "/v2/controlled-access/CMB-PCA/files?limit=1",
+      "status": 200,
+      "count": 1,
+      "keys": [
+        "short_title",
+        "files",
+        "count",
+        "limit",
+        "controlled_access_policy_url",
+        "warning"
+      ]
+    }
+  ]
+}

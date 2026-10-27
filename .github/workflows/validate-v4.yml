@@ -1,0 +1,110 @@
+name: Validate TCIA Utils v4
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+  workflow_call:
+    inputs:
+      require_notebooks:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  offline-tests:
+    name: Offline tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install v4 core and test dependencies
+        run: python -m pip install -e '.[test]'
+      - name: Run offline v4 tests
+        run: python -m pytest -q tests/test_v4_*.py
+
+  distributions:
+    name: Build and install distributions
+    needs: offline-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Build wheel and source distribution
+        run: |
+          python -m pip install build
+          python -m build
+      - name: Inspect package contents and core dependencies
+        run: python tools/check_v4_distribution.py dist
+      - name: Install and import wheel in a clean environment
+        run: |
+          python -m venv wheel-venv
+          wheel-venv/bin/python -m pip install dist/*.whl pytest
+          wheel-venv/bin/python -c 'from tcia_utils import TCIAClient; assert TCIAClient.__name__ == "TCIAClient"'
+          (cd /tmp && "$GITHUB_WORKSPACE/wheel-venv/bin/python" -m pytest -q "$GITHUB_WORKSPACE"/tests/test_v4_*.py)
+      - name: Install and import source distribution in a clean environment
+        run: |
+          python -m venv sdist-venv
+          sdist-venv/bin/python -m pip install dist/*.tar.gz pytest
+          sdist-venv/bin/python -c 'from tcia_utils import TCIAClient; assert TCIAClient.__name__ == "TCIAClient"'
+          (cd /tmp && "$GITHUB_WORKSPACE/sdist-venv/bin/python" -m pytest -q "$GITHUB_WORKSPACE"/tests/test_v4_*.py)
+
+  examples:
+    name: Installed-wheel examples and notebooks
+    needs: offline-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Read the pinned tutorial revision
+        id: notebooks
+        run: |
+          python - <<'PYCODE'
+          import json, os, re, tomllib
+          from pathlib import Path
+          pin = json.loads(Path("examples/notebooks.json").read_text())
+          package = tomllib.loads(Path("pyproject.toml").read_text())["project"]
+          assert pin["repository"] == "kirbyju/TCIA_Notebooks"
+          assert re.fullmatch(r"[0-9a-f]{40}", pin["ref"])
+          assert pin["directory"] == "tcia_utils_v4" and pin["notebook_count"] == 1
+          assert pin["package_version"] == package["version"]
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"ref={pin['ref']}\n")
+          PYCODE
+      - name: Check out canonical tutorials
+        uses: actions/checkout@v4
+        with:
+          repository: kirbyju/TCIA_Notebooks
+          ref: ${{ steps.notebooks.outputs.ref }}
+          path: notebook-examples
+      - name: Build and install wheel with example dependencies
+        run: |
+          python -m pip install build
+          python -m build --wheel
+          python -m venv examples-venv
+          wheel=$(find dist -name '*.whl' -print -quit)
+          examples-venv/bin/python -m pip install "${wheel}[examples]" pytest
+      - name: Check optional imports
+        run: examples-venv/bin/python -c 'import idc_index, nbformat, pandas, tcia_utils; print(tcia_utils.__file__)'
+      - name: Validate the guided workshop notebook
+        run: examples-venv/bin/python tools/validate_v4_notebooks.py notebook-examples/tcia_utils_v4 --require-count 1
+      - name: Check cohort, credential-path, and geometry examples
+        run: examples-venv/bin/python -m pytest -q notebook-examples/tools/test_workshop.py
+      - name: Execute deterministic offline notebook variant
+        run: examples-venv/bin/python tools/run_v4_notebooks_offline.py notebook-examples/tcia_utils_v4

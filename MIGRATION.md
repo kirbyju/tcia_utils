@@ -1,46 +1,17 @@
-# Migration Guide: Moving to the new `nbia` module
+# Moving from TCIA Utils 3.x to 4.0
 
-This guide outlines the key changes introduced in the latest `tcia_utils` update, where the `nbia.py` module has been rewritten to use the new NBIA V4 APIs. These changes simplify the library and align it with modern data access practices.
+The 4.0 interface is a new research client, not a compatibility release for every 3.x provider module. Pin a 3.x environment for existing scripts until you have moved each workflow deliberately. Version `4.0.0a1` is an opt-in alpha. Install it explicitly with `python -m pip install "tcia_utils==4.0.0a1"`; ordinary pip installs continue selecting the stable release.
 
-## Key Changes
+| 3.x pattern | 4.0 approach |
+| --- | --- |
+| Import `wordpress`, `datacite`, `nbia`, `pathdb`, or `idc` from the package root | Construct `TCIAClient(base_url=...)` and use task methods for discovery and evidence |
+| Query a catalog provider and infer that a DOI is a TCIA publication | Use visible `search_datasets()` / `get_dataset()` records as publication identity; use `get_citation()` for DataCite enrichment |
+| Treat a short title as globally unique | Keep `(dataset_type, short_title)` for Collection versus Analysis Result; `get_dataset()` may return multiple `datasets` rows |
+| Treat a dataset diagnosis or display patient ID as a patient-level fact | Inspect clinical evidence scope and use dataset-scoped participant identity and reviewed crosswalks |
+| Download through package-specific helpers | Prepare an explicit selection manifest for TCIA Data Retriever; use `idc-index` directly for public DICOM detail and viewer selection |
 
-### 1. Removal of Authentication and Token Management
+The client needs an explicit TCIA V2 REST `base_url`. `status()` reports its observed fingerprint, profile, and capabilities. The package does not silently fall back to live WordPress, DataCite, IDC, or another host when a snapshot component is unavailable. There is no 4.0 MCP transport, native controlled download, or token helper.
 
-The most significant change is the removal of all authentication-related functions. Due to recent changes in NIH policies, TCIA no longer hosts controlled-access data in NBIA. As a result, the new NBIA V4 API, which this library now uses, does not require user authentication. More information about this policy change can be found [here](https://www.cancerimagingarchive.net/nih-controlled-data-access-policy/).
+Start a migration by calling `search_datasets()`, then inspect `get_dataset()` and `list_downloads()` before choosing records. Use `search_participants()` and clinical methods only where the service reports the corresponding capability. Keep each result's provenance and completeness when saving an analysis. A `Page` covers one requested page; use explicit cursor iteration for more. Bounded clinical and controlled routes report `unknown` completeness even if their returned count is below the limit.
 
-The following functions have been **removed**:
-
--   `getToken()`
--   `refreshToken()`
--   `makeCredentialFile()`
-
-You no longer need to manage API tokens or credentials within your code. Simply remove any calls to these functions.
-
-### 2. Renamed and Simplified Functions
-
--   `getSimpleSearchWithModalityAndBodyPartPaged()` has been renamed to **`getSimpleSearch()`**. The functionality remains the same, but the name is now more concise.
-
-### 3. Deprecated and Moved Visualization Functions
-
-The following visualization functions have been moved to a separate package, `simpleDicomViewer`, to better separate concerns:
-
--   `viewSeries()`
--   `viewSeriesAnnotation()`
-
-You can install it via pip:
-`pip install simpleDicomViewer`
-
-The `makeVizLinks()` function has been deprecated in favor of the new `idcOhifViewer()` function, which provides a more robust and feature-rich way to visualize studies and series using the IDC OHIF viewer. It can take either a DataFrame or a list of series and generates clickable links for visualization.
-
-## How to Update Your Code
-
-1.  **Remove Authentication Calls**: Delete any lines of code that call `getToken()`, `refreshToken()`, or `makeCredentialFile()`.
-
-2.  **Update Function Calls**:
-    -   Replace `nbia.getSimpleSearchWithModalityAndBodyPartPaged(...)` with `nbia.getSimpleSearch(...)`.
-    -   For `viewSeries()` and `viewSeriesAnnotation()`, install the `simpleDicomViewer` package and update your imports.
-    -   Replace any usage of `makeVizLinks()` with `idcOhifViewer()`.
-
-## Backwards Compatibility
-
-To ensure a smoother transition, we have implemented a compatibility layer. If you call a removed or renamed function, a `DeprecationWarning` will be raised, guiding you on how to update your code. For renamed functions, the call will be automatically forwarded to the new function, so your code won't break immediately. However, we strongly recommend updating your code to use the new function names to avoid issues in the future.
+Existing workshop notebooks under `TCIA_Notebooks` remain historical examples of older APIs. The five maintained 4.0 notebooks live under [TCIA_Notebooks/tcia_utils_v4](https://github.com/kirbyju/TCIA_Notebooks/tree/main/tcia_utils_v4) and use the installed 4.0 package.

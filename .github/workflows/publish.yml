@@ -3,10 +3,19 @@ name: Publish to PyPI
 on:
   push:
     tags:
-      - "v*"
+      - "v4.*"
+
+permissions:
+  contents: read
 
 jobs:
+  validate:
+    uses: ./.github/workflows/validate-v4.yml
+    with:
+      require_notebooks: true
+
   build:
+    needs: validate
     runs-on: ubuntu-latest
 
     steps:
@@ -23,6 +32,9 @@ jobs:
 
       - name: Build package
         run: python -m build
+
+      - name: Check distribution contents
+        run: python tools/check_v4_distribution.py dist
 
       - name: Upload distribution artifacts
         uses: actions/upload-artifact@v4

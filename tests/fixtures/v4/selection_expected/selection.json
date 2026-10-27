@@ -1,0 +1,182 @@
+{
+  "accounting": [
+    {
+      "disposition": "exported",
+      "file": "public-series.csv",
+      "input_index": 0,
+      "record": {
+        "access_level": "open",
+        "dataset_type": "collection",
+        "doi": "10.0000/example",
+        "file_size_bytes": 123,
+        "identifier_source": "idc-index",
+        "record_grain": "series",
+        "route_kind": "SeriesInstanceUID",
+        "series_instance_uid": "1.02.003",
+        "short_title": "EXAMPLE"
+      }
+    },
+    {
+      "disposition": "deduplicated",
+      "input_index": 1,
+      "reason": "same_manifest_identifier",
+      "record": {
+        "access_level": "open",
+        "dataset_type": "collection",
+        "identifier_source": "idc-index",
+        "record_grain": "series",
+        "route_kind": "SeriesInstanceUID",
+        "series_instance_uid": "1.02.003",
+        "short_title": "EXAMPLE"
+      }
+    },
+    {
+      "disposition": "exported",
+      "file": "public-image-url.csv",
+      "input_index": 2,
+      "record": {
+        "access_level": "open",
+        "dataset_type": "collection",
+        "imageUrl": "https://example.org/synthetic-image.tiff",
+        "known_size_bytes": null,
+        "record_grain": "file",
+        "route_kind": "imageUrl",
+        "short_title": "EXAMPLE"
+      }
+    },
+    {
+      "disposition": "exported",
+      "file": "controlled-ctdc-drs-uri.csv",
+      "input_index": 3,
+      "record": {
+        "access_level": "controlled",
+        "dataset_type": "collection",
+        "drs_uri": "drs://example.org/synthetic-0007",
+        "file_id": "synthetic-0007",
+        "license_label": "Synthetic controlled license",
+        "participant_id": "0007",
+        "record_grain": "file",
+        "route_kind": "drs_uri",
+        "route_system": "ctdc",
+        "series_instance_uid": "1.2.3",
+        "short_title": "EXAMPLE"
+      }
+    },
+    {
+      "disposition": "exported",
+      "file": "aspera-handoff.json",
+      "input_index": 4,
+      "record": {
+        "access_level": "open",
+        "dataset_type": "analysis-result",
+        "object_role": "annotation",
+        "package_path": "path/in/package",
+        "package_url": "https://example.org/faspex/synthetic-package",
+        "record_grain": "package",
+        "route_kind": "aspera",
+        "route_system": "aspera",
+        "short_title": "EXAMPLE-ANNOT"
+      }
+    },
+    {
+      "disposition": "unresolved",
+      "input_index": 5,
+      "reason": "missing_or_invalid_drs_uri",
+      "record": {
+        "access_level": "controlled",
+        "dataset_type": "collection",
+        "file_id": "synthetic-0008",
+        "participant_id": "0008",
+        "record_grain": "file",
+        "route_system": "ctdc",
+        "short_title": "EXAMPLE"
+      }
+    },
+    {
+      "disposition": "excluded",
+      "input_index": 6,
+      "reason": "source_images_not_selected",
+      "record": {
+        "access_level": "open",
+        "dataset_type": "analysis-result",
+        "identifier_source": "reviewed",
+        "object_role": "source_image",
+        "record_grain": "series",
+        "route_kind": "SeriesInstanceUID",
+        "series_instance_uid": "1.02.004",
+        "short_title": "EXAMPLE-ANNOT"
+      }
+    },
+    {
+      "disposition": "unresolved",
+      "input_index": 7,
+      "reason": "no_supported_exact_route",
+      "record": {
+        "access_level": "open",
+        "dataset_type": "collection",
+        "record_grain": "file",
+        "short_title": "EXAMPLE",
+        "source_url": "https://example.org/metadata-only"
+      }
+    }
+  ],
+  "completeness": "unknown",
+  "completeness_basis": null,
+  "completeness_source": "caller_supplied",
+  "counts": {
+    "deduplicated": 1,
+    "excluded": 1,
+    "exported": 4,
+    "exported_unknown_size": 3,
+    "input": 8,
+    "known_size_bytes": 123,
+    "unresolved": 2
+  },
+  "coverage": {
+    "coverage_complete": false
+  },
+  "dataset_context": [
+    {
+      "access_levels": [
+        "open",
+        "controlled"
+      ],
+      "dataset_type": "collection",
+      "dois": [
+        "10.0000/example"
+      ],
+      "license_labels": [
+        "Synthetic controlled license"
+      ],
+      "short_title": "EXAMPLE"
+    },
+    {
+      "access_levels": [
+        "open"
+      ],
+      "dataset_type": "analysis-result",
+      "dois": [],
+      "license_labels": [],
+      "short_title": "EXAMPLE-ANNOT"
+    }
+  ],
+  "include_source_images": false,
+  "notes": [
+    "Captured service identity is observed provenance, not a per-row server stamp.",
+    "Series identifiers supplied by callers require a separate IDC coverage check.",
+    "Controlled manifests are metadata handoffs; authorization is separate."
+  ],
+  "query_scope": {
+    "completeness": "unknown",
+    "short_titles": [
+      "EXAMPLE"
+    ]
+  },
+  "release_identity": {
+    "base_url": "https://example.org",
+    "installed_profile": "research_detail",
+    "release_fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "release_tag": "synthetic-test"
+  },
+  "schema_version": 1
+}

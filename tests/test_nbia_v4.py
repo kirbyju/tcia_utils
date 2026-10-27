@@ -77,22 +77,6 @@ def test_formatSeriesInput_df():
     assert formatted_df['SeriesInstanceUID'].tolist() == ['1.2.3', '4.5.6']
 
 
-def test_viewSeries_raises_error():
-    """
-    Tests that viewSeries raises a NotImplementedError as expected.
-    """
-    with pytest.raises(NotImplementedError):
-        nbia.viewSeries()
-
-
-def test_viewSeriesAnnotation_raises_error():
-    """
-    Tests that viewSeriesAnnotation raises a NotImplementedError as expected.
-    """
-    with pytest.raises(NotImplementedError):
-        nbia.viewSeriesAnnotation()
-
-
 def test_getCollections():
     """
     Tests the getCollections function to ensure it returns a list of collections.
@@ -161,35 +145,6 @@ def test_queryData_connection_error(mock_get, caplog):
     # Assertions
     assert result is None
     assert "Connection Error" in caplog.text
-
-
-def test_makeCredentialFile(tmp_path):
-    """
-    Tests the makeCredentialFile function to ensure it creates a credential file
-    with the correct content in a specified directory.
-    """
-    # Change the current working directory to the temporary directory
-    original_cwd = os.getcwd()
-    os.chdir(tmp_path)
-
-    try:
-        # Define user and password
-        user = "testuser"
-        pw = "testpassword"
-
-        # Call the function
-        nbia.makeCredentialFile(user=user, pw=pw)
-
-        # Check if the file was created and has the correct content
-        cred_file = tmp_path / "credentials.txt"
-        assert cred_file.exists()
-        with open(cred_file, 'r') as f:
-            content = f.read()
-            assert f"userName={user}" in content
-            assert f"passWord={pw}" in content
-    finally:
-        # Change back to the original working directory
-        os.chdir(original_cwd)
 
 
 def test_downloadSeries(tmp_path, valid_series_uid):

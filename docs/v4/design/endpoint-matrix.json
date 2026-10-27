@@ -1,0 +1,406 @@
+{
+  "contract_version": "tcia_utils_v4_phase1_t02",
+  "source_server_revision": "2ebb7a6d4adecb378a57d4dd2753e5444f7c55bf",
+  "observed_hosted_api_version": "0.4.0",
+  "observed_hosted_release_fingerprint": "a74b80068740d823657379be97e704e6db5229424a731de47397aa534213ff29",
+  "observed_hosted_profile": "research_detail",
+  "hosted_observation_date": "2026-10-14",
+  "notes": [
+    "Hosted OpenAPI and readiness show advertised routes and installed components only; each route needs behavior verification.",
+    "count on cursor routes is page count, not total.",
+    "bounded_no_cursor routes have unknown completeness even when count is below limit.",
+    "No new route is required in phase 1, but a hosted participant-assets HTTP 500 requires T03 diagnosis."
+  ],
+  "entries": [
+    {
+      "public_method": "status",
+      "http": [
+        {
+          "method": "GET",
+          "path": "/v2/ready"
+        },
+        {
+          "method": "GET",
+          "path": "/v2/bundle"
+        }
+      ],
+      "request_model_or_parameters": "none",
+      "response_model": "HealthResponse + BundleResponse",
+      "paging": "single",
+      "completeness": "installed manifest/receipt and capability flags; 503 is unavailable",
+      "requires_capability": "bundle_manifest, install_state",
+      "owner_task": "T04",
+      "server_gap_or_limit": "No per-row release stamp; observe service identity",
+      "source_status": "present in source V2 REST and installed skill models",
+      "hosted_status": "advertised in observed OpenAPI; response behavior unverified"
+    },
+    {
+      "public_method": "search_datasets",
+      "http": [
+        {
+          "method": "POST",
+          "path": "/v2/datasets/search"
+        }
+      ],
+      "request_model_or_parameters": "SearchDatasetsRequest",
+      "response_model": "DatasetSearchResponse.datasets: DatasetSummary[]",
+      "paging": "cursor",
+      "completeness": "visible WordPress records; release-bound cursor",
+      "requires_capability": "WordPress snapshot",
+      "owner_task": "T05",
+      "server_gap_or_limit": "None for bounded method",
+      "source_status": "present in source V2 REST and installed skill models",
+      "hosted_status": "advertised in observed OpenAPI; response behavior unverified"
+    },
+    {
+      "public_method": "get_dataset",
+      "http": [
+        {
+          "method": "GET",
+          "path": "/v2/datasets/{short_title}"
+        }
+      ],
+      "request_model_or_parameters": "path short_title",
+      "response_model": "DatasetDetailResponse",
+      "paging": "single_with_bounded_related",
+      "completeness": "related_analysis_results limited to 25; preserve datasets[] and caveats",
+      "requires_capability": "WordPress snapshot",
+      "owner_task": "T05",
+      "server_gap_or_limit": "Related analyses not exhaustive",
+      "source_status": "present in source V2 REST and installed skill models",
+      "hosted_status": "advertised in observed OpenAPI; response behavior unverified"
+    },
+    {
+      "public_method": "get_access",
+      "http": [
+        {
+          "method": "GET",
+          "path": "/v2/datasets/{short_title}/access"
+        }
+      ],
+      "request_model_or_parameters": "path short_title",
+      "response_model": "AccessSummaryResponse",
+      "paging": "single",
+      "completeness": "download groups and policy; retain mixed access",
+      "requires_capability": "WordPress snapshot",
+      "owner_task": "T05",
+      "server_gap_or_limit": "None",
+      "source_status": "present in source V2 REST and installed skill models",
+      "hosted_status": "advertised in observed OpenAPI; response behavior unverified"
+    },
+    {
+      "public_method": "list_downloads",
+      "http": [
+        {
+          "method": "GET",
+          "path": "/v2/datasets/{short_title}/downloads"
+        }
+      ],
+      "request_model_or_parameters": "path + query filters, limit<=200, cursor",
+      "response_model": "DownloadsResponse.downloads: Download[]",
+      "paging": "cursor",
+      "completeness": "return count/limit/has_more/truncated/next_cursor",
+      "requires_capability": "WordPress snapshot",
+      "owner_task": "T05",
+      "server_gap_or_limit": "None",
+      "source_status": "present in source V2 REST and installed skill models",
+      "hosted_status": "advertised in observed OpenAPI; response behavior unverified"
+    },
+    {
+      "public_method": "search_citations",
+      "http": [
+        {
+          "method": "GET",
+          "path": "/v2/datacite/dois"
+        }
+      ],
+      "request_model_or_parameters": "query, dois[], short_titles[], sort_by, limit<=200, cursor",
+      "response_model": "DataCiteSearchResponse.dois: DataCiteDOISummary[]",
+      "paging": "cursor",
+      "completeness": "DataCite snapshot metadata; not publication authority",
+      "requires_capability": "datacite_metadata",
+      "owner_task": "T05",
+      "server_gap_or_limit": "None",
+      "source_status": "present in source V2 REST and installed skill models",
+      "hosted_status": "advertised in observed OpenAPI; response behavior unverified"
+    },
+    {
+      "public_method": "get_citation",
+      "http": [
+        {
+          "method": "GET",
+          "path": "/v2/datacite/dois/{doi}"
+        }
+      ],
+      "request_model_or_parameters": "path doi + citation_style",
+      "response_model": "DataCiteDetailResponse",
+      "paging": "single",
+      "completeness": "preserve citation_style, formatted_citation, provenance_note",
+      "requires_capability": "datacite_metadata",
+      "owner_task": "T05",
+      "server_gap_or_limit": "None",
+      "source_status": "present in source V2 REST and installed skill models",
+      "hosted_status": "advertised in observed OpenAPI; response behavior unverified"
+    },
+    {
+      "public_method": "search_publications",
+      "http": [
+        {
+          "method": "GET",
+          "path": "/v2/publications/verified-use"
+        }
+      ],
+      "request_model_or_parameters": "query, dataset_dois[], short_titles[], from_year, to_year, limit<=200, cursor",
+      "response_model": "VerifiedPublicationsResponse.publications: VerifiedPublication[]",
+      "paging": "cursor",
+      "completeness": "TCIA-maintained verified analytical use; preserve verification_note",
+      "requires_capability": "verified_analytical_publications",
+      "owner_task": "T05",
+      "server_gap_or_limit": "None",
+      "source_status": "present in source V2 REST and installed skill models",
+      "hosted_status": "advertised in observed OpenAPI; response behavior unverified"
+    },
+    {
+      "public_method": "get_impact",
+      "http": [
+        {
+          "method": "GET",
+          "path": "/v2/datasets/{short_title}/impact"
+        }
+      ],
+      "request_model_or_parameters": "path short_title + publication_limit<=200",
+      "response_model": "DatasetImpactResponse",
+      "paging": "single_with_bounded_publications",
+      "completeness": "impacts[] and bounded verified_publications[]; source-specific metrics",
+      "requires_capability": "datacite_metadata + verified_analytical_publications",
+      "owner_task": "T05",
+      "server_gap_or_limit": "Use search_publications for fuller list",
+      "source_status": "present in source V2 REST and installed skill models",
+      "hosted_status": "advertised in observed OpenAPI; response behavior unverified"
+    },
+    {
+      "public_method": "search_participants",
+      "http": [
+        {
+          "method": "POST",
+          "path": "/v2/participants/search"
+        }
+      ],
+      "request_model_or_parameters": "SearchParticipantsRequest",
+      "response_model": "ParticipantsResponse.participants: Participant[]",
+      "paging": "cursor",
+      "completeness": "dataset-scoped participant key; release-bound cursor",
+      "requires_capability": "participant_search",
+      "owner_task": "T06",
+      "server_gap_or_limit": "None",
+      "source_status": "present in source V2 REST and installed skill models",
+      "hosted_status": "advertised in observed OpenAPI; response behavior unverified"
+    },
+    {
+      "public_method": "get_participant",
+      "http": [
+        {
+          "method": "GET",
+          "path": "/v2/participants/{participant_key}"
+        }
+      ],
+      "request_model_or_parameters": "path participant_key",
+      "response_model": "ParticipantDetailResponse",
+      "paging": "single",
+      "completeness": "participant, identifiers, identity_scope",
+      "requires_capability": "participant_search",
+      "owner_task": "T06",
+      "server_gap_or_limit": "No automatic clinical crosswalk",
+      "source_status": "present in source V2 REST and installed skill models",
+      "hosted_status": "advertised in observed OpenAPI; response behavior unverified"
+    },
+    {
+      "public_method": "get_coverage",
+      "http": [
+        {
+          "method": "GET",
+          "path": "/v2/datasets/{short_title}/participant-coverage"
+        }
+      ],
+      "request_model_or_parameters": "path short_title + dataset_type",
+      "response_model": "CoverageResponse",
+      "paging": "single",
+      "completeness": "coverage_complete applies only to inventory linkage",
+      "requires_capability": "participant_search",
+      "owner_task": "T06",
+      "server_gap_or_limit": "No clinical/file completeness guarantee",
+      "source_status": "present in source V2 REST and installed skill models",
+      "hosted_status": "advertised in observed OpenAPI; response behavior unverified"
+    },
+    {
+      "public_method": "list_clinical_subjects",
+      "http": [
+        {
+          "method": "GET",
+          "path": "/v2/clinical/{short_title}/subjects"
+        }
+      ],
+      "request_model_or_parameters": "path + subject_ids[], include_clinical_only, has_conflicts, include_inferred, limit<=500",
+      "response_model": "ClinicalSubjectsResponse",
+      "paging": "bounded_no_cursor",
+      "completeness": "unknown completeness; dataset-scoped subject IDs; inferred flags",
+      "requires_capability": "clinical_detail",
+      "owner_task": "T06",
+      "server_gap_or_limit": "No exhaustive cohort paging",
+      "source_status": "present in source V2 REST and installed skill models",
+      "hosted_status": "advertised in observed OpenAPI; response behavior unverified"
+    },
+    {
+      "public_method": "list_clinical_facts",
+      "http": [
+        {
+          "method": "GET",
+          "path": "/v2/clinical/{short_title}/facts"
+        }
+      ],
+      "request_model_or_parameters": "path + subject_id, concepts[], source_kinds[], inferred, limit<=500",
+      "response_model": "ClinicalFactsResponse",
+      "paging": "bounded_no_cursor",
+      "completeness": "unknown completeness; preserve evidence_scope, priority, provenance",
+      "requires_capability": "clinical_detail",
+      "owner_task": "T06",
+      "server_gap_or_limit": "No exhaustive fact paging",
+      "source_status": "present in source V2 REST and installed skill models",
+      "hosted_status": "advertised in observed OpenAPI; response behavior unverified"
+    },
+    {
+      "public_method": "list_clinical_conflicts",
+      "http": [
+        {
+          "method": "GET",
+          "path": "/v2/clinical/{short_title}/conflicts"
+        }
+      ],
+      "request_model_or_parameters": "path + subject_id, concepts[], limit<=500",
+      "response_model": "ClinicalConflictsResponse",
+      "paging": "bounded_no_cursor",
+      "completeness": "unknown completeness; preserve values_seen/source_kinds",
+      "requires_capability": "clinical_detail",
+      "owner_task": "T06",
+      "server_gap_or_limit": "No exhaustive conflict paging",
+      "source_status": "present in source V2 REST and installed skill models",
+      "hosted_status": "advertised in observed OpenAPI; response behavior unverified"
+    },
+    {
+      "public_method": "list_participant_assets",
+      "http": [
+        {
+          "method": "GET",
+          "path": "/v2/participants/{participant_key}/assets"
+        }
+      ],
+      "request_model_or_parameters": "path + access_levels[], data_categories[], data_types[], file_formats[], geometry_statuses[], data_domains[], limit<=500, cursor",
+      "response_model": "AssetsResponse.assets: Asset[]",
+      "paging": "cursor",
+      "completeness": "record grain and public_dicom_detail_route retained",
+      "requires_capability": "participant_search",
+      "owner_task": "T07",
+      "server_gap_or_limit": "T03 diagnosis of hosted HTTP 500 required; Asset DTO lacks explicit series UID/location",
+      "source_status": "present in source V2 REST and installed skill models",
+      "hosted_status": "advertised; bounded live request returned HTTP 500 on 2026-10-14"
+    },
+    {
+      "public_method": "search_public_assets",
+      "http": [
+        {
+          "method": "GET",
+          "path": "/v2/public-non-dicom/assets"
+        }
+      ],
+      "request_model_or_parameters": "short_titles[], participant_id, file_formats[], modalities[], geometry_statuses[], media_kinds[], object_roles[], requires_annotations, limit<=500, cursor",
+      "response_model": "AssetsResponse.assets: Asset[]",
+      "paging": "cursor",
+      "completeness": "public non-DICOM with narrow IDC-missing exceptions; no annotation-source relationship",
+      "requires_capability": "public_non_dicom_detail",
+      "owner_task": "T07",
+      "server_gap_or_limit": "No universal DICOM inventory",
+      "source_status": "present in source V2 REST and installed skill models",
+      "hosted_status": "advertised in observed OpenAPI; response behavior unverified"
+    },
+    {
+      "public_method": "search_controlled_datasets",
+      "http": [
+        {
+          "method": "GET",
+          "path": "/v2/controlled-access/datasets"
+        }
+      ],
+      "request_model_or_parameters": "modalities[], file_types[], requires_annotations, include_mixed, limit<=200",
+      "response_model": "ControlledDatasetsResponse",
+      "paging": "bounded_no_cursor",
+      "completeness": "unknown completeness; public inventory only",
+      "requires_capability": "WordPress snapshot",
+      "owner_task": "T07",
+      "server_gap_or_limit": "No exhaustive search paging",
+      "source_status": "present in source V2 REST and installed skill models",
+      "hosted_status": "advertised in observed OpenAPI; response behavior unverified"
+    },
+    {
+      "public_method": "list_controlled_files",
+      "http": [
+        {
+          "method": "GET",
+          "path": "/v2/controlled-access/{short_title}/files"
+        }
+      ],
+      "request_model_or_parameters": "path + route_systems[], modalities[], file_types[], body_part, participant_id, patient_id, has_drs_uri, limit<=500",
+      "response_model": "ControlledFilesResponse",
+      "paging": "bounded_no_cursor",
+      "completeness": "unknown completeness; public metadata does not grant retrieval",
+      "requires_capability": "controlled_access_detail",
+      "owner_task": "T07",
+      "server_gap_or_limit": "No exhaustive file paging",
+      "source_status": "present in source V2 REST and installed skill models",
+      "hosted_status": "advertised in observed OpenAPI; response behavior unverified"
+    },
+    {
+      "public_method": "search_annotation_downloads",
+      "http": [
+        {
+          "method": "GET",
+          "path": "/v2/dicom/annotation-downloads"
+        }
+      ],
+      "request_model_or_parameters": "query, short_titles[], modalities[], access_levels[], limit<=200",
+      "response_model": "DicomAnnotationsResponse",
+      "paging": "bounded_no_cursor",
+      "completeness": "download-level signal; no source series relationship",
+      "requires_capability": "WordPress snapshot",
+      "owner_task": "T07",
+      "server_gap_or_limit": "No DICOM detail or exhaustive paging",
+      "source_status": "present in source V2 REST and installed skill models",
+      "hosted_status": "advertised in observed OpenAPI; response behavior unverified"
+    },
+    {
+      "public_method": "select",
+      "http": [],
+      "request_model_or_parameters": "explicit records + provenance + query_scope + include_source_images",
+      "response_model": "Selection",
+      "paging": "local",
+      "completeness": "preserve every record and partialness; no network call",
+      "requires_capability": "none",
+      "owner_task": "T08",
+      "server_gap_or_limit": "Exact route evidence required for actionable export",
+      "source_status": "local-only planned client operation",
+      "hosted_status": "not applicable"
+    },
+    {
+      "public_method": "export_selection",
+      "http": [],
+      "request_model_or_parameters": "Selection + destination + overwrite",
+      "response_model": "ExportReport + route CSV/JSON files",
+      "paging": "local",
+      "completeness": "explicit write; route-specific manifests plus unresolved accounting; deterministic for same captured selection/options, no fresh timestamp or network by default",
+      "requires_capability": "none",
+      "owner_task": "T08",
+      "server_gap_or_limit": "No transfer or credential operation",
+      "source_status": "local-only planned client operation",
+      "hosted_status": "not applicable"
+    }
+  ]
+}

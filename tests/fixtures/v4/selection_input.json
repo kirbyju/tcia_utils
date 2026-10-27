@@ -1,0 +1,84 @@
+{
+  "description": "Synthetic mixed-route selection; no payload or credential values",
+  "records": [
+    {
+      "dataset_type": "collection",
+      "short_title": "EXAMPLE",
+      "doi": "10.0000/example",
+      "access_level": "open",
+      "record_grain": "series",
+      "route_kind": "SeriesInstanceUID",
+      "series_instance_uid": "1.02.003",
+      "identifier_source": "idc-index",
+      "file_size_bytes": 123
+    },
+    {
+      "dataset_type": "collection",
+      "short_title": "EXAMPLE",
+      "access_level": "open",
+      "record_grain": "series",
+      "route_kind": "SeriesInstanceUID",
+      "series_instance_uid": "1.02.003",
+      "identifier_source": "idc-index"
+    },
+    {
+      "dataset_type": "collection",
+      "short_title": "EXAMPLE",
+      "access_level": "open",
+      "record_grain": "file",
+      "route_kind": "imageUrl",
+      "imageUrl": "https://example.org/synthetic-image.tiff",
+      "known_size_bytes": null
+    },
+    {
+      "dataset_type": "collection",
+      "short_title": "EXAMPLE",
+      "access_level": "controlled",
+      "route_system": "ctdc",
+      "route_kind": "drs_uri",
+      "record_grain": "file",
+      "drs_uri": "drs://example.org/synthetic-0007",
+      "file_id": "synthetic-0007",
+      "participant_id": "0007",
+      "series_instance_uid": "1.2.3",
+      "license_label": "Synthetic controlled license"
+    },
+    {
+      "dataset_type": "analysis-result",
+      "short_title": "EXAMPLE-ANNOT",
+      "access_level": "open",
+      "route_system": "aspera",
+      "route_kind": "aspera",
+      "record_grain": "package",
+      "object_role": "annotation",
+      "package_url": "https://example.org/faspex/synthetic-package",
+      "package_path": "path/in/package"
+    },
+    {
+      "dataset_type": "collection",
+      "short_title": "EXAMPLE",
+      "access_level": "controlled",
+      "route_system": "ctdc",
+      "record_grain": "file",
+      "file_id": "synthetic-0008",
+      "participant_id": "0008"
+    },
+    {
+      "dataset_type": "analysis-result",
+      "short_title": "EXAMPLE-ANNOT",
+      "access_level": "open",
+      "record_grain": "series",
+      "route_kind": "SeriesInstanceUID",
+      "series_instance_uid": "1.02.004",
+      "identifier_source": "reviewed",
+      "object_role": "source_image"
+    },
+    {
+      "dataset_type": "collection",
+      "short_title": "EXAMPLE",
+      "access_level": "open",
+      "record_grain": "file",
+      "source_url": "https://example.org/metadata-only"
+    }
+  ]
+}

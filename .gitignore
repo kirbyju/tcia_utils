@@ -130,3 +130,9 @@ dmypy.json
 *.bak
 .DS_Store
 /tcia-utils-env
+
+# Local cross-repository notebook and distribution validation
+/notebook-examples/
+/examples-venv/
+/wheel-venv/
+/sdist-venv/
