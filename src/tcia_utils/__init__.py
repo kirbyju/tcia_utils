@@ -13,8 +13,10 @@ from ._errors import (
 from ._results import Completeness, Page, Provenance, Result, ServiceStatus
 from .client import TCIAClient
 from ._selection import Selection, ExportReport
+from ._downloads import DownloadPlan, DownloadReport, ManifestReport, DownloadError
 
 __all__ = [
+    "DownloadPlan", "DownloadReport", "ManifestReport", "DownloadError",
     "TCIAClient", "Selection", "ExportReport", "Result", "Page", "Provenance", "Completeness", "ServiceStatus",
     "TCIAError", "InvalidRequestError", "NotFoundError", "RetiredRouteError",
     "ServiceUnavailableError", "TransportError", "HTTPResponseError", "ProtocolError",

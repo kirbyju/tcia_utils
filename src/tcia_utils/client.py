@@ -17,6 +17,8 @@ from ._participants import ParticipantsMixin
 from ._clinical import ClinicalMixin
 from ._available_data import AvailableDataMixin
 from ._selection import select, export_selection
+from ._downloads import DownloadsMixin
+from ._research import ResearchMixin
 
 
 _CAPABILITIES = (
@@ -36,7 +38,7 @@ def _identity_matches(first: Provenance, later: Provenance) -> None:
         raise ProtocolError("Service release or installed profile changed during pagination")
 
 
-class TCIAClient(DatasetMethods, CitationMethods, ParticipantsMixin, ClinicalMixin, AvailableDataMixin):
+class TCIAClient(DatasetMethods, CitationMethods, ParticipantsMixin, ClinicalMixin, AvailableDataMixin, DownloadsMixin, ResearchMixin):
     """Reusable synchronous client for a configured TCIA V2 REST host."""
 
     select = staticmethod(select)
@@ -49,7 +51,12 @@ class TCIAClient(DatasetMethods, CitationMethods, ParticipantsMixin, ClinicalMix
         timeout: float = 15.0,
         retries: int = 2,
         http_client: httpx.Client | None = None,
+        pin_snapshot: bool = False,
     ) -> None:
+        if not isinstance(pin_snapshot, bool):
+            raise InvalidRequestError("pin_snapshot must be a boolean")
+        self._pin_snapshot = pin_snapshot
+        self._pinned_identity = None
         self._transport = Transport(base_url, timeout=timeout, retries=retries, client=http_client)
 
     def __enter__(self) -> "TCIAClient":
@@ -97,6 +104,11 @@ class TCIAClient(DatasetMethods, CitationMethods, ParticipantsMixin, ClinicalMix
             capabilities=observed_caps,
             observed_at_utc=observed_at,
         )
+        if self._pin_snapshot:
+            identity = (fingerprint, profile)
+            if self._pinned_identity is not None and self._pinned_identity != identity:
+                raise ProtocolError("Metadata changed during this client session; create a new client and restart the query")
+            self._pinned_identity = identity
         return ServiceStatus(ready, observed_caps, fingerprint, release_tag, profile), provenance
 
     def status(self) -> Result[ServiceStatus]:
