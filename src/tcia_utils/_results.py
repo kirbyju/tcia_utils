@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from typing import Any, Callable, Generic, Iterator, Mapping, TypeVar
 
 T = TypeVar("T")
@@ -37,12 +37,12 @@ class ServiceStatus:
     installed_profile: str
 
 
-def _frame(records: Any) -> Any:
+def _frame(records: Any, columns=None) -> Any:
     try:
         import pandas as pd
     except ImportError as exc:
         raise ImportError("Install tcia_utils[tables] to use to_dataframe()") from exc
-    return pd.DataFrame(records)
+    return pd.DataFrame(records, columns=columns)
 
 
 @dataclass(frozen=True)
@@ -52,7 +52,7 @@ class Result(Generic[T]):
     provenance: Provenance
     completeness: Completeness
 
-    def to_dataframe(self, key: str | None = None) -> Any:
+    def to_dataframe(self, key: str | None = None, *, columns=None) -> Any:
         """Convert an explicit record list without changing evidence fields."""
         records: Any = self.data
         if isinstance(records, Mapping):
@@ -65,7 +65,7 @@ class Result(Generic[T]):
                 records = records[key]
         if not isinstance(records, (list, tuple)):
             raise ValueError("Result does not contain a record list")
-        return _frame(records)
+        return _frame(records, columns=columns)
 
 
 @dataclass(frozen=True)
@@ -93,5 +93,19 @@ class Page(Generic[T]):
             yield current
             current = current.next_page()
 
-    def to_dataframe(self) -> Any:
-        return _frame(self.items)
+    def to_dataframe(self, *, all_pages: bool = False) -> Any:
+        """Convert this page, or explicitly collect all cursor pages first."""
+        if not isinstance(all_pages, bool):
+            raise ValueError("all_pages must be a boolean")
+        rows = self.items
+        if all_pages:
+            rows = []
+            for page in self.iter_pages():
+                if (page.provenance.release_fingerprint, page.provenance.installed_profile) != (self.provenance.release_fingerprint, self.provenance.installed_profile):
+                    from ._errors import ProtocolError
+                    raise ProtocolError("Metadata changed during page collection")
+                rows.extend(page.items)
+        frame = _frame(rows)
+        frame.attrs["tcia_provenance"] = asdict(self.provenance)
+        frame.attrs["all_pages_collected"] = all_pages or not self.has_more
+        return frame

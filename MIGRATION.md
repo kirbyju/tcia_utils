@@ -1,6 +1,6 @@
 # Moving from TCIA Utils 3.x to 4.0
 
-The 4.0 interface is a new research client, not a compatibility release for every 3.x provider module. Pin a 3.x environment for existing scripts until you have moved each workflow deliberately. Version `4.0.0a1` is an opt-in alpha. Install it explicitly with `python -m pip install "tcia_utils==4.0.0a1"`; ordinary pip installs continue selecting the stable release.
+The 4.0 interface is a new research client, not a compatibility release for every 3.x provider module. Pin a 3.x environment for existing scripts until you have moved each workflow deliberately. Version `4.0.0a2` is an opt-in alpha. Install it explicitly with `python -m pip install "tcia_utils==4.0.0a2"`; ordinary pip installs continue selecting the stable release.
 
 | 3.x pattern | 4.0 approach |
 | --- | --- |
@@ -8,10 +8,10 @@ The 4.0 interface is a new research client, not a compatibility release for ever
 | Query a catalog provider and infer that a DOI is a TCIA publication | Use visible `search_datasets()` / `get_dataset()` records as publication identity; use `get_citation()` for DataCite enrichment |
 | Treat a short title as globally unique | Keep `(dataset_type, short_title)` for Collection versus Analysis Result; `get_dataset()` may return multiple `datasets` rows |
 | Treat a dataset diagnosis or display patient ID as a patient-level fact | Inspect clinical evidence scope and use dataset-scoped participant identity and reviewed crosswalks |
-| Download through package-specific helpers | Prepare an explicit selection manifest for TCIA Data Retriever; use `idc-index` directly for public DICOM detail and viewer selection |
+| Download through package-specific helpers | Use `download_dataset()` / `download_files()` for explicit transfers, or export a selection for TCIA Data Retriever; public DICOM delegates to `idc-index` |
 
-The client needs an explicit TCIA V2 REST `base_url`. `status()` reports its observed fingerprint, profile, and capabilities. The package does not silently fall back to live WordPress, DataCite, IDC, or another host when a snapshot component is unavailable. There is no 4.0 MCP transport, native controlled download, or token helper.
+The client needs an explicit TCIA V2 REST `base_url`. `status()` reports its observed fingerprint, profile, and capabilities. The package does not silently fall back to live WordPress, DataCite, IDC, or another host when a snapshot component is unavailable. The client uses REST for metadata; there is no MCP transport. Explicit download methods resolve approved controlled files through the supported API without requiring readers to handle tokens.
 
 Start a migration by calling `search_datasets()`, then inspect `get_dataset()` and `list_downloads()` before choosing records. Use `search_participants()` and clinical methods only where the service reports the corresponding capability. Keep each result's provenance and completeness when saving an analysis. A `Page` covers one requested page; use explicit cursor iteration for more. Bounded clinical and controlled routes report `unknown` completeness even if their returned count is below the limit.
 
-Existing workshop notebooks under `TCIA_Notebooks` remain historical examples of older APIs. The five maintained 4.0 notebooks live under [TCIA_Notebooks/tcia_utils_v4](https://github.com/kirbyju/TCIA_Notebooks/tree/main/tcia_utils_v4) and use the installed 4.0 package.
+Existing workshop notebooks under `TCIA_Notebooks` remain historical examples of older APIs. The single guided 4.0 workshop lives under [TCIA_Notebooks/tcia_utils_v4](https://github.com/kirbyju/TCIA_Notebooks/tree/main/tcia_utils_v4) and use the installed 4.0 package.
