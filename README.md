@@ -2,10 +2,10 @@
 
 TCIA Utils is a Python client for discovering TCIA datasets, participants, clinical evidence, available data, citations, and verified analytical publications. It uses the shared TCIA V2 REST service. A researcher can start with a question about a dataset without choosing the underlying catalog or storage system.
 
-Version `4.0.0a2` is an **opt-in alpha preview** of the new API. Ordinary pip installs and upgrades continue selecting the stable 3.x release. Use a fresh Python environment to try the preview:
+Version `4.0.0a3` is an **opt-in alpha preview** of the new API. Ordinary pip installs and upgrades continue selecting the stable 3.x release. Use a fresh Python environment to try the preview:
 
 ```sh
-python -m pip install "tcia_utils[tables,downloads]==4.0.0a2"
+python -m pip install "tcia_utils[tables,downloads]==4.0.0a3"
 ```
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/TCIA_Dataset_and_Participant_Queries.ipynb)
@@ -28,6 +28,8 @@ with TCIAClient(base_url="https://tcia.duckdns.org") as tcia:
 ```
 
 Searches return one `Page` at a time. Call `page.next_page()` or iterate `page.iter_pages()` when more results are needed. Detail calls return a `Result` containing the service's named fields and notes. Both expose observed release provenance and completeness. `partial` means more cursor pages are available; `unknown` means the route has no exhaustive cursor or contains a bounded sublist. An empty successful page is a real zero-match result. Failures raise typed `TCIAError` subclasses: for example, `ServiceUnavailableError` for a missing capability or HTTP 503, `HTTPResponseError` for HTTP 500, and `TransportError` for a connection failure.
+
+Use `describe_datasets(search_results)` to add collection-level `data_categories` without notebook-specific lookup code. Missing download requirements now have specific error messages and per-group setup links.
 
 To plan and download a dataset from Python:
 

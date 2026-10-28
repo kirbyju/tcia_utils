@@ -172,3 +172,67 @@ def test_snapshot_pin_applies_between_independent_operations():
         fingerprint[0] = "b"
         with pytest.raises(ProtocolError):
             client.status()
+
+
+def test_dataset_descriptions_keep_type_identity_and_external_resources_separate():
+    from tcia_utils._results import Result
+
+    calls = []
+
+    def detail(title):
+        calls.append(title)
+        rows = [
+            dict(
+                short_title=title,
+                dataset_type=kind,
+                download_types=categories,
+                external_resource_labels=["Clinical"],
+            )
+            for kind, categories in [
+                ("Collection", ["Radiology Images", "Pathology Images"]),
+                ("Analysis Result", ["Image Analyses"]),
+            ]
+        ]
+        return Result({"datasets": rows}, ("Source caveat",), P, Completeness("unknown"))
+
+    client = Client(None)
+    client.get_dataset = detail
+    result = client.describe_datasets(
+        [
+            {"short_title": "SHARED", "dataset_type": kind}
+            for kind in ["collection", "analysis_result"]
+        ]
+    )
+    assert calls == ["SHARED"]
+    assert [r["data_categories"] for r in result.data["datasets"]] == [
+        ["Radiology Images", "Pathology Images"],
+        ["Image Analyses"],
+    ]
+    assert all("Clinical" not in r["data_categories"] for r in result.data["datasets"])
+    assert result.notes == ("SHARED: Source caveat",)
+
+
+@pytest.mark.parametrize("fault", ["changed_release", "wrong_identity", "missing_categories"])
+def test_dataset_descriptions_fail_on_unverifiable_enrichment(fault):
+    from tcia_utils._results import Result
+
+    client = Client(None)
+    row = dict(short_title="A", dataset_type="Collection", download_types=["Radiology Images"])
+    if fault == "wrong_identity":
+        row["dataset_type"] = "Analysis Result"
+    if fault == "missing_categories":
+        row.pop("download_types")
+    client.get_dataset = lambda _: Result(
+        {"datasets": [row]},
+        (),
+        replace(P, release_fingerprint="changed") if fault == "changed_release" else P,
+        Completeness("unknown"),
+    )
+    with pytest.raises(ProtocolError):
+        client.describe_datasets([{"short_title": "A", "dataset_type": "Collection"}])
+
+
+def test_empty_dataset_descriptions_need_no_detail_request():
+    client = Client(None)
+    client.get_dataset = lambda _: pytest.fail("No detail needed")
+    assert client.describe_datasets([]).data == {"datasets": []}

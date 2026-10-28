@@ -14,6 +14,54 @@ def records(value):
 
 
 class ResearchMixin:
+    def describe_datasets(self, datasets):
+        """Enrich explicit dataset records with details and published data categories.
+
+        Search DTOs omit download categories. Resolve those through get_dataset(),
+        retaining dataset type and rejecting a changed snapshot or ambiguous identity.
+        No external-resource label is reclassified as a downloadable data category.
+        """
+        rows = records(datasets)
+        _, provenance = self._observe_status()
+        cache, described, notes = {}, [], []
+        for row in rows:
+            title, kind = row.get("short_title"), row.get("dataset_type")
+            if not isinstance(title, str) or not title.strip() or not isinstance(kind, str):
+                raise InvalidRequestError("Each dataset needs short_title and dataset_type")
+            identity = kind.casefold().replace("_", " ")
+            if identity not in {"collection", "analysis result"}:
+                raise InvalidRequestError("Unrecognized dataset_type")
+            if title not in cache:
+                result = self.get_dataset(title)
+                if (result.provenance.release_fingerprint, result.provenance.installed_profile) != (
+                    provenance.release_fingerprint,
+                    provenance.installed_profile,
+                ):
+                    raise ProtocolError(
+                        "Metadata changed during dataset enrichment; restart the query"
+                    )
+                cache[title] = result.data["datasets"]
+                notes.extend(f"{title}: {note}" for note in result.notes)
+            matches = [
+                item
+                for item in cache[title]
+                if item.get("short_title") == title
+                and str(item.get("dataset_type", "")).casefold().replace("_", " ") == identity
+            ]
+            if len(matches) != 1:
+                raise ProtocolError("Dataset detail does not resolve the selected dataset identity")
+            detail = matches[0]
+            categories = detail.get("download_types")
+            if not isinstance(categories, list) or any(not isinstance(v, str) for v in categories):
+                raise ProtocolError("Dataset detail is missing its published download categories")
+            described.append({**row, **detail, "data_categories": list(categories)})
+        return Result(
+            {"datasets": described},
+            tuple(dict.fromkeys(notes)),
+            provenance,
+            Completeness("complete", "All explicitly selected dataset records enriched"),
+        )
+
     def clinical_for_participants(self, participants, *, include_inferred=True):
         """Get clinical rows for exact Collection-scoped participant identifiers.
 
