@@ -317,3 +317,26 @@ def test_plan_displays_real_download_category_and_requires_dataset_identity():
     plan = client.plan_downloads("EXAMPLE", dataset_type="collection")
     assert len(plan.rows) == 1 and plan.rows[0]["download_category"] == "Clinical Data"
     assert plan.scope["metadata_snapshot"] == "fp"
+
+
+def test_missing_package_tool_explains_real_requirement_without_requesting_key(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(downloads.shutil, "which", lambda _: None)
+    fake_http(monkeypatch, lambda r: pytest.fail("No manifest or payload request should run"))
+    package = row(
+        download_types=["Pathology Images"],
+        download_url="https://faspex.cancerimagingarchive.net/?context=OFFICIAL_PACKAGE_LINK",
+    )
+    client = Client([package])
+    check = client.download_dataset("EXAMPLE", tmp_path, dry_run=True)
+    entry = check.entries[0]
+    assert entry["status"] == "requires_package_transfer_tools"
+    assert "Aspera CLI" in entry["message"] and "runtime" in entry["next_step"]
+    assert entry["documentation_url"].endswith("TCIA_Aspera_CLI_Downloads.ipynb")
+    with pytest.raises(DownloadError) as error:
+        client.download_dataset("EXAMPLE", tmp_path)
+    message = str(error.value)
+    assert "Aspera CLI" in message and "package_client=" in message
+    assert "credential" not in message.lower()
+    assert error.value.report.entries == check.entries and not check.complete

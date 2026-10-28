@@ -1,6 +1,6 @@
 # Moving from TCIA Utils 3.x to 4.0
 
-The 4.0 interface is a new research client, not a compatibility release for every 3.x provider module. Pin a 3.x environment for existing scripts until you have moved each workflow deliberately. Version `4.0.0a2` is an opt-in alpha. Install it explicitly with `python -m pip install "tcia_utils==4.0.0a2"`; ordinary pip installs continue selecting the stable release.
+The 4.0 interface is a new research client, not a compatibility release for every 3.x provider module. Pin a 3.x environment for existing scripts until you have moved each workflow deliberately. Version `4.0.0a3` is an opt-in alpha. Install it explicitly with `python -m pip install "tcia_utils==4.0.0a3"`; ordinary pip installs continue selecting the stable release.
 
 | 3.x pattern | 4.0 approach |
 | --- | --- |

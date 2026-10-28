@@ -406,6 +406,43 @@ def _engine(command):
         )
 
 
+def _prerequisite_guidance(status):
+    guidance = {
+        "requires_package_transfer_tools": (
+            "Aspera CLI (ascli) was not found in this Python runtime's PATH.",
+            "Install Aspera CLI and its transfer engine in the notebook runtime, or pass package_client= with an existing executable's full path. The Python downloads extra does not install these tools.",
+            "https://github.com/kirbyju/TCIA_Notebooks/blob/main/TCIA_Aspera_CLI_Downloads.ipynb",
+        ),
+        "requires_python_download_extra": (
+            "The public DICOM Python dependency is missing.",
+            "Install tcia_utils[downloads] in the environment running the notebook.",
+            "https://github.com/kirbyju/tcia_utils/blob/main/docs/v4/user-guide.md#download-from-python",
+        ),
+        "requires_credential": (
+            "This selected download requires an approved controlled-data key file.",
+            "Supply credential_file= with the path to your approved JSON key. Keep the key contents out of the notebook.",
+            "https://www.cancerimagingarchive.net/nih-controlled-data-access-policy/",
+        ),
+        "requires_data_retriever": (
+            "The configured TCIA Data Retriever executable was not found.",
+            "Install TCIA Data Retriever in this runtime, or pass retriever= with its executable path.",
+            "https://github.com/TCIA/data-retriever/releases",
+        ),
+        "unsupported_by_data_retriever": (
+            "This selected group cannot be downloaded through the Data Retriever backend.",
+            "Use backend='python' with the published route, or follow the official collection download link.",
+            "",
+        ),
+        "unsupported": (
+            "This record has no supported, unambiguous download route.",
+            "Follow the official collection instructions; no replacement URL will be invented.",
+            "",
+        ),
+    }
+    message, next_step, documentation_url = guidance.get(status, ("", "", ""))
+    return {"message": message, "next_step": next_step, "documentation_url": documentation_url}
+
+
 class DownloadsMixin:
     def plan_downloads(
         self, short_title, *, download_ids=None, access_levels=None, dataset_type=None
@@ -657,16 +694,17 @@ class DownloadsMixin:
                     "download_category": "; ".join(row.get("download_types") or []),
                     "route": route,
                     "status": problem or "planned",
+                    **_prerequisite_guidance(problem),
                 }
             )
         report = DownloadReport(tuple(entries), scope)
         if dry_run:
             return report
         if any(e["status"] != "planned" for e in entries):
-            raise DownloadError(
-                "Selection is not ready. Inspect error.report.to_dataframe(); install the downloads extra, configure package tools, or supply approved credentials as indicated.",
-                report,
-            )
+            missing = [entry for entry in entries if entry["status"] != "planned"]
+            reasons = " ".join(dict.fromkeys(entry["message"] for entry in missing))
+            actions = " ".join(dict.fromkeys(entry["next_step"] for entry in missing))
+            raise DownloadError(f"Download cannot start. {reasons} {actions}", report)
         if any(r.get("access_level") == "controlled" for r in rows):
             key = _credential(credential_file)
         target = Path(destination)
