@@ -2,7 +2,7 @@
 
 ## Install and connect
 
-The 4.0.0a3 alpha requires Python 3.11 or newer. Install the exact preview in a fresh environment as shown in the [README](../../README.md). Install `tcia_utils[tables]` only if you want pandas conversion; the core client imports no pandas, notebooks, or imaging libraries. The [notebook environment](https://github.com/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/requirements.txt) pins the separately tested example tools.
+The unpublished 4.0.0a4.dev0 review build requires Python 3.11 or newer. Install the supplied local wheel in a fresh environment as shown in the [README](../../README.md). Install `tcia_utils[tables]` only if you want pandas conversion; the core client imports no pandas, notebooks, or imaging libraries. The [notebook environment](https://github.com/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/requirements.txt) pins the separately tested example tools.
 
 Set an explicit `base_url` for a TCIA V2 REST host. `TCIAClient` does not select a host, authenticate, transfer files, or contact the network until a method is called. Close it with a `with` block or `close()`.
 
@@ -33,13 +33,10 @@ Visible TCIA Collection and Analysis Result records establish TCIA publication i
 
 Use `search_citations()` and `get_citation(doi, style="apa")` for DataCite metadata and formatted APA, Vancouver, Chicago author-date, BibTeX, or RIS output. The DOI record enriches a TCIA dataset; it does not establish TCIA publication independently. `search_publications()` returns TCIA-maintained verified analytical use. `get_impact()` keeps verified-use counts separate from DataCite citation, view, download, and reference event metrics. DataCite download events are not TCIA image-download totals.
 
-`describe_datasets(records_or_dataframe)` enriches an explicit search selection through dataset detail calls. Its `datasets` table includes `data_categories` (the published download categories), `download_data_types` (modalities and other data types), and `download_file_types` (formats). External-resource labels remain separate. The helper keeps Collection versus Analysis Result identity, caches repeated short titles within the call, and rejects changed snapshots or ambiguous detail records.
-
-```python
-matches = tcia.search_datasets(cancer_locations=["Esophagus"], dataset_type="collection").to_dataframe(all_pages=True)
-datasets = tcia.describe_datasets(matches).to_dataframe("datasets")
-print(datasets[["short_title", "data_categories", "download_data_types", "download_file_types"]])
-```
+Collection search now includes `data_categories`, distinct from `download_data_types`
+and `download_file_types`. No per-dataset detail calls are needed to display these
+categories. `describe_datasets()` remains available when full dataset detail is
+wanted for an explicit selection.
 
 ## Read pages and evidence scope
 
@@ -71,38 +68,177 @@ For public DICOM detail, use `idc-index` directly with an evidenced dataset DOI 
 
 ## Download from Python
 
+The download scope is **Python and pip-installed dependencies**. Public DICOM
+reuses `idc-index`, including its pip-supplied `s5cmd` executable. Public HTTPS
+files and approved controlled files use the SDK's `httpx` adapter. Data Retriever,
+Aspera CLI, and applications needing a separate installation are not invoked.
+
 ```python
-with TCIAClient(base_url="https://tcia.duckdns.org", pin_snapshot=True) as tcia:
-    plan = tcia.plan_downloads("CMB-GEC")
-    print(plan.to_dataframe()[["download_id", "download_category", "access_level"]])
-    check = tcia.download_dataset("CMB-GEC", "downloads", dry_run=True)
-    print(check.to_dataframe())
-    # Explicit transfer, when ready:
-    # report = tcia.download_dataset("CMB-GEC", "downloads", download_ids=[...])
+plan = tcia.plan_downloads("CMB-GEC")
+display(plan.to_dataframe())
+# Choose the exact Python-supported group(s) you want from this inventory.
+check = tcia.download_dataset("CMB-GEC", "images", download_ids=imaging_ids, dry_run=True)
+# report = tcia.download_dataset("CMB-GEC", "images", download_ids=imaging_ids, max_items=1)
+# report = tcia.download_files(selected_files, "images", credential_file="approved-key.json")
 ```
 
-`plan_downloads()` collects the current dataset download inventory. `download_category` comes from the collection's published `download_types`; data formats and access levels remain separate fields. Use `download_ids` or `access_levels` to define a subset explicitly. Without filters, **every download group** is selected. If a short title identifies both dataset types, supply `dataset_type="collection"` or `"analysis_result"`. Unknown requested IDs fail rather than producing a partial selection.
+`plan_downloads()` consumes the shared REST/MCP download plan. Software labels,
+requirements URLs, category/count fields, and official links describe **all**
+published groups. `python_supported` and `python_support_message` describe this
+SDK's execution scope, independent of the published instructions. A requirement
+label mentioning another application does not prevent supported manifests from
+being processed directly in Python. Unknown or conflicting routes remain
+unsupported. No download group is silently discarded. Use explicit `download_ids`
+or `access_levels` to select a subset; ambiguous short titles need `dataset_type`.
 
-`download_dataset(..., dry_run=True)` queries metadata and checks local prerequisites. It does not fetch manifests, authenticate, validate index coverage, or transfer files, and its report never claims completion. Actual downloads preflight all selected manifests and public DICOM index coverage before starting any payload. Missing prerequisites stop the entire selection rather than silently skipping a group.
+A group requiring an external application reports `requires_external_tool`.
+Actual execution stops the entire selection before any payload transfer, even if
+that application happens to be installed. Follow the official link or separate
+application notebook. Such groups remain in discovery metadata and selection
+accounting; `export_selection()` does not generate application-specific Aspera
+handoffs. Ordinary UID/URL/DRS CSV manifests remain supported Python inputs.
+The SDK no longer exposes `data_retriever_command`, `backend`, `retriever`, or
+`package_client` parameters. Earlier release notes describe earlier versions.
 
-| Data route | Python behavior | Additional requirement |
-| --- | --- | --- |
-| Public DICOM `.tcia` / series CSV | Reuses `IDCClient.download_dicom_series()` | `pip install "tcia_utils[downloads]"`; all selected series must be present in the current IDC index |
-| Public HTTPS file / image URL CSV | Streams original files atomically | No optional transfer dependency |
-| Controlled DRS files / official DRS manifest | Resolves authorized file URLs, then streams files | Approved JSON `credential_file` with `api_key`, currently for `nci-crdc.datacommons.io` |
-| Original TCIA Aspera package | Calls the maintained package transfer client using the exact official package URL | Separately installed/configured [Aspera CLI](https://github.com/IBM/aspera-cli) (`ascli`) and IBM transfer tools |
-| Other or incomplete route | Reports unsupported; no fallback URL is invented | Use the official collection instructions |
+Preparation messages start before network metadata requests or index loading.
+The first public DICOM transfer initializes one IDC client; later transfers through
+the same TCIAClient reuse it. `close()` releases that reference. A destination
+containing only saved manifests does not trigger a sync scan. If existing data
+hierarchy entries are present, IDC synchronization is enabled for resumable
+transfers. Pass `progress=False` to silence SDK status output and IDC's transfer
+bar. No dependency installation is performed by download calls.
 
-Pip does not install Aspera software. Install/configure it following its documentation, then pass `package_client="/path/to/ascli"` if it is not on `PATH`. Original packages are kept as published; the helper does not substitute viewer files or automatically extract archives. Current indexed NIfTI paths do not establish individual download URLs; select the published package.
+A dry run checks metadata/local prerequisites without authentication or payloads;
+sample dry runs may read small manifests. It never initializes the IDC index.
+Actual downloads validate all selected manifests/index coverage before transferring
+payloads. Missing dependencies, authorization, unsupported routes, or unavailable
+series stop the selection.
 
-`download_files(records, destination, credential_file=...)` downloads an explicit file-grain selection with authoritative `access_level` and either an HTTPS file URL or supported `drs_uri`. It does not add related source images. The current public asset DTO often describes inventory rather than a directly retrievable file; unresolved records fail.
+Controlled downloads currently use a narrow `httpx` integration with a recognized
+CRDC/Gen3 host, not the `gen3` package or a general DRS client. Your JSON key-file
+path stays local. The adapter exchanges its key for an access token, resolves
+selected DRS identifiers to temporary HTTPS URLs, then streams through a separate
+client without the authorization token. Keys, tokens and signed URLs stay out of
+reports and metadata services. This does not grant or expand access approval.
 
-`save_manifests(plan_or_records, directory)` saves unchanged official TCIA `.tcia`/CSV/TSV manifests with SHA-256 hashes and item counts. It never fetches imaging payloads. `data_retriever_command(manifest, destination, credential_file=...)` returns an argument list for optional CLI use. `download_dataset(..., backend="data_retriever")` invokes an installed retriever for supported manifest groups; package-only links are not supported by that backend. No policy is automatically accepted.
+`DownloadReport.complete` describes the selected scope, including a sample when
+requested. `engine_completed` records IDC's completion without independent byte
+verification. HTTP files check response length and supplied size/checksum metadata,
+write atomically, and preserve existing complete files on failure. HTTP downloads
+restart interrupted files; they do not currently resume partial files. Existing
+files are skipped only when available size/checksum checks match. Failures preserve
+per-group accounting, and later groups are marked not attempted. Metadata-only
+notebook validation does not prove a real authorized transfer.
 
-Controlled keys remain local. Supply a file path, never a literal key in notebook source. Keys are sent only to the recognized authorization service; file requests use a separate client without the bearer token. Signed URLs and credentials are excluded from completion reports and external engine output is suppressed. Public inventory metadata does not confer permission to retrieve controlled data.
+## Download a manifest directly
 
-Every `DownloadReport` retains selected scope and per-group status. `complete` means all selected entries reported success; it does not mean every group in a dataset was selected. `engine_completed` records successful upstream process/client completion **without independent byte-level verification**. HTTP transfers check response length when supplied and metadata size/checksum when available; size-only checks are weaker than checksums. Failed partial HTTP files are removed without replacing an existing complete file. Existing files are skipped only when the available checksum or size matches; `overwrite=True` explicitly replaces them. HTTP transfers restart interrupted files; delegated clients retain their own resume behavior.
+```python
+report = tcia.download_manifest("cohort.tcia", "images", dry_run=True)
+# report = tcia.download_manifest("cohort.tcia", "images")
+# report = tcia.download_manifest("https://example.org/cohort.csv", "images")
+# report = tcia.download_manifest("controlled.csv", "images", credential_file="approved-key.json")
+```
 
-A failure raises `DownloadError`; inspect `error.report.to_dataframe()` when a report is present. Prerequisite failures name the missing requirement in the exception and include `message`, `next_step`, and `documentation_url` per group. `requires_package_transfer_tools` specifically means the configured Aspera CLI executable was not found in this Python runtime's `PATH`; it is unrelated to a public package's access permission. The Python `downloads` extra installs public DICOM support, not Ruby, Aspera CLI, or its transfer engine. A local browser's Aspera Connect installation is not available inside a hosted notebook runtime. Follow the [existing TCIA setup notebook](https://github.com/kirbyju/TCIA_Notebooks/blob/main/TCIA_Aspera_CLI_Downloads.ipynb) and the [official installation guide](https://github.com/IBM/aspera-cli#install), then rerun the prerequisite check. With the current Ruby gem, Ruby 3.2+ is required; `gem install aspera-cli` installs the CLI and `ascli config transferd install` installs the transfer runtime. If the CLI already exists outside `PATH`, pass its full path as `package_client`. A dry run only discovers the executable; it does not prove the transfer runtime or remote connection works. Completed earlier groups remain recorded, failed groups are marked, and later groups are `not_attempted`. Do not infer success from the presence of a destination directory. No adapter live tests with credentials or imaging payloads are included in the notebook's metadata validation; synthetic offline tests exercise transfer and failure behavior.
+Pass a local path (including `Path`) or an HTTPS URL. Supported formats are
+`.tcia`, `.csv`, and `.tsv`. A tabular manifest must have exactly one recognized
+route column. UID rows use the existing public-DICOM adapter, file URLs use the
+HTTP adapter, and DRS rows use the approved controlled-file adapter. The method
+does not require a REST plan and does not upload the manifest or key to the service.
 
-The [single guided workshop](https://github.com/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/TCIA_Dataset_and_Participant_Queries.ipynb) uses the installed package, real public metadata by default, and opt-in imaging transfers. Its maintainer fixture mode replays recorded public metadata for regression checks; it is not a current research result.
+A dry run reads the small manifest (10 MB cap) and checks local prerequisites;
+it transfers no payload, performs no authentication, and does not initialize the
+imaging index. Actual UID transfers check **every** selected series against the
+index before transferring any. Missing UIDs stop the selection and appear in the
+failure report. Controlled UID-only manifests are not sent through a public route;
+use a supported approved DRS manifest. DRS manifests cannot be declared open.
+
+Malformed/mixed route columns, unrecognized DRS hosts, non-HTTPS file routes,
+unsafe names, and duplicate destinations fail before payload transfer. Original
+CSV filenames, sizes, and supported checksum fields are retained. Existing files
+follow the same verification/overwrite behavior as dataset downloads. Data files
+are grouped under `destination/manifest/<manifest-hash-prefix>/`; the original
+small manifest is saved in its `manifests/` subdirectory. Reports retain a content
+hash and item count, not keys, signed URLs, or a guessed dataset/participant identity.
+
+
+## Try a sample before a larger transfer
+
+Use the same download functions with `max_items` to transfer only the first few
+items. This is a real transfer check; `dry_run=True` remains metadata/setup only.
+
+```python
+# First whole series from a local or HTTPS manifest.
+report = tcia.download_manifest("cohort.tcia", "sample", max_items=1)
+display(report.to_dataframe())
+print(report.scope)
+
+# Or sample a particular published download group.
+report = tcia.download_dataset(
+    "CMB-GEC", "sample", download_ids=[imaging_download_id], max_items=1
+)
+
+# File records from a participant query can be sampled the same way.
+report = tcia.download_files(file_records, "sample", max_items=2)
+```
+
+The limit applies **across the complete selection**, in input/manifest order,
+not separately to every group. It counts whole DICOM series or whole files,
+including whole archives where each manifest entry is an archive. It is not a
+byte limit or a random/representative sample. Choose the desired download IDs
+when a dataset has several groups; a small limit may select only the first group.
+For a scan/segmentation example, select a verified candidate pair first and keep
+both records rather than taking the first two unrelated files.
+
+`report.scope["is_sample"]` marks the transfer. The scope includes the item limit,
+selected/available/omitted counts, and every selected group's accounting (including
+zero-selected groups). Entry tables show counts and units, while subset manifest
+hashes identify the precise selection. For manifest downloads, the adapter saves
+and uses a new `selection.csv`; it never edits the supplied original manifest.
+The original manifest's hash remains in the scope for standalone manifest inputs.
+The Python adapter uses that reduced manifest.
+
+`report.complete` means the **sample selection** completed. It does not mean the
+full dataset was downloaded or that all remaining files are authorized/available.
+A successful transfer also does not prove image quality or image/label alignment.
+Inspect the sample and report, then omit `max_items` to request the larger
+selection, preferably in a separate destination. The larger transfer repeats its
+normal checks. No automatic full download follows a successful sample.
+
+External-application packages cannot be sampled by this SDK.
+The call reports `unsupported_sample` and transfers no payloads, including any
+other groups in that selection. It never falls back to downloading the full
+package. Use a published manifest or an indexed file selection when available;
+otherwise follow the official download link using a separate application outside
+this SDK.
+Controlled samples require the same approved credentials as any controlled
+transfer. A sample dry run may fetch small manifests to calculate the selection,
+but it does not authenticate, initialize the imaging index, or download payloads.
+This runtime choice belongs in the Python SDK; it does not require an API/schema
+change or send credentials/local files to the metadata service.
+
+
+## Download images after clinical filtering
+
+`plan_participant_images(cohort, modality="CT", file_format="DICOM")` inventories
+public series for the exact participant query records supplied. It anchors them
+to each selected dataset's published public manifest before matching IDC PatientID
+and modality; it does not derive IDC collection names or join IDs across datasets.
+The plan records manifest hashes and index version. For non-DICOM whole slides,
+use modality="Whole Slide Image", file_format="non-DICOM". That selection follows
+all public-asset pages and accepts explicit API file-download descriptors, not
+arbitrary source URLs or archive-internal paths. It requires the matching API
+update for recognized public slide routes.
+
+Use `plan.to_dataframe()` for matching images and `plan.coverage_to_dataframe()`
+for each requested participant, including zero-match subjects. `plan.unresolved`
+retains missing index coverage, unverified identity namespaces, and missing or
+controlled file routes. Those issues block `download_images()` rather than
+silently reducing the image selection. All selection methods retain dataset-scoped
+identity and distinguish public slide copies from submitted originals.
+
+`download_images(plan, destination, max_items=1)` delegates to the same Python
+manifest/file adapters used elsewhere. The limit is global and counts whole series
+or slide files; one CT series includes all its DICOM instances. Omit max_items to
+retrieve the complete planned public selection. This does not include controlled
+images, prove image quality or completeness outside indexed coverage, or change
+clinical inclusion criteria. Rebuild the plan after changing those criteria.

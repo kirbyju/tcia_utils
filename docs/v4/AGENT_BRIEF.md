@@ -1,3 +1,5 @@
+> Historical phase-1 brief. For the current review scope and supported Python downloads, use [the user guide](user-guide.md#download-from-python). External application launchers and Aspera handoffs are no longer part of the SDK.
+
 # TCIA Utils 4.0 agent brief
 
 Implement a clean Python client for TCIA research workflows. Researchers should discover datasets, participants, clinical evidence, available data, citations, and publications without selecting TCIA's underlying software. The package consumes the shared TCIA REST contract; it does not reproduce the metadata ingestion pipeline or require an LLM account.

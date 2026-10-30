@@ -182,20 +182,8 @@ def _classify(record: Mapping[str, Any]) -> tuple[str | None, str | None, str | 
     if route_system == "aspera" and route_kind not in {"", "aspera"}:
         return None, None, "ambiguous_route"
 
-    if route_kind == "aspera" or (route_system == "aspera" and record.get("package_url")):
-        if access not in _OPEN_ACCESS:
-            return None, None, "aspera_requires_open_access"
-        package_url, package_path = _text(record, "package_url"), _text(record, "package_path")
-        if not package_url or not package_path:
-            return None, None, "missing_aspera_package_or_path"
-        if any(ord(char) < 32 for char in package_url + package_path) or package_path.startswith("-"):
-            return None, None, "invalid_aspera_package_or_path"
-        parsed = urlsplit(package_url)
-        if parsed.scheme != "https" or not parsed.netloc or parsed.query or parsed.fragment:
-            return None, None, "invalid_aspera_package_url"
-        return "aspera-handoff.json", "aspera", json.dumps(
-            {"package_url": package_url, "package_path": package_path}, sort_keys=True
-        )
+    if route_kind == "aspera" or route_system == "aspera":
+        return None, None, "external_application_required"
 
     if access == "controlled":
         if route_system not in _CONTROLLED_SYSTEMS:
@@ -255,7 +243,6 @@ def export_selection(
     _reject_secrets(selection.coverage, "coverage")
 
     groups: dict[tuple[str, str], list[str]] = {}
-    aspera: list[dict[str, str]] = []
     accounted: list[dict[str, Any]] = []
     datasets: dict[tuple[str, str], dict[str, Any]] = {}
     seen: set[tuple[str, str, str]] = set()
@@ -290,11 +277,8 @@ def export_selection(
                               "reason": "same_manifest_identifier", "record": record})
             continue
         seen.add(key)
-        if column == "aspera":
-            aspera.append({**json.loads(value), "dataset_type": identity[0], "short_title": identity[1]})
-        else:
-            assert column in _ROUTE_COLUMNS
-            groups.setdefault((filename, column), []).append(value)
+        assert column in _ROUTE_COLUMNS
+        groups.setdefault((filename, column), []).append(value)
         size = next((record.get(field) for field in ("file_size_bytes", "known_size_bytes", "size_bytes")
                      if isinstance(record.get(field), int) and not isinstance(record.get(field), bool)
                      and record.get(field) >= 0), None)
@@ -341,9 +325,6 @@ def export_selection(
     }
     _reject_secrets(companion, "companion")
     payloads = {(name): _csv_bytes(column, values) for (name, column), values in groups.items()}
-    if aspera:
-        payloads["aspera-handoff.json"] = (json.dumps({"format": "ascli_faspex5_package_paths_v1",
-            "items": aspera}, indent=2, sort_keys=True) + "\n").encode("utf-8")
     payloads["selection.json"] = (json.dumps(companion, indent=2, sort_keys=True) + "\n").encode("utf-8")
 
     if target.exists():

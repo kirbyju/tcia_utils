@@ -17,8 +17,9 @@ class ResearchMixin:
     def describe_datasets(self, datasets):
         """Enrich explicit dataset records with details and published data categories.
 
-        Search DTOs omit download categories. Resolve those through get_dataset(),
-        retaining dataset type and rejecting a changed snapshot or ambiguous identity.
+        Current search responses already include data_categories. Use this helper
+        when full detail fields are needed, retaining dataset type and rejecting a
+        changed snapshot or ambiguous identity.
         No external-resource label is reclassified as a downloadable data category.
         """
         rows = records(datasets)
