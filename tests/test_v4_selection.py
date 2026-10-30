@@ -1,4 +1,4 @@
-"""Offline selection/export behavior and Data Retriever header compatibility."""
+"""Offline selection/export behavior and Python download manifest compatibility."""
 
 from __future__ import annotations
 
@@ -28,10 +28,10 @@ def test_route_specific_exports_and_accounting(tmp_path):
                     query_scope={"short_titles": ["EXAMPLE"], "completeness": "unknown"},
                     coverage={"coverage_complete": False})
     report = export_selection(chosen, tmp_path / "export")
-    assert (report.exported, report.deduplicated, report.excluded, report.unresolved) == (4, 1, 1, 2)
+    assert (report.exported, report.deduplicated, report.excluded, report.unresolved) == (3, 1, 1, 3)
     names = {path.name for path in report.files}
     assert names == {"public-series.csv", "public-image-url.csv",
-                     "controlled-ctdc-drs-uri.csv", "aspera-handoff.json", "selection.json"}
+                     "controlled-ctdc-drs-uri.csv", "selection.json"}
     for name, header in (("public-series.csv", "SeriesInstanceUID"),
                          ("public-image-url.csv", "imageUrl"),
                          ("controlled-ctdc-drs-uri.csv", "drs_uri")):
@@ -43,9 +43,7 @@ def test_route_specific_exports_and_accounting(tmp_path):
             assert not set(reader.fieldnames) & {"file_id", "access", "File ID"}
     with (report.destination / "public-series.csv").open(newline="") as stream:
         assert list(csv.DictReader(stream))[0]["SeriesInstanceUID"] == "1.02.003"
-    aspera = json.loads((report.destination / "aspera-handoff.json").read_text())
-    assert aspera["format"] == "ascli_faspex5_package_paths_v1"
-    assert aspera["items"][0]["package_path"] == "path/in/package"
+    assert not (report.destination / "aspera-handoff.json").exists()
     companion = json.loads((report.destination / "selection.json").read_text())
     assert companion["counts"]["input"] == len(rows) == 8
     assert sum(companion["counts"][name] for name in ("exported", "deduplicated", "excluded", "unresolved")) == 8
@@ -145,7 +143,7 @@ def test_frozen_provenance_dataclass_is_accepted(tmp_path):
     assert companion["release_identity"]["release_fingerprint"] == "f" * 64
 
 
-def test_aspera_handoff_requires_exact_safe_package_and_path(tmp_path):
+def test_external_application_records_are_not_exported_for_transfer(tmp_path):
     base = {"dataset_type": "collection", "short_title": "EXAMPLE", "access_level": "open",
             "route_kind": "aspera", "package_url": "https://example.org/package",
             "package_path": "path/in/package"}

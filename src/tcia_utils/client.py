@@ -18,6 +18,7 @@ from ._clinical import ClinicalMixin
 from ._available_data import AvailableDataMixin
 from ._selection import select, export_selection
 from ._downloads import DownloadsMixin
+from ._images import ParticipantImagesMixin
 from ._research import ResearchMixin
 
 
@@ -38,7 +39,7 @@ def _identity_matches(first: Provenance, later: Provenance) -> None:
         raise ProtocolError("Service release or installed profile changed during pagination")
 
 
-class TCIAClient(DatasetMethods, CitationMethods, ParticipantsMixin, ClinicalMixin, AvailableDataMixin, DownloadsMixin, ResearchMixin):
+class TCIAClient(DatasetMethods, CitationMethods, ParticipantsMixin, ClinicalMixin, AvailableDataMixin, DownloadsMixin, ParticipantImagesMixin, ResearchMixin):
     """Reusable synchronous client for a configured TCIA V2 REST host."""
 
     select = staticmethod(select)
@@ -67,6 +68,8 @@ class TCIAClient(DatasetMethods, CitationMethods, ParticipantsMixin, ClinicalMix
 
     def close(self) -> None:
         self._transport.close()
+        # Release the lazily loaded upstream client and its in-memory indexes.
+        self._imaging_client = None
 
     def _observe_status(self) -> tuple[ServiceStatus, Provenance]:
         ready = self._transport.request_json("GET", "/v2/ready")

@@ -63,9 +63,9 @@
       }
     },
     {
-      "disposition": "exported",
-      "file": "aspera-handoff.json",
+      "disposition": "unresolved",
       "input_index": 4,
+      "reason": "external_application_required",
       "record": {
         "access_level": "open",
         "dataset_type": "analysis-result",
@@ -126,11 +126,11 @@
   "counts": {
     "deduplicated": 1,
     "excluded": 1,
-    "exported": 4,
-    "exported_unknown_size": 3,
+    "exported": 3,
+    "exported_unknown_size": 2,
     "input": 8,
     "known_size_bytes": 123,
-    "unresolved": 2
+    "unresolved": 3
   },
   "coverage": {
     "coverage_complete": false

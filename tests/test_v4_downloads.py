@@ -23,6 +23,18 @@ def row(**changes):
         file_size_bytes=4,
     )
     result.update(changes)
+    result.setdefault("requirement_status", "declared")
+    if "download_method" not in result:
+        url = result.get("download_url") or ""
+        result["download_method"] = (
+            "aspera_package"
+            if "faspex.cancerimagingarchive.net" in url
+            else (
+                "dicom_manifest"
+                if url.endswith(".tcia")
+                else "tabular_manifest" if url.endswith((".csv", ".tsv")) else "direct_file"
+            )
+        )
     return result
 
 
@@ -213,45 +225,8 @@ def test_dicom_delegates_exact_series_allowlist_to_upstream_client(tmp_path, mon
     assert report.entries[0]["verification"].startswith("upstream engine")
 
 
-def test_package_wrapper_preserves_official_url_and_captures_output(tmp_path, monkeypatch):
-    calls = []
-    monkeypatch.setattr(downloads.shutil, "which", lambda name: "/fake/ascli")
-    monkeypatch.setattr(
-        downloads.subprocess,
-        "run",
-        lambda command, **kwargs: calls.append((command, kwargs))
-        or SimpleNamespace(returncode=0, stdout="PRIVATE_OUTPUT", stderr=""),
-    )
-    package = row(
-        download_url="https://faspex.cancerimagingarchive.net/?context=OFFICIAL_PACKAGE_LINK"
-    )
-    report = Client([package]).download_dataset("EXAMPLE", tmp_path)
-    assert (
-        report.complete
-        and calls[0][1]["stdout"] == downloads.subprocess.DEVNULL
-        and calls[0][1]["stderr"] == downloads.subprocess.DEVNULL
-    )
-    assert "--url=" + package["download_url"] in calls[0][0]
-    assert "PRIVATE_OUTPUT" not in str(report)
 
 
-def test_data_retriever_option_never_echoes_engine_secrets(tmp_path, monkeypatch):
-    monkeypatch.setattr(downloads.shutil, "which", lambda name: "/fake/retriever")
-    fake_http(
-        monkeypatch,
-        lambda r: httpx.Response(200, text="ListOfSeriesToDownload=\n1.2.3\n"),
-    )
-    monkeypatch.setattr(
-        downloads.subprocess,
-        "run",
-        lambda *a, **k: SimpleNamespace(
-            returncode=1, stdout="EXPOSED_TOKEN", stderr="EXPOSED_TOKEN"
-        ),
-    )
-    image = row(download_url="https://www.cancerimagingarchive.net/wp-content/uploads/example.tcia")
-    with pytest.raises(DownloadError) as error:
-        Client([image]).download_dataset("EXAMPLE", tmp_path, backend="data_retriever")
-    assert "EXPOSED_TOKEN" not in str(error.value.report)
 
 
 @pytest.mark.parametrize("filename", ["../outside.bin", "/outside.bin", "..\\outside.bin"])
@@ -299,44 +274,3 @@ def test_controlled_manifest_uses_authoritative_scope_and_original_filename(tmp_
     report = Client([protected]).download_dataset("EXAMPLE", tmp_path, credential_file=key)
     assert report.complete and (tmp_path / "EXAMPLE/1/original.zip").read_bytes() == b"DATA"
     assert not (tmp_path / "WRONG").exists()
-
-
-def test_plan_displays_real_download_category_and_requires_dataset_identity():
-    from tcia_utils._results import Page, Provenance, Completeness
-
-    p = Provenance("https://example.org", "fp", "latest", "research_detail", {}, "now")
-    rows = [
-        row(dataset_type="Collection"),
-        row(dataset_type="Analysis Result", download_id="2"),
-    ]
-    page = Page(tuple(rows), 2, 100, False, False, None, {}, {}, p, Completeness("complete"))
-    client = DownloadsMixin()
-    client.list_downloads = lambda *a, **k: page
-    with pytest.raises(Exception, match="multiple dataset types"):
-        client.plan_downloads("EXAMPLE")
-    plan = client.plan_downloads("EXAMPLE", dataset_type="collection")
-    assert len(plan.rows) == 1 and plan.rows[0]["download_category"] == "Clinical Data"
-    assert plan.scope["metadata_snapshot"] == "fp"
-
-
-def test_missing_package_tool_explains_real_requirement_without_requesting_key(
-    tmp_path, monkeypatch
-):
-    monkeypatch.setattr(downloads.shutil, "which", lambda _: None)
-    fake_http(monkeypatch, lambda r: pytest.fail("No manifest or payload request should run"))
-    package = row(
-        download_types=["Pathology Images"],
-        download_url="https://faspex.cancerimagingarchive.net/?context=OFFICIAL_PACKAGE_LINK",
-    )
-    client = Client([package])
-    check = client.download_dataset("EXAMPLE", tmp_path, dry_run=True)
-    entry = check.entries[0]
-    assert entry["status"] == "requires_package_transfer_tools"
-    assert "Aspera CLI" in entry["message"] and "runtime" in entry["next_step"]
-    assert entry["documentation_url"].endswith("TCIA_Aspera_CLI_Downloads.ipynb")
-    with pytest.raises(DownloadError) as error:
-        client.download_dataset("EXAMPLE", tmp_path)
-    message = str(error.value)
-    assert "Aspera CLI" in message and "package_client=" in message
-    assert "credential" not in message.lower()
-    assert error.value.report.entries == check.entries and not check.complete
