@@ -242,3 +242,20 @@ or slide files; one CT series includes all its DICOM instances. Omit max_items t
 retrieve the complete planned public selection. This does not include controlled
 images, prove image quality or completeness outside indexed coverage, or change
 clinical inclusion criteria. Rebuild the plan after changing those criteria.
+
+
+## Multi-value fields and display tables
+
+Dataset search/detail/access and download metadata use lists of strings for
+multi-value categorical fields. A singleton is a one-item list; a missing value
+is an empty list. This includes cancer types/locations, categories, data/file
+types, external resources, source collections, species, licenses and programs.
+Commas within labels are preserved; scalar IDs, URLs, titles and prose stay strings.
+The REST/MCP server is the canonical normalizer; the client adds no legacy-server
+handling. The SDK's download_category alias and reports retain category lists too.
+
+For notebook display, use `format_table(frame, columns=[...])`. It returns a
+separate display table with missing cells labeled "Not reported", preserving list
+cells, zero counts, booleans and provenance attributes. The raw frame and CSV/JSON
+exports retain their original missing values. Formatting avoids pandas' implicit
+object downcasting and is tested with pandas 2.2 and 3.1.

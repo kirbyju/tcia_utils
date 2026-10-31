@@ -711,7 +711,7 @@ class DownloadsMixin:
             row = dict(item)
             kind = _route(row)
             row.update(
-                download_category="; ".join(row.get("download_types") or []),
+                download_category=list(row.get("download_types") or []),
                 python_route=kind,
                 python_supported=kind
                 in {"public_dicom", "public_manifest", "controlled_files", "public_file"},
@@ -1034,7 +1034,7 @@ class DownloadsMixin:
                     "download_id": row.get("download_id"),
                     "file_name": row.get("file_name"),
                     "manifest_item_count": row.get("manifest_item_count"),
-                    "download_category": "; ".join(row.get("download_types") or []),
+                    "download_category": list(row.get("download_types") or []),
                     "route": route,
                     **(
                         {

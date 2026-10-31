@@ -2,12 +2,12 @@
 
 TCIA Utils is a Python client for discovering TCIA datasets, participants, clinical evidence, available data, citations, and verified analytical publications. It uses the shared TCIA V2 REST service. A researcher can start with a question about a dataset without choosing the underlying catalog or storage system.
 
-Version **4.0.0a4** is an opt-in preview for testing the redesigned interface.
+Version **4.0.0a5** is an opt-in preview for testing the redesigned interface.
 Ordinary pip installations continue selecting stable 3.x. Install this version
 explicitly in a fresh Python 3.11+ environment:
 
 ```sh
-python -m pip install "tcia_utils[tables,downloads]==4.0.0a4"
+python -m pip install "tcia_utils[tables,downloads]==4.0.0a5"
 ```
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/TCIA_Dataset_and_Participant_Queries.ipynb)
