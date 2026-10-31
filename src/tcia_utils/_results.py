@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
+from copy import deepcopy
 from typing import Any, Callable, Generic, Iterator, Mapping, TypeVar
 
 T = TypeVar("T")
@@ -43,6 +44,27 @@ def _frame(records: Any, columns=None) -> Any:
     except ImportError as exc:
         raise ImportError("Install tcia_utils[tables] to use to_dataframe()") from exc
     return pd.DataFrame(records, columns=columns)
+
+
+def format_table(data, *, columns=None, missing_label="Not reported"):
+    """Return a display copy with explicit missing values, preserving list cells.
+
+    Query data and exports are untouched. Explicit object construction avoids
+    pandas' implicit fillna downcasting of boolean/numeric columns. Pandas is
+    loaded only when this optional table helper is called.
+    """
+    if not isinstance(missing_label, str):
+        raise TypeError("missing_label must be a string")
+    frame = _frame(data)
+    if columns is not None:
+        frame = frame.reindex(columns=columns)
+    values = frame.convert_dtypes().astype(object).to_numpy(copy=True)
+    values[frame.isna().to_numpy()] = missing_label
+    import pandas as pd
+
+    result = pd.DataFrame(values, index=frame.index, columns=frame.columns, dtype=object)
+    result.attrs = deepcopy(getattr(data, "attrs", {}))
+    return result
 
 
 @dataclass(frozen=True)
@@ -101,8 +123,12 @@ class Page(Generic[T]):
         if all_pages:
             rows = []
             for page in self.iter_pages():
-                if (page.provenance.release_fingerprint, page.provenance.installed_profile) != (self.provenance.release_fingerprint, self.provenance.installed_profile):
+                if (page.provenance.release_fingerprint, page.provenance.installed_profile) != (
+                    self.provenance.release_fingerprint,
+                    self.provenance.installed_profile,
+                ):
                     from ._errors import ProtocolError
+
                     raise ProtocolError("Metadata changed during page collection")
                 rows.extend(page.items)
         frame = _frame(rows)

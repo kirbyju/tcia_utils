@@ -78,7 +78,7 @@ def test_plan_uses_shared_endpoint_and_forwards_exact_selectors():
     assert plan.rows[0]["python_route"] == "public_package"
     assert plan.rows[0]["python_supported"] is False
     assert "official download link" in plan.rows[0]["python_support_message"]
-    assert plan.rows[0]["download_category"] == "Pathology Images"
+    assert plan.rows[0]["download_category"] == ["Pathology Images"]
     assert plan.software["aspera"]["label"] == "Requires Aspera"
     assert plan.scope["metadata_snapshot"] == "fp"
     request = calls[-1]

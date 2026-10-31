@@ -39,3 +39,7 @@ IDC initialization is cached per client, progress appears before setup, and a
 manifest-only folder does not trigger synchronization. Controlled downloads remain
 the narrow httpx authorization/streaming adapter; TDR packaging is a separate
 conversation and no new packaging work is included here.
+
+The follow-up 4.0.0a5 preview coordinates list-valued API attributes with a
+warning-free display helper. REST/MCP 0.5.1 owns normalization; the SDK does not
+handle older response formats. The existing metadata bundle is reused.
