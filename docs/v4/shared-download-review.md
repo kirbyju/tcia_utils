@@ -43,3 +43,9 @@ conversation and no new packaging work is included here.
 The follow-up 4.0.0a5 preview coordinates list-valued API attributes with a
 warning-free display helper. REST/MCP 0.5.1 owns normalization; the SDK does not
 handle older response formats. The existing metadata bundle is reused.
+
+The 4.0.0a6 preview removes automatic public DICOM synchronization after a sample.
+Normal downloads follow IDC copy behavior; resume=True explicitly requests the
+existing-file scan, with a separate preparation message. This applies to manifest,
+dataset and participant-image downloads. HTTP/controlled file semantics are
+unchanged. No REST/MCP or artifact update is required.

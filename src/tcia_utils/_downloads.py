@@ -616,6 +616,11 @@ def _manifest_records(row, column, items):
     return child
 
 
+def _validate_resume(resume):
+    if not isinstance(resume, bool):
+        raise InvalidRequestError("resume must be a boolean")
+
+
 class DownloadsMixin:
     def _get_imaging_client(self, progress):
         client = getattr(self, "_imaging_client", None)
@@ -806,6 +811,7 @@ class DownloadsMixin:
         progress=True,
         max_items=None,
         overwrite=False,
+        resume=False,
         access_level=None,
     ):
         """Download a local/HTTPS .tcia, CSV or TSV manifest without manual parsing.
@@ -813,10 +819,14 @@ class DownloadsMixin:
         max_items selects at most that many whole series/files in input order.
         It limits item count, not bytes; the report marks the selection as a sample.
         A dry run reads this small manifest and checks local prerequisites only.
+        resume=True explicitly checks existing public DICOM files before transfer.
+        Normal downloads skip that synchronization scan. HTTP downloads do not
+        resume partial files; their existing size/checksum rules still apply.
         UID manifests use the public imaging index; missing series fail before
         transfer. DRS manifests require approved credentials. No dataset/participant
         identity is guessed from filenames or opaque identifiers.
         """
+        _validate_resume(resume)
         _validate_max_items(max_items)
         _notify(progress, "Preparing download selection...")
         if not isinstance(manifest, (str, os.PathLike)) or not str(manifest):
@@ -891,6 +901,7 @@ class DownloadsMixin:
             progress=progress,
             max_items=max_items,
             overwrite=overwrite,
+            resume=resume,
             manifest_inputs={0: (content, suffix)},
         )
 
@@ -906,16 +917,20 @@ class DownloadsMixin:
         progress=True,
         max_items=None,
         overwrite=False,
+        resume=False,
         dataset_type=None,
     ):
         """Download selected groups. Preflight all groups before transferring any.
 
         max_items selects a sample across the chosen groups, in inventory order.
+        resume=True synchronizes existing public DICOM data; it does not resume
+        partial HTTP files. The default follows IDC normal copy behavior.
         Original packages without file-level routes cannot be sampled.
         All groups are in scope unless filtered explicitly. Missing authorization
         or engine support stops the entire selection rather than silently dropping
         data. dry_run only queries metadata and checks local prerequisites.
         """
+        _validate_resume(resume)
         _validate_max_items(max_items)
         _notify(progress, "Preparing download selection...")
         plan = self.plan_downloads(
@@ -933,6 +948,7 @@ class DownloadsMixin:
             progress=progress,
             max_items=max_items,
             overwrite=overwrite,
+            resume=resume,
         )
 
     def download_files(
@@ -996,10 +1012,12 @@ class DownloadsMixin:
         overwrite,
         manifest_inputs=None,
         max_items=None,
+        resume=False,
     ):
+        _validate_resume(resume)
         if not isinstance(dry_run, bool) or not isinstance(overwrite, bool):
             raise InvalidRequestError("dry_run and overwrite must be booleans")
-        scope = {**scope, "dry_run": dry_run}
+        scope = {**scope, "dry_run": dry_run, "public_dicom_resume_requested": resume}
         if not rows:
             raise InvalidRequestError("No download records were selected")
         _validate_max_items(max_items)
@@ -1086,8 +1104,10 @@ class DownloadsMixin:
                     / _safe_name(str(row.get("short_title") or "selection"))
                     / _safe_name(str(row.get("download_id") or "files"))
                 )
-                sync_required[i] = folder.is_dir() and any(
-                    child.name != "manifests" for child in folder.iterdir()
+                sync_required[i] = (
+                    resume
+                    and folder.is_dir()
+                    and any(child.name != "manifests" for child in folder.iterdir())
                 )
                 if manifest_inputs and i in manifest_inputs:
                     content, suffix = manifest_inputs[i]
@@ -1178,7 +1198,11 @@ class DownloadsMixin:
                         uids = [r[column] for r in items]
                         _notify(
                             progress,
-                            "Resolving selected public DICOM files and starting transfer...",
+                            (
+                                "Checking existing public DICOM files before resuming (this may take a few minutes)..."
+                                if sync_required[i]
+                                else "Starting public DICOM download..."
+                            ),
                         )
                         client.download_dicom_series(
                             seriesInstanceUID=uids,
@@ -1198,6 +1222,7 @@ class DownloadsMixin:
                             dry_run=False,
                             progress=progress,
                             overwrite=overwrite,
+                            resume=resume,
                         )
                         if not nested.complete:
                             raise DownloadError("A manifest item did not complete")

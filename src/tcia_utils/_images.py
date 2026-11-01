@@ -7,7 +7,15 @@ import hashlib
 import io
 import math
 
-from ._downloads import DownloadError, _get_bytes, _manifest, _notify, _url, _validate_max_items
+from ._downloads import (
+    DownloadError,
+    _get_bytes,
+    _manifest,
+    _notify,
+    _url,
+    _validate_max_items,
+    _validate_resume,
+)
 from ._errors import InvalidRequestError, ProtocolError
 from ._research import records
 from ._results import _frame
@@ -298,9 +306,18 @@ class ParticipantImagesMixin:
         )
 
     def download_images(
-        self, plan, destination, *, max_items=None, dry_run=False, overwrite=False, progress=True
+        self,
+        plan,
+        destination,
+        *,
+        max_items=None,
+        dry_run=False,
+        overwrite=False,
+        progress=True,
+        resume=False,
     ):
-        """Execute a participant image plan through the existing Python download adapters."""
+        """Download a participant image plan; resume=True synchronizes public DICOM only."""
+        _validate_resume(resume)
         if not isinstance(plan, ParticipantImagePlan):
             raise InvalidRequestError(
                 "Supply a ParticipantImagePlan from plan_participant_images()"
@@ -318,7 +335,11 @@ class ParticipantImagesMixin:
         rows, inputs, dicom = [], {}, {}
         for record in plan.rows:
             if record.get("asset_granularity") == "series" and record.get("file_format") == "DICOM":
-                key = (record["dataset_type"], record["short_title"], record["access_level"])
+                key = (
+                    record["dataset_type"],
+                    record["short_title"],
+                    record["access_level"],
+                )
                 dicom.setdefault(key, []).append(record["series_instance_uid"])
             else:
                 rows.append(dict(record))
@@ -352,6 +373,7 @@ class ParticipantImagesMixin:
             dry_run=dry_run,
             progress=progress,
             overwrite=overwrite,
+            resume=resume,
             manifest_inputs=inputs,
             max_items=max_items,
         )

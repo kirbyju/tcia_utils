@@ -103,9 +103,17 @@ The SDK no longer exposes `data_retriever_command`, `backend`, `retriever`, or
 Preparation messages start before network metadata requests or index loading.
 The first public DICOM transfer initializes one IDC client; later transfers through
 the same TCIAClient reuse it. `close()` releases that reference. A destination
-containing only saved manifests does not trigger a sync scan. If existing data
-hierarchy entries are present, IDC synchronization is enabled for resumable
-transfers. Pass `progress=False` to silence SDK status output and IDC's transfer
+containing only saved manifests does not trigger a sync scan. Downloads use IDC
+normal copy behavior by default, including after a sample; existing files may be
+copied again. To continue an interrupted public DICOM download, pass `resume=True`
+to `download_manifest()`, `download_dataset()`, or `download_images()` and reuse
+the same destination. This explicitly enables synchronization when image hierarchy
+entries exist. It compares remote and local files before the transfer bar appears,
+which can take minutes for a large manifest. It is a check-and-skip operation, not
+a guarantee of byte-range resume or a complete integrity audit. HTTP and controlled
+file routes retain their size/checksum and overwrite behavior; they do not gain
+partial-file resume. Invalid non-boolean resume options fail before metadata
+queries. Reports record `public_dicom_resume_requested`. Pass `progress=False` to silence SDK status output and IDC's transfer
 bar. No dependency installation is performed by download calls.
 
 A dry run checks metadata/local prerequisites without authentication or payloads;

@@ -2,12 +2,12 @@
 
 TCIA Utils is a Python client for discovering TCIA datasets, participants, clinical evidence, available data, citations, and verified analytical publications. It uses the shared TCIA V2 REST service. A researcher can start with a question about a dataset without choosing the underlying catalog or storage system.
 
-Version **4.0.0a5** is an opt-in preview for testing the redesigned interface.
+Version **4.0.0a6** is an opt-in preview for testing the redesigned interface.
 Ordinary pip installations continue selecting stable 3.x. Install this version
 explicitly in a fresh Python 3.11+ environment:
 
 ```sh
-python -m pip install "tcia_utils[tables,downloads]==4.0.0a5"
+python -m pip install "tcia_utils[tables,downloads]==4.0.0a6"
 ```
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/TCIA_Dataset_and_Participant_Queries.ipynb)
@@ -85,5 +85,7 @@ DICOM series/files, not bytes; original packages without file-level selection
 cannot be sampled. See the sample-download section of the v4 user guide.
 
 Download preparation is visible immediately. One IDC client is reused per TCIAClient,
-and metadata-only destination folders do not trigger synchronization scans.
+and downloads use normal copy behavior even when the destination contains images.
+Pass `resume=True` to synchronize existing public DICOM files; that remote check
+can take time before the transfer bar appears. HTTP files do not support partial-file resume.
 Use `progress=False` for quiet SDK output and no IDC transfer bar.

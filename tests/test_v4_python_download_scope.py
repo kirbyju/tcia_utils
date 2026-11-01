@@ -42,7 +42,8 @@ def test_early_progress_precedes_manifest_fetch_and_index_loading(tmp_path, monk
     assert events == ["manifest", "index", "transfer"]
 
 
-def test_index_is_reused_and_sync_enabled_only_for_existing_data(tmp_path, monkeypatch, capsys):
+@pytest.mark.parametrize("api", ["manifest", "dataset"])
+def test_index_is_reused_and_resume_is_explicit(tmp_path, monkeypatch, capsys, api):
     path = tmp_path / "cohort.tcia"
     path.write_text("ListOfSeriesToDownload=\n1.2.3\n")
     constructions = []
@@ -61,12 +62,22 @@ def test_index_is_reused_and_sync_enabled_only_for_existing_data(tmp_path, monke
         )
 
     install_fake_index(monkeypatch, factory)
-    c = DownloadsMixin()
-    c.download_manifest(path, tmp_path / "out")
-    c.download_manifest(path, tmp_path / "out")
+    fake_http(monkeypatch, lambda _: httpx.Response(200, content=path.read_bytes()))
+    c = (Client([row(download_url="https://www.cancerimagingarchive.net/wp-content/uploads/cohort.tcia",
+                         download_types=["Radiology Images"], file_types=["DICOM"])])
+         if api == "dataset" else DownloadsMixin())
+    download = c.download_dataset if api == "dataset" else c.download_manifest
+    source = "EXAMPLE" if api == "dataset" else path
+    download(source, tmp_path / "out")
+    normal = download(source, tmp_path / "out")
+    resumed = download(source, tmp_path / "out", resume=True)
+    assert not normal.scope["public_dicom_resume_requested"]
+    assert resumed.scope["public_dicom_resume_requested"]
     assert len(constructions) == 1
-    assert [v["use_s5cmd_sync"] for v in calls] == [False, True]
-    assert "Reusing the prepared public DICOM index" in capsys.readouterr().out
+    assert [v["use_s5cmd_sync"] for v in calls] == [False, False, True]
+    output = capsys.readouterr().out
+    assert "Reusing the prepared public DICOM index" in output
+    assert output.count("Checking existing public DICOM files before resuming") == 1
 
 
 def test_saved_manifests_alone_do_not_trigger_sync(tmp_path, monkeypatch):
@@ -82,7 +93,7 @@ def test_saved_manifests_alone_do_not_trigger_sync(tmp_path, monkeypatch):
     )
     c = DownloadsMixin()
     for _ in range(2):
-        c.download_manifest(path, tmp_path / "out", progress=False)
+        c.download_manifest(path, tmp_path / "out", progress=False, resume=True)
     assert [v["use_s5cmd_sync"] for v in calls] == [False, False]
 
 
@@ -183,3 +194,29 @@ def test_invalid_progress_fails_before_any_metadata(tmp_path, monkeypatch):
         DownloadsMixin().download_manifest(
             "https://example.org/cohort.tcia", tmp_path, progress="yes"
         )
+
+
+@pytest.mark.parametrize("resume", [None, 0, 1, "yes", []])
+def test_invalid_resume_fails_before_metadata_or_payload(monkeypatch, tmp_path, resume):
+    fake_http(monkeypatch, lambda _: pytest.fail("Invalid options must not fetch metadata or files"))
+    with TCIAClient(base_url="https://metadata.example.org") as c:
+        monkeypatch.setattr(c, "_result", lambda *a, **kw: pytest.fail("No service queries"))
+        for download, source in [(c.download_manifest, "https://example.org/cohort.tcia"),
+                                 (c.download_dataset, "EXAMPLE"), (c.download_images, None)]:
+            with pytest.raises(InvalidRequestError, match="resume must be a boolean"):
+                download(source, tmp_path, resume=resume)
+    assert not list(tmp_path.iterdir())
+
+
+def test_resume_request_keeps_http_streaming_without_byte_ranges(monkeypatch, tmp_path):
+    manifest = tmp_path / "files.csv"
+    manifest.write_text("imageUrl,file_name,file_size_bytes\nhttps://example.org/image.nii.gz,image.nii.gz,4\n")
+    requests = []
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, content=b"FAKE")
+    fake_http(monkeypatch, handler)
+    report = DownloadsMixin().download_manifest(manifest, tmp_path / "out", resume=True)
+    assert report.complete and requests
+    assert all("range" not in request.headers for request in requests)
+    assert next((tmp_path / "out").rglob("image.nii.gz")).read_bytes() == b"FAKE"

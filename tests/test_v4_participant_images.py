@@ -1,5 +1,6 @@
 """Synthetic, dataset-scoped cohort-to-image selections; no imaging payloads."""
 
+from pathlib import Path
 from types import SimpleNamespace
 import json
 import httpx
@@ -218,7 +219,8 @@ def test_slide_download_applies_global_sample_limit_and_keeps_original_names(mon
     assert report.scope["sample_selected_items"] == 1 and report.scope["sample_omitted_items"] == 1
 
 
-def test_dicom_download_reuses_bounded_manifest_adapter(monkeypatch, tmp_path):
+@pytest.mark.parametrize("resume", [False, True])
+def test_dicom_download_reuses_bounded_manifest_adapter(monkeypatch, tmp_path, resume):
     pd = pytest.importorskip("pandas")
     fake_manifest(monkeypatch)
     index = pd.DataFrame(
@@ -236,6 +238,10 @@ def test_dicom_download_reuses_bounded_manifest_adapter(monkeypatch, tmp_path):
     monkeypatch.setattr(downloads.importlib.util, "find_spec", lambda _: object())
     report = c.download_images(plan, tmp_path, max_items=1, progress=False)
     assert report.complete and calls[0]["seriesInstanceUID"] == ["1.2.3"]
+    assert calls[0]["use_s5cmd_sync"] is False
+    (Path(calls[0]["downloadDir"]) / "existing-images").mkdir()
+    c.download_images(plan, tmp_path, max_items=1, progress=False, resume=resume)
+    assert calls[1]["use_s5cmd_sync"] is resume
     assert (
         report.scope["participant_image_selection"] and report.scope["sample_available_items"] == 2
     )
