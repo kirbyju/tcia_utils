@@ -118,8 +118,16 @@ jobs:
           python -m venv examples-venv
           wheel=$(find dist -name '*.whl' -print -quit)
           examples-venv/bin/python -m pip install "${wheel}[examples]" pytest
-      - name: Check optional imports
-        run: examples-venv/bin/python -c 'import idc_index, nbformat, pandas, tcia_utils; print(tcia_utils.__file__)'
+      - name: Check optional imports and packaged transfer executable
+        run: |
+          examples-venv/bin/python - <<'PYCODE'
+          import idc_index, nbformat, pandas, tcia_utils
+          import subprocess
+          import tcia_data_retriever as tdr
+          print(tcia_utils.__file__)
+          result = subprocess.run([str(tdr.executable()), "--version"], check=True, capture_output=True, text=True)
+          assert result.stdout.strip() == tdr.build_info()["version"]
+          PYCODE
       - name: Validate the guided workshop notebook
         run: examples-venv/bin/python tools/validate_v4_notebooks.py notebook-examples/tcia_utils_v4 --require-count 1
       - name: Check cohort, credential-path, and geometry examples
