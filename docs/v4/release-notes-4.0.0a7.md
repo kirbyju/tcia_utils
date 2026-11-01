@@ -26,11 +26,10 @@ SDK metadata nor reports contain keys, tokens or temporary storage URLs. Failure
 reports use conservative batch accounting rather than invent per-file success.
 
 The guided notebook pins this preview, requests policy acceptance explicitly,
-and retains one-item public examples. A separate self-contained Colab benchmark
-compares identical public DICOM objects with cold and prepared-client timing.
-The local small CT/MR pilot was comparable with prepared IDC and faster from a
-fresh process; it is not a universal speed claim. No live controlled-transfer
-or Colab-performance result is claimed. This needs no new REST/MCP routes or bundle.
+and retains one-item public examples. Transfer performance comparisons and dated
+results are maintained separately in the [SDK development tools](../../tools/benchmarks/transfers/README.md).
+No live controlled-transfer or Colab-performance result is claimed. This needs
+no new REST/MCP routes or bundle.
 
 When upgrading from earlier transfer backends, use a fresh destination. TDR owns
 its file layout and completion metadata; resume=True does not migrate an earlier

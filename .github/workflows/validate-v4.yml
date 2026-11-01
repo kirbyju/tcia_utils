@@ -132,7 +132,7 @@ jobs:
         run: examples-venv/bin/python tools/validate_v4_notebooks.py notebook-examples/tcia_utils_v4 --require-count 1
       - name: Check cohort, credential-path, and geometry examples
         run: examples-venv/bin/python -m pytest -q notebook-examples/tools/test_workshop.py
-      - name: Check no-transfer benchmark guards and embedded Colab sources
-        run: examples-venv/bin/python -m pytest -q notebook-examples/benchmarks/test_benchmark.py
+      - name: Check maintainer benchmark guards without transfers
+        run: examples-venv/bin/python -m pytest -q tools/benchmarks/transfers/test_benchmark.py
       - name: Execute deterministic offline notebook variant
         run: examples-venv/bin/python tools/run_v4_notebooks_offline.py notebook-examples/tcia_utils_v4
