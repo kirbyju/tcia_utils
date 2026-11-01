@@ -2,12 +2,12 @@
 
 TCIA Utils is a Python client for discovering TCIA datasets, participants, clinical evidence, available data, citations, and verified analytical publications. It uses the shared TCIA V2 REST service. A researcher can start with a question about a dataset without choosing the underlying catalog or storage system.
 
-Version **4.0.0a6** is an opt-in preview for testing the redesigned interface.
+Version **4.0.0a7** is an opt-in preview for testing the redesigned interface.
 Ordinary pip installations continue selecting stable 3.x. Install this version
 explicitly in a fresh Python 3.11+ environment:
 
 ```sh
-python -m pip install "tcia_utils[tables,downloads]==4.0.0a6"
+python -m pip install "tcia_utils[tables,downloads]==4.0.0a7"
 ```
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/TCIA_Dataset_and_Participant_Queries.ipynb)
@@ -42,16 +42,18 @@ with TCIAClient(base_url="https://tcia.duckdns.org", pin_snapshot=True) as tcia:
     readiness = tcia.download_dataset("CMB-GEC", "downloads", dry_run=True)
     print(readiness.to_dataframe())  # Metadata and local prerequisite checks only.
     # Download public groups when ready (can be large):
-    # report = tcia.download_dataset("CMB-GEC", "downloads", access_levels=["open"])
+    # After choosing a supported imaging download_id from plan:
+    # report = tcia.download_dataset("CMB-GEC", "downloads",
+    #     download_ids=[chosen_download_id], max_items=1, accept_data_policy=True)
 ```
 
-The download scope is Python and pip-installed dependencies. The `downloads` extra supplies `idc-index` and its pip-supplied transfer executable for public DICOM. Public HTTPS files and approved controlled manifests use Python HTTP streaming. The SDK does not invoke Data Retriever or Aspera CLI. Download plans keep external-only groups visible with their requirements and official links; `python_supported` identifies supported execution routes. See the [download guide](docs/v4/user-guide.md#download-from-python).
+Optional transfers delegate to `tcia-data-retriever==0.1.0rc1`, including its pip-bundled headless executable. `tcia_utils[downloads]` installs it; `tcia_utils[cohorts]` separately provides IDC metadata for public DICOM cohort queries. The SDK prepares exact, bounded selections and reports; TDR owns downloads, retries, verification, authorization and output layout. No separate Go/desktop installation is needed. Aspera groups remain external-only. See the [download guide](docs/v4/user-guide.md#download-from-python) for policy acceptance, credential-cache behavior and current interface limits.
 
-Use [the task-oriented guide](docs/v4/user-guide.md) for methods, evidence scope, selection exports, and tool handoffs. The [migration guide](MIGRATION.md) explains the 3.x API change; [troubleshooting](docs/v4/troubleshooting.md) covers setup and response errors. The canonical [guided workshop](https://github.com/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/TCIA_Dataset_and_Participant_Queries.ipynb) teaches dataset discovery/download planning, participant cohorts, brain MR segmentations, and controlled CT/SEG access in one conversational lesson. It uses real public metadata by default; imaging downloads are opt-in. It shows download categories and uses package helpers for page collection, clinical enrichment, manifest saving, and direct Python downloads. Original slide packages need configured transfer software; indexed NIfTI paths still require their published package rather than an invented per-file URL.
+Use [the task-oriented guide](docs/v4/user-guide.md) for methods, evidence scope, selection exports, and tool handoffs. The [migration guide](MIGRATION.md) explains the 3.x API change; [troubleshooting](docs/v4/troubleshooting.md) covers setup and response errors. The canonical [guided workshop](https://github.com/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/TCIA_Dataset_and_Participant_Queries.ipynb) teaches dataset discovery/download planning, participant cohorts, brain MR segmentations, and controlled CT/SEG access in one conversational lesson. It uses real public metadata by default; public image cells run bounded samples; controlled transfers remain opt-in. It shows download categories and uses package helpers for page collection, clinical enrichment, manifest saving, and direct Python downloads. Original slide packages need configured transfer software; indexed NIfTI paths still require their published package rather than an invented per-file URL.
 
 This alpha is for community testing. The [service compatibility review](docs/v4/design/service-compatibility.md) and [notebook validation](docs/v4/design/notebook-validation.md) preserve dated verification and earlier failure history. The four original hosted-route failures were repaired and subsequently passed live checks. API availability, indexed coverage, and the active metadata snapshot can change; retain response provenance with research exports. Clinical summaries are derived metadata, and some routes are bounded rather than exhaustive.
 
-Visible TCIA Collection and Analysis Result records establish dataset publication. DataCite metadata and publication metrics enrich those records but do not establish publication by themselves. Public metadata about controlled data does not grant payload access. For public DICOM series detail and viewer URLs, use `idc-index` directly. Selection export prepares route-specific manifests without transferring payloads. Explicit `download_dataset()` and `download_files()` calls perform transfers; all notebook image-transfer flags start off.
+Visible TCIA Collection and Analysis Result records establish dataset publication. DataCite metadata and publication metrics enrich those records but do not establish publication by themselves. Public metadata about controlled data does not grant payload access. For public DICOM series detail and viewer URLs, use `idc-index` directly. Selection export prepares route-specific manifests without transferring payloads. Explicit `download_dataset()` and `download_files()` calls perform transfers; public notebook samples run with max_items=1, while controlled examples require the reader's approved key and explicit selection.
 
 TCIA data use remains subject to the [TCIA Data Usage Policy](https://www.cancerimagingarchive.net/data-usage-policies-and-restrictions/).
 
@@ -61,7 +63,7 @@ TCIA data use remains subject to the [TCIA Data Usage Policy](https://www.cancer
 with TCIAClient(base_url="https://tcia.duckdns.org") as tcia:
     report = tcia.download_manifest("cohort.tcia", "downloads", dry_run=True)
     # When ready, omit dry_run to transfer the entire supported selection.
-    # report = tcia.download_manifest("https://example.org/cohort.csv", "downloads")
+    # report = tcia.download_manifest("https://example.org/cohort.csv", "downloads", accept_data_policy=True)
 ```
 
 Supported inputs are `.tcia` and CSV/TSV with exactly one route column:
@@ -84,8 +86,8 @@ marks a sample and counts what was selected and omitted. The limit counts whole
 DICOM series/files, not bytes; original packages without file-level selection
 cannot be sampled. See the sample-download section of the v4 user guide.
 
-Download preparation is visible immediately. One IDC client is reused per TCIAClient,
-and downloads use normal copy behavior even when the destination contains images.
-Pass `resume=True` to synchronize existing public DICOM files; that remote check
-can take time before the transfer bar appears. HTTP files do not support partial-file resume.
-Use `progress=False` for quiet SDK output and no IDC transfer bar.
+Download preparation is visible immediately. Actual transfers require explicit
+`accept_data_policy=True`. `resume=True` requests TDR skip-existing behavior;
+normal copy can download existing files again. The current TDR wrapper always
+inherits console progress and may privately cache supplied controlled keys.
+Read the download guide before using credentials. No dependency is installed at runtime.

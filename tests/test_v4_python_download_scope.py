@@ -15,119 +15,77 @@ from test_v4_downloads import Client, row, fake_http
 
 def install_fake_index(monkeypatch, factory):
     monkeypatch.setitem(sys.modules, "idc_index", SimpleNamespace(IDCClient=factory))
-    monkeypatch.setattr(downloads.importlib.util, "find_spec", lambda _: object())
 
 
-def test_early_progress_precedes_manifest_fetch_and_index_loading(tmp_path, monkeypatch, capsys):
-    events = []
-
+def test_early_progress_precedes_manifest_fetch_and_transfer(
+    tmp_path, monkeypatch, capsys, tdr_calls
+):
     def handler(request):
         assert "Preparing download selection" in capsys.readouterr().out
-        events.append("manifest")
         return httpx.Response(200, content=b"ListOfSeriesToDownload=\n1.2.3\n")
 
     fake_http(monkeypatch, handler)
-
-    def factory():
-        assert "first use" in capsys.readouterr().out
-        events.append("index")
-        return SimpleNamespace(
-            index={"SeriesInstanceUID": ["1.2.3"]},
-            download_dicom_series=lambda **kw: events.append("transfer"),
-        )
-
-    install_fake_index(monkeypatch, factory)
-    path = tmp_path / "out"
-    DownloadsMixin().download_manifest("https://example.org/cohort.tcia", path)
-    assert events == ["manifest", "index", "transfer"]
+    DownloadsMixin().download_manifest(
+        "https://example.org/cohort.tcia", tmp_path, accept_data_policy=True
+    )
+    assert tdr_calls[0]["seriesInstanceUID"] == ["1.2.3"]
 
 
 @pytest.mark.parametrize("api", ["manifest", "dataset"])
-def test_index_is_reused_and_resume_is_explicit(tmp_path, monkeypatch, capsys, api):
+def test_transfer_resume_is_explicit_without_a_local_idc_index(
+    tmp_path, monkeypatch, capsys, api, tdr_calls
+):
     path = tmp_path / "cohort.tcia"
     path.write_text("ListOfSeriesToDownload=\n1.2.3\n")
-    constructions = []
-    calls = []
-
-    def transfer(**kwargs):
-        calls.append(kwargs)
-        folder = Path(kwargs["downloadDir"]) / "EXAMPLE"
-        folder.mkdir(exist_ok=True)
-        (folder / "synthetic.dcm").write_bytes(b"FAKE")
-
-    def factory():
-        constructions.append(True)
-        return SimpleNamespace(
-            index={"SeriesInstanceUID": ["1.2.3"]}, download_dicom_series=transfer
-        )
-
-    install_fake_index(monkeypatch, factory)
     fake_http(monkeypatch, lambda _: httpx.Response(200, content=path.read_bytes()))
-    c = (Client([row(download_url="https://www.cancerimagingarchive.net/wp-content/uploads/cohort.tcia",
-                         download_types=["Radiology Images"], file_types=["DICOM"])])
-         if api == "dataset" else DownloadsMixin())
+    c = (
+        Client(
+            [
+                row(
+                    download_url="https://www.cancerimagingarchive.net/wp-content/uploads/cohort.tcia"
+                )
+            ]
+        )
+        if api == "dataset"
+        else DownloadsMixin()
+    )
+    monkeypatch.setattr(
+        c, "_get_imaging_client", lambda _: pytest.fail("TDR owns transfer indexing"), raising=False
+    )
     download = c.download_dataset if api == "dataset" else c.download_manifest
     source = "EXAMPLE" if api == "dataset" else path
-    download(source, tmp_path / "out")
-    normal = download(source, tmp_path / "out")
-    resumed = download(source, tmp_path / "out", resume=True)
-    assert not normal.scope["public_dicom_resume_requested"]
-    assert resumed.scope["public_dicom_resume_requested"]
-    assert len(constructions) == 1
-    assert [v["use_s5cmd_sync"] for v in calls] == [False, False, True]
-    output = capsys.readouterr().out
-    assert "Reusing the prepared public DICOM index" in output
-    assert output.count("Checking existing public DICOM files before resuming") == 1
+    for resume in [False, False, True]:
+        report = download(source, tmp_path / "out", resume=resume, accept_data_policy=True)
+        assert report.complete and report.scope["resume_requested"] is resume
+    assert [c["options"]["skip_existing"] for c in tdr_calls] == [False, False, True]
 
 
-def test_saved_manifests_alone_do_not_trigger_sync(tmp_path, monkeypatch):
-    path = tmp_path / "cohort.csv"
-    path.write_text("SeriesInstanceUID\n1.2.3\n")
-    calls = []
-    install_fake_index(
-        monkeypatch,
-        lambda: SimpleNamespace(
-            index={"SeriesInstanceUID": ["1.2.3"]},
-            download_dicom_series=lambda **kw: calls.append(kw),
-        ),
-    )
-    c = DownloadsMixin()
-    for _ in range(2):
-        c.download_manifest(path, tmp_path / "out", progress=False, resume=True)
-    assert [v["use_s5cmd_sync"] for v in calls] == [False, False]
+def test_dry_run_never_launches_tdr_for_resume(tmp_path, monkeypatch, tdr_calls):
+    p = tmp_path / "cohort.csv"
+    p.write_text("SeriesInstanceUID\n1.2.3\n")
+    report = DownloadsMixin().download_manifest(p, tmp_path / "out", resume=True, dry_run=True)
+    assert not tdr_calls and not report.complete and not (tmp_path / "out").exists()
 
 
-def test_quiet_mode_silences_status_and_upstream_bar(tmp_path, monkeypatch, capsys):
-    path = tmp_path / "cohort.tcia"
-    path.write_text("ListOfSeriesToDownload=\n1.2.3\n")
-    calls = []
-    install_fake_index(
-        monkeypatch,
-        lambda: SimpleNamespace(
-            index={"SeriesInstanceUID": ["1.2.3"]},
-            download_dicom_series=lambda **kw: calls.append(kw),
-        ),
-    )
-    DownloadsMixin().download_manifest(path, tmp_path / "out", progress=False)
-    assert capsys.readouterr().out == "" and calls[0]["show_progress_bar"] is False
-
-
-def test_distinct_clients_do_not_share_index_or_credentials(tmp_path, monkeypatch):
-    created = []
-    path = tmp_path / "cohort.tcia"
-    path.write_text("ListOfSeriesToDownload=\n1.2.3\n")
-
-    def factory():
-        obj = SimpleNamespace(
-            index={"SeriesInstanceUID": ["1.2.3"]}, download_dicom_series=lambda **kw: None
+def test_progress_false_explains_the_current_engine_console_limit(tmp_path, monkeypatch, capsys):
+    p = tmp_path / "cohort.tcia"
+    p.write_text("ListOfSeriesToDownload=\n1.2.3\n")
+    with pytest.warns(UserWarning, match="inherits console progress"):
+        DownloadsMixin().download_manifest(
+            p, tmp_path / "out", progress=False, accept_data_policy=True
         )
-        created.append(obj)
-        return obj
+    assert capsys.readouterr().out == ""
 
-    install_fake_index(monkeypatch, factory)
-    for i in range(2):
-        DownloadsMixin().download_manifest(path, tmp_path / str(i), progress=False)
-    assert len(created) == 2
+
+def test_public_transfers_never_receive_a_supplied_controlled_key(tmp_path, monkeypatch, tdr_calls):
+    p = tmp_path / "cohort.tcia"
+    p.write_text("ListOfSeriesToDownload=\n1.2.3\n")
+    key = tmp_path / "key.json"
+    key.write_text('{"api_key":"FAKE"}')
+    DownloadsMixin().download_manifest(
+        p, tmp_path / "out", credential_file=key, accept_data_policy=True
+    )
+    assert tdr_calls[0]["options"]["credential_file"] is None
 
 
 def test_close_releases_lazy_index_reference(monkeypatch):
@@ -139,45 +97,40 @@ def test_close_releases_lazy_index_reference(monkeypatch):
     assert c._imaging_client is None
 
 
-def test_initialization_failure_is_not_cached(tmp_path, monkeypatch):
-    calls = []
-    path = tmp_path / "cohort.tcia"
-    path.write_text("ListOfSeriesToDownload=\n1.2.3\n")
+def test_failed_transfer_does_not_poison_the_next_attempt(tmp_path, monkeypatch):
+    from tdr_fakes import install_tdr, EngineError, success
 
-    def factory():
-        calls.append(True)
-        if len(calls) == 1:
-            raise RuntimeError("FAKE_PRIVATE_DETAIL")
-        return SimpleNamespace(
-            index={"SeriesInstanceUID": ["1.2.3"]}, download_dicom_series=lambda **kw: None
-        )
+    seen = []
 
-    install_fake_index(monkeypatch, factory)
+    def transfer(call):
+        seen.append(call)
+        if len(seen) == 1:
+            raise EngineError()
+        return success(len(call["records"]))
+
+    install_tdr(monkeypatch, handler=transfer)
+    p = tmp_path / "cohort.tcia"
+    p.write_text("ListOfSeriesToDownload=\n1.2.3\n")
     c = DownloadsMixin()
-    with pytest.raises(DownloadError) as caught:
-        c.download_manifest(path, tmp_path / "out", progress=False)
-    assert "FAKE_PRIVATE_DETAIL" not in str(caught.value)
-    assert c.download_manifest(path, tmp_path / "out", progress=False).complete
-    assert len(calls) == 2
+    with pytest.raises(DownloadError):
+        c.download_manifest(p, tmp_path / "out", accept_data_policy=True)
+    assert c.download_manifest(p, tmp_path / "out", accept_data_policy=True).complete
 
 
-def test_external_package_blocks_entire_selection_without_install_or_payload(tmp_path, monkeypatch):
-    fake_http(monkeypatch, lambda _: pytest.fail("No manifest or payload transfer"))
+def test_external_package_blocks_the_whole_selection_before_tdr(tmp_path, monkeypatch, tdr_calls):
     c = Client(
         [
             row(),
             row(
-                download_id="package",
-                download_url="https://faspex.cancerimagingarchive.net/package/example",
+                download_id="external",
+                download_url="https://faspex.cancerimagingarchive.net/package/a",
             ),
         ]
     )
-    check = c.download_dataset("EXAMPLE", tmp_path / "out", dry_run=True, progress=False)
-    assert [e["status"] for e in check.entries] == ["planned", "requires_external_tool"]
-    assert "outside the Python" in check.entries[1]["message"]
     with pytest.raises(DownloadError) as caught:
-        c.download_dataset("EXAMPLE", tmp_path / "out", progress=False)
-    assert caught.value.report.entries == check.entries and not (tmp_path / "out").exists()
+        c.download_dataset("EXAMPLE", tmp_path, accept_data_policy=True)
+    assert not tdr_calls and not caught.value.report.complete
+    assert caught.value.report.entries[1]["status"] == "requires_external_tool"
 
 
 def test_external_launcher_api_is_removed():
@@ -192,31 +145,31 @@ def test_invalid_progress_fails_before_any_metadata(tmp_path, monkeypatch):
     fake_http(monkeypatch, lambda _: pytest.fail("No HTTP"))
     with pytest.raises(InvalidRequestError, match="progress"):
         DownloadsMixin().download_manifest(
-            "https://example.org/cohort.tcia", tmp_path, progress="yes"
+            "https://example.org/cohort.tcia", tmp_path, progress="yes", accept_data_policy=True
         )
 
 
 @pytest.mark.parametrize("resume", [None, 0, 1, "yes", []])
 def test_invalid_resume_fails_before_metadata_or_payload(monkeypatch, tmp_path, resume):
-    fake_http(monkeypatch, lambda _: pytest.fail("Invalid options must not fetch metadata or files"))
+    fake_http(
+        monkeypatch, lambda _: pytest.fail("Invalid options must not fetch metadata or files")
+    )
     with TCIAClient(base_url="https://metadata.example.org") as c:
         monkeypatch.setattr(c, "_result", lambda *a, **kw: pytest.fail("No service queries"))
-        for download, source in [(c.download_manifest, "https://example.org/cohort.tcia"),
-                                 (c.download_dataset, "EXAMPLE"), (c.download_images, None)]:
+        for download, source in [
+            (c.download_manifest, "https://example.org/cohort.tcia"),
+            (c.download_dataset, "EXAMPLE"),
+            (c.download_images, None),
+        ]:
             with pytest.raises(InvalidRequestError, match="resume must be a boolean"):
                 download(source, tmp_path, resume=resume)
     assert not list(tmp_path.iterdir())
 
 
-def test_resume_request_keeps_http_streaming_without_byte_ranges(monkeypatch, tmp_path):
-    manifest = tmp_path / "files.csv"
-    manifest.write_text("imageUrl,file_name,file_size_bytes\nhttps://example.org/image.nii.gz,image.nii.gz,4\n")
-    requests = []
-    def handler(request):
-        requests.append(request)
-        return httpx.Response(200, content=b"FAKE")
-    fake_http(monkeypatch, handler)
-    report = DownloadsMixin().download_manifest(manifest, tmp_path / "out", resume=True)
-    assert report.complete and requests
-    assert all("range" not in request.headers for request in requests)
-    assert next((tmp_path / "out").rglob("image.nii.gz")).read_bytes() == b"FAKE"
+def test_resume_for_files_uses_the_engine_skip_existing_option(tmp_path, monkeypatch, tdr_calls):
+    p = tmp_path / "files.csv"
+    p.write_text("imageUrl,file_name\nhttps://example.org/image.nii.gz,image.nii.gz\n")
+    report = DownloadsMixin().download_manifest(
+        p, tmp_path / "out", resume=True, accept_data_policy=True
+    )
+    assert report.complete and tdr_calls[0]["options"]["skip_existing"] is True

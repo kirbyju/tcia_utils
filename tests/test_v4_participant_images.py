@@ -145,7 +145,7 @@ def test_no_explicit_file_route_is_retained_and_blocks_download(tmp_path):
     )
     assert len(plan.rows) == 1 and plan.unresolved and not plan.rows[0]["python_supported"]
     with pytest.raises(DownloadError, match="unresolved"):
-        c.download_images(plan, tmp_path, max_items=1, progress=False)
+        c.download_images(plan, tmp_path, max_items=1, progress=False, accept_data_policy=True)
     assert not list(tmp_path.iterdir())
 
 
@@ -156,7 +156,7 @@ def test_controlled_files_cannot_be_downloaded_via_public_cohort_route(tmp_path)
     )
     assert plan.unresolved
     with pytest.raises(DownloadError):
-        c.download_images(plan, tmp_path, progress=False)
+        c.download_images(plan, tmp_path, progress=False, accept_data_policy=True)
 
 
 def test_zero_matches_keep_participant_coverage():
@@ -193,10 +193,12 @@ def test_missing_manifest_series_is_not_silently_ignored(monkeypatch, tmp_path):
     plan = c.plan_participant_images([person()], modality="CT", file_format="DICOM", progress=False)
     assert plan.unresolved[0]["series_instance_uids"] == ["1.2.4"]
     with pytest.raises(DownloadError):
-        c.download_images(plan, tmp_path, progress=False)
+        c.download_images(plan, tmp_path, progress=False, accept_data_policy=True)
 
 
-def test_slide_download_applies_global_sample_limit_and_keeps_original_names(monkeypatch, tmp_path):
+def test_slide_download_delegates_only_the_bounded_filtered_cohort(
+    monkeypatch, tmp_path, tdr_calls
+):
     c = Client([asset(), asset("P2")])
     plan = c.plan_participant_images(
         [person(), person(name="P2")],
@@ -204,23 +206,18 @@ def test_slide_download_applies_global_sample_limit_and_keeps_original_names(mon
         file_format="non-DICOM",
         progress=False,
     )
-    requested = []
-
-    def handler(request):
-        requested.append(str(request.url))
-        return httpx.Response(200, content=b"FAKE")
-
-    monkeypatch.setattr(
-        downloads, "_http", lambda: httpx.Client(transport=httpx.MockTransport(handler))
-    )
-    report = c.download_images(plan, tmp_path, max_items=1, progress=False)
-    assert report.complete and len(requested) == 1 and requested[0].endswith("/P1.svs")
-    assert len(list(tmp_path.rglob("*.svs"))) == 1
+    report = c.download_images(plan, tmp_path, max_items=1, accept_data_policy=True)
+    assert report.complete and len(tdr_calls) == 1
+    records = tdr_calls[0]["records"]
+    assert len(records) == 1 and records[0]["imageUrl"].endswith("/P1.svs")
+    assert records[0]["file_name"] == "P1.svs"
     assert report.scope["sample_selected_items"] == 1 and report.scope["sample_omitted_items"] == 1
 
 
 @pytest.mark.parametrize("resume", [False, True])
-def test_dicom_download_reuses_bounded_manifest_adapter(monkeypatch, tmp_path, resume):
+def test_dicom_download_reuses_bounded_tdr_manifest_adapter(
+    monkeypatch, tmp_path, resume, tdr_calls
+):
     pd = pytest.importorskip("pandas")
     fake_manifest(monkeypatch)
     index = pd.DataFrame(
@@ -231,17 +228,9 @@ def test_dicom_download_reuses_bounded_manifest_adapter(monkeypatch, tmp_path, r
     )
     c = Client(index=index)
     plan = c.plan_participant_images([person()], modality="CT", file_format="DICOM", progress=False)
-    calls = []
-    c._get_imaging_client = lambda _: SimpleNamespace(
-        index=index, download_dicom_series=lambda **kw: calls.append(kw)
-    )
-    monkeypatch.setattr(downloads.importlib.util, "find_spec", lambda _: object())
-    report = c.download_images(plan, tmp_path, max_items=1, progress=False)
-    assert report.complete and calls[0]["seriesInstanceUID"] == ["1.2.3"]
-    assert calls[0]["use_s5cmd_sync"] is False
-    (Path(calls[0]["downloadDir"]) / "existing-images").mkdir()
-    c.download_images(plan, tmp_path, max_items=1, progress=False, resume=resume)
-    assert calls[1]["use_s5cmd_sync"] is resume
+    report = c.download_images(plan, tmp_path, max_items=1, resume=resume, accept_data_policy=True)
+    assert report.complete and tdr_calls[0]["seriesInstanceUID"] == ["1.2.3"]
+    assert tdr_calls[0]["options"]["skip_existing"] is resume
     assert (
         report.scope["participant_image_selection"] and report.scope["sample_available_items"] == 2
     )

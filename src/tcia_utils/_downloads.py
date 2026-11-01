@@ -1,19 +1,17 @@
 """Small download adapters over supported clients and official manifest routes.
 
-No transfer or optional dependency is initialized at import. Credentials are
-confined to the recognized controlled-data service; signed URLs stay in memory.
+No transfer or optional dependency is initialized at import. Actual transfers,
+retries, verification and authentication belong to the packaged TCIA Data Retriever. This module only prepares and accounts for selections.
 """
 
 from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
-from urllib.parse import urlsplit, urljoin, quote
+from urllib.parse import urlsplit, urljoin
 import csv
 import hashlib
-import importlib.util
 import io
 import ipaddress
-import json
 import os
 import re
 import tempfile
@@ -374,27 +372,6 @@ def _route(row):
     return "unsupported"
 
 
-def _credential(path):
-    if not path:
-        raise DownloadError("Controlled downloads require your own approved JSON key-file path")
-    try:
-        p = Path(path)
-        data = json.loads(p.read_text())
-        key = data.get("api_key") if isinstance(data, dict) else None
-        if not isinstance(key, str) or not key.strip():
-            raise ValueError()
-        if os.name == "posix" and p.stat().st_mode & 0o077:
-            warnings.warn(
-                "Credential file is accessible to other users; consider chmod 600",
-                stacklevel=3,
-            )
-        return key.strip()
-    except (OSError, ValueError):
-        raise DownloadError(
-            "Could not read a JSON credential file with a nonempty api_key"
-        ) from None
-
-
 def _drs(uri):
     try:
         p = urlsplit(uri)
@@ -421,48 +398,6 @@ def _drs(uri):
     return p.hostname, identifier
 
 
-def _authorized_url(uri, key, tokens):
-    host, identifier = _drs(uri)
-    with _http() as client:
-        for attempt in range(2):
-            if host not in tokens:
-                response = client.post(
-                    f"https://{host}/user/credentials/api/access_token",
-                    json={"api_key": key},
-                )
-                if response.status_code != 200:
-                    raise DownloadError(
-                        f"Controlled authentication failed (HTTP {response.status_code})"
-                    )
-                try:
-                    token = response.json()["access_token"]
-                    if not isinstance(token, str) or not token:
-                        raise ValueError()
-                except (KeyError, ValueError, TypeError):
-                    raise DownloadError("Controlled service returned no access token") from None
-                tokens[host] = token
-            response = client.get(
-                f"https://{host}/user/data/download/{quote(identifier,safe='')}",
-                headers={"Authorization": f"Bearer {tokens[host]}"},
-            )
-            if response.status_code == 401 and attempt == 0:
-                tokens.pop(host, None)
-                continue
-            if response.status_code != 200:
-                raise DownloadError(
-                    f"Controlled download authorization failed (HTTP {response.status_code})"
-                )
-            try:
-                location = response.json()["url"]
-                _url(location)
-            except (ValueError, KeyError, TypeError):
-                raise DownloadError(
-                    "Controlled service returned no valid HTTPS file location"
-                ) from None
-            return location
-    raise DownloadError("Controlled download authorization failed")
-
-
 def _size(row):
     value = next(
         (
@@ -478,79 +413,6 @@ def _size(row):
         return None
 
 
-def _stream_file(url, path, *, size=None, checksum=None, algorithm=None, overwrite=False):
-    _url(url)
-    algorithm = algorithm.lower() if isinstance(algorithm, str) else None
-    if checksum and algorithm not in {"md5", "sha256"}:
-        raise DownloadError("Unsupported checksum algorithm")
-    if path.is_symlink():
-        raise DownloadError("Refusing to replace a symlink")
-    if path.exists() and not overwrite:
-        if checksum:
-            h = hashlib.new(algorithm)
-            with path.open("rb") as existing:
-                for chunk in iter(lambda: existing.read(1024 * 1024), b""):
-                    h.update(chunk)
-            if h.hexdigest().lower() == checksum.lower() and (
-                size is None or path.stat().st_size == size
-            ):
-                return "verified_existing"
-        elif size is not None and path.stat().st_size == size:
-            return "verified_existing"
-        raise DownloadError("Existing file cannot be verified; use overwrite=True to replace it")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = None
-    try:
-        with _http() as client:
-            for _ in range(6):
-                _url(url)
-                with client.stream("GET", url, headers={"Accept-Encoding": "identity"}) as response:
-                    if response.status_code in {301, 302, 303, 307, 308}:
-                        url = urljoin(url, response.headers.get("location", ""))
-                        continue
-                    if response.status_code != 200:
-                        raise DownloadError(f"File transfer failed (HTTP {response.status_code})")
-                    length = response.headers.get("content-length")
-                    expected = (
-                        int(length)
-                        if length
-                        and length.isdigit()
-                        and response.headers.get("content-encoding", "identity") == "identity"
-                        else None
-                    )
-                    h = hashlib.new(algorithm or "sha256")
-                    total = 0
-                    with tempfile.NamedTemporaryFile(
-                        dir=path.parent,
-                        prefix="." + path.name + ".",
-                        suffix=".part",
-                        delete=False,
-                    ) as out:
-                        temporary = Path(out.name)
-                        for chunk in response.iter_bytes():
-                            out.write(chunk)
-                            h.update(chunk)
-                            total += len(chunk)
-                    if (size is not None and total != size) or (
-                        expected is not None and total != expected
-                    ):
-                        raise DownloadError(
-                            "Downloaded byte count does not match the expected size"
-                        )
-                    if checksum and h.hexdigest().lower() != checksum.lower():
-                        raise DownloadError("Downloaded checksum does not match")
-                    temporary.replace(path)
-                    temporary = None
-                    return "downloaded"
-        raise DownloadError("Too many file redirects")
-    except httpx.HTTPError:
-        raise DownloadError("File transfer failed; partial file was not promoted") from None
-    finally:
-        # A failed transfer never overwrites a previously complete file.
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)
-
-
 def _prerequisite_guidance(status):
     guidance = {
         "requires_external_tool": (
@@ -559,7 +421,7 @@ def _prerequisite_guidance(status):
             "https://github.com/kirbyju/TCIA_Notebooks/blob/main/TCIA_Aspera_CLI_Downloads.ipynb",
         ),
         "requires_python_download_extra": (
-            "The public DICOM Python dependency is missing.",
+            "The packaged Python transfer dependency is missing.",
             "Install tcia_utils[downloads] in the environment running the notebook.",
             "https://github.com/kirbyju/tcia_utils/blob/main/docs/v4/user-guide.md#download-from-python",
         ),
@@ -621,25 +483,92 @@ def _validate_resume(resume):
         raise InvalidRequestError("resume must be a boolean")
 
 
-class DownloadsMixin:
-    def _get_imaging_client(self, progress):
-        client = getattr(self, "_imaging_client", None)
-        if client is None:
-            _notify(
-                progress,
-                "Preparing the public DICOM index (first use in this client may take a moment)...",
+def _tdr():
+    try:
+        import tcia_data_retriever
+    except ImportError:
+        raise DownloadError("Install tcia_utils[downloads] for Python downloads") from None
+    return tcia_data_retriever
+
+
+def _validate_policy(accept_data_policy, dry_run):
+    if type(dry_run) is not bool:
+        raise InvalidRequestError("dry_run must be a boolean")
+    if type(accept_data_policy) is not bool:
+        raise InvalidRequestError("accept_data_policy must be a boolean")
+    if not dry_run and not accept_data_policy:
+        raise InvalidRequestError(
+            "Review https://www.cancerimagingarchive.net/data-usage-policies-and-restrictions/ "
+            "and pass accept_data_policy=True to download"
+        )
+
+
+def _transfer_csv(items, column):
+    output = io.StringIO(newline="")
+    fields = (
+        [column]
+        if column == "SeriesInstanceUID"
+        else [
+            column,
+            "file_name",
+            "collection",
+            "participant_id",
+            "study_id",
+            "file_size_bytes",
+            "md5",
+            "sha256",
+        ]
+    )
+    writer = csv.DictWriter(output, fieldnames=fields)
+    writer.writeheader()
+    for item in items:
+        record = {column: item[column]}
+        if column != "SeriesInstanceUID":
+            algorithm = str(item.get("checksum_algorithm") or "").lower()
+            record.update(
+                file_name=item.get("file_name") or "",
+                collection=item.get("short_title") or "selection",
+                participant_id=item.get("participant_id") or item.get("subject_id") or "",
+                study_id=item.get("study_instance_uid") or "",
+                file_size_bytes=_size(item) if _size(item) is not None else "",
+                md5=item.get("md5") or (item.get("checksum") if algorithm == "md5" else "") or "",
+                sha256=item.get("sha256")
+                or (item.get("checksum") if algorithm == "sha256" else "")
+                or "",
             )
-            try:
-                from idc_index import IDCClient
-            except ImportError:
-                raise DownloadError(
-                    "Install tcia_utils[downloads] for public DICOM downloads"
-                ) from None
-            client = IDCClient()
-            self._imaging_client = client
-        else:
-            _notify(progress, "Reusing the prepared public DICOM index...")
-        return client
+        writer.writerow(record)
+    return output.getvalue().encode()
+
+
+def _engine_summary(report, expected=None):
+    fields = ("total", "downloaded", "synced", "skipped", "failed")
+    if not isinstance(report, dict) or report.get("schema_version") != 1:
+        raise DownloadError("Transfer engine returned an unsupported completion report")
+    if any(type(report.get(k)) is not int or report[k] < 0 for k in fields):
+        raise DownloadError("Transfer engine returned invalid completion counts")
+    safe = {
+        key: report[key]
+        for key in (
+            "schema_version",
+            "status",
+            "version",
+            "git_commit",
+            *fields,
+            "elapsed_seconds",
+            "error_code",
+        )
+        if key in report
+    }
+    if report.get("status") != "success" or report["failed"] or not report["total"]:
+        raise DownloadError("Transfer engine did not complete the requested selection")
+    if sum(report[k] for k in ("downloaded", "synced", "skipped")) != report["total"]:
+        raise DownloadError("Transfer engine completion counts do not cover its selection")
+    if expected is not None and report["total"] != expected:
+        raise DownloadError("Transfer engine did not account for every selected series/file")
+    return safe
+
+
+class DownloadsMixin:
 
     def plan_downloads(
         self, short_title, *, download_ids=None, access_levels=None, dataset_type=None
@@ -807,6 +736,7 @@ class DownloadsMixin:
         destination,
         *,
         credential_file=None,
+        accept_data_policy=False,
         dry_run=False,
         progress=True,
         max_items=None,
@@ -819,15 +749,14 @@ class DownloadsMixin:
         max_items selects at most that many whole series/files in input order.
         It limits item count, not bytes; the report marks the selection as a sample.
         A dry run reads this small manifest and checks local prerequisites only.
-        resume=True explicitly checks existing public DICOM files before transfer.
-        Normal downloads skip that synchronization scan. HTTP downloads do not
-        resume partial files; their existing size/checksum rules still apply.
-        UID manifests use the public imaging index; missing series fail before
-        transfer. DRS manifests require approved credentials. No dataset/participant
-        identity is guessed from filenames or opaque identifiers.
+        resume=True requests TDR skip-existing behavior. The transfer engine owns
+        layout, checksums, retries, archive extraction and controlled authorization.
+        Explicit data-policy acceptance is required for actual transfers. TDR rc1
+        inherits console progress and may privately cache a supplied credential.
         """
         _validate_resume(resume)
         _validate_max_items(max_items)
+        _validate_policy(accept_data_policy, dry_run)
         _notify(progress, "Preparing download selection...")
         if not isinstance(manifest, (str, os.PathLike)) or not str(manifest):
             raise InvalidRequestError("manifest must be a local path or HTTPS URL")
@@ -897,6 +826,7 @@ class DownloadsMixin:
                 "manifest_items": len(items),
             },
             credential_file=credential_file,
+            accept_data_policy=accept_data_policy,
             dry_run=dry_run,
             progress=progress,
             max_items=max_items,
@@ -913,6 +843,7 @@ class DownloadsMixin:
         download_ids=None,
         access_levels=None,
         credential_file=None,
+        accept_data_policy=False,
         dry_run=False,
         progress=True,
         max_items=None,
@@ -923,8 +854,8 @@ class DownloadsMixin:
         """Download selected groups. Preflight all groups before transferring any.
 
         max_items selects a sample across the chosen groups, in inventory order.
-        resume=True synchronizes existing public DICOM data; it does not resume
-        partial HTTP files. The default follows IDC normal copy behavior.
+        resume=True requests the packaged transfer engine skip-existing behavior.
+        It does not guarantee byte-range resume of partial files.
         Original packages without file-level routes cannot be sampled.
         All groups are in scope unless filtered explicitly. Missing authorization
         or engine support stops the entire selection rather than silently dropping
@@ -932,6 +863,7 @@ class DownloadsMixin:
         """
         _validate_resume(resume)
         _validate_max_items(max_items)
+        _validate_policy(accept_data_policy, dry_run)
         _notify(progress, "Preparing download selection...")
         plan = self.plan_downloads(
             short_title,
@@ -944,6 +876,7 @@ class DownloadsMixin:
             destination,
             scope=plan.scope,
             credential_file=credential_file,
+            accept_data_policy=accept_data_policy,
             dry_run=dry_run,
             progress=progress,
             max_items=max_items,
@@ -957,13 +890,16 @@ class DownloadsMixin:
         destination,
         *,
         credential_file=None,
+        accept_data_policy=False,
         dry_run=False,
         progress=True,
         max_items=None,
         overwrite=False,
+        resume=False,
     ):
         """Download explicit files; max_items samples the first N records, without adding related images."""
         _validate_max_items(max_items)
+        _validate_policy(accept_data_policy, dry_run)
         _notify(progress, "Preparing download selection...")
         rows = records(files)
         for row in rows:
@@ -994,10 +930,12 @@ class DownloadsMixin:
             destination,
             scope={"explicit_file_records": len(rows)},
             credential_file=credential_file,
+            accept_data_policy=accept_data_policy,
             dry_run=dry_run,
             progress=progress,
             max_items=max_items,
             overwrite=overwrite,
+            resume=resume,
         )
 
     def _download(
@@ -1013,11 +951,24 @@ class DownloadsMixin:
         manifest_inputs=None,
         max_items=None,
         resume=False,
+        accept_data_policy=False,
     ):
         _validate_resume(resume)
-        if not isinstance(dry_run, bool) or not isinstance(overwrite, bool):
+        _validate_policy(accept_data_policy, dry_run)
+        if type(dry_run) is not bool or type(overwrite) is not bool:
             raise InvalidRequestError("dry_run and overwrite must be booleans")
-        scope = {**scope, "dry_run": dry_run, "public_dicom_resume_requested": resume}
+        if overwrite and resume:
+            raise InvalidRequestError("Choose overwrite=True or resume=True, not both")
+        if type(progress) is not bool:
+            raise InvalidRequestError("progress must be a boolean")
+        scope = {
+            **scope,
+            "dry_run": dry_run,
+            "resume_requested": resume,
+            "public_dicom_resume_requested": resume,
+            "transfer_engine": "tcia-data-retriever",
+            "data_policy_accepted": accept_data_policy,
+        }
         if not rows:
             raise InvalidRequestError("No download records were selected")
         _validate_max_items(max_items)
@@ -1031,21 +982,23 @@ class DownloadsMixin:
                     return error.report
                 raise
         entries = []
-        key = None
+        try:
+            engine = _tdr()
+            engine_missing = False
+        except DownloadError:
+            engine, engine_missing = None, True
         for row in rows:
-            route = _route(row)
-            problem = None
-            if row.get("access_level") == "controlled":
-                if row.get("drs_uri"):
-                    _drs(row["drs_uri"])
-                if not credential_file:
-                    problem = "requires_credential"
-            if route == "unsupported":
-                problem = "unsupported"
-            if route == "public_dicom" and importlib.util.find_spec("idc_index") is None:
+            kind, problem = _route(row), None
+            if kind in {"unsupported", "public_package"}:
+                problem = (
+                    "requires_external_tool"
+                    if row.get("download_method") == "aspera_package"
+                    else "unsupported"
+                )
+            elif engine_missing:
                 problem = "requires_python_download_extra"
-            if route == "public_package":
-                problem = "requires_external_tool"
+            elif row.get("access_level") == "controlled" and not credential_file:
+                problem = "requires_credential"
             entries.append(
                 {
                     "short_title": row.get("short_title"),
@@ -1053,196 +1006,213 @@ class DownloadsMixin:
                     "file_name": row.get("file_name"),
                     "manifest_item_count": row.get("manifest_item_count"),
                     "download_category": list(row.get("download_types") or []),
-                    "route": route,
+                    "route": kind,
+                    "status": problem or "planned",
+                    **_prerequisite_guidance(problem),
                     **(
                         {
-                            "is_sample": True,
-                            "sample_selected_items": row["sample_selected_items"],
-                            "sample_available_items": row["sample_available_items"],
-                            "sample_unit": row["sample_unit"],
-                            "sample_manifest_sha256": row["sample_manifest_sha256"],
+                            key: row[key]
+                            for key in (
+                                "sample_selected_items",
+                                "sample_available_items",
+                                "sample_unit",
+                                "sample_manifest_sha256",
+                            )
+                            if key in row
                         }
                         if scope.get("is_sample")
                         else {}
                     ),
-                    "status": problem or "planned",
-                    **_prerequisite_guidance(problem),
                 }
             )
         report = DownloadReport(tuple(entries), scope)
         if dry_run:
             return report
-        if any(e["status"] != "planned" for e in entries):
-            missing = [entry for entry in entries if entry["status"] != "planned"]
-            reasons = " ".join(dict.fromkeys(entry["message"] for entry in missing))
-            actions = " ".join(dict.fromkeys(entry["next_step"] for entry in missing))
-            raise DownloadError(f"Download cannot start. {reasons} {actions}", report)
-        if any(r.get("access_level") == "controlled" for r in rows):
-            key = _credential(credential_file)
+        blocked = [e for e in entries if e["status"] != "planned"]
+        if blocked:
+            reason = " ".join(dict.fromkeys(e["message"] + " " + e["next_step"] for e in blocked))
+            raise DownloadError("Download cannot start. " + reason, report)
+        key_path = None
+        if any(row.get("access_level") == "controlled" for row in rows):
+            try:
+                key_path = Path(credential_file).expanduser().resolve(strict=True)
+                if not key_path.is_file():
+                    raise ValueError()
+            except (OSError, TypeError, ValueError):
+                raise DownloadError(
+                    "Supply a readable controlled-access credential file", report
+                ) from None
         target = Path(destination)
-        tokens = {}
-        prepared = {}
-        imaging_clients = {}
-        sync_required = {}
-        # Expand and validate every manifest before sending credentials or payloads.
-        # This also discovers dependencies hidden by a generic CSV route.
+        jobs, file_batches = [], {}
+        # Read and validate every route before launching the transfer engine.
         try:
             for i, row in enumerate(rows):
-                _safe_name(str(row.get("short_title") or "selection"))
-                _safe_name(str(row.get("download_id") or "files"))
-                route = entries[i]["route"]
-                if route not in {
-                    "public_dicom",
-                    "public_manifest",
-                    "controlled_files",
-                } or row.get("drs_uri"):
-                    if row.get("file_name"):
-                        _safe_name(row["file_name"])
+                title = _safe_name(str(row.get("short_title") or "selection"))
+                identifier = _safe_name(str(row.get("download_id") or "files"))
+                if row.get("drs_uri") or entries[i]["route"] == "public_file":
+                    column = "drs_uri" if row.get("drs_uri") else "imageUrl"
+                    item = dict(row)
+                    item[column] = (
+                        row[column]
+                        if column == "drs_uri"
+                        else row.get("imageUrl") or row["download_url"]
+                    )
+                    checked = _manifest_records(row, column, [item])[0]
+                    group = (title, row["access_level"], column)
+                    file_batches.setdefault(group, []).append((i, checked))
                     continue
-                folder = (
-                    target
-                    / _safe_name(str(row.get("short_title") or "selection"))
-                    / _safe_name(str(row.get("download_id") or "files"))
-                )
-                sync_required[i] = (
-                    resume
-                    and folder.is_dir()
-                    and any(child.name != "manifests" for child in folder.iterdir())
-                )
                 if manifest_inputs and i in manifest_inputs:
                     content, suffix = manifest_inputs[i]
-                    column, items = _manifest(content, suffix)
-                    manifest_folder = folder / "manifests"
-                    manifest_folder.mkdir(parents=True, exist_ok=True)
-                    name = "selection" + suffix
-                    path = manifest_folder / name
-                    if path.is_symlink():
-                        raise DownloadError("Refusing to replace a symlink")
-                    with tempfile.NamedTemporaryFile(dir=manifest_folder, delete=False) as temp:
-                        temp.write(content)
-                        temporary = Path(temp.name)
-                    temporary.replace(path)
-                    manifest = ManifestReport(manifest_folder, ({"manifest": name},))
                 else:
-                    manifest = self.save_manifests([row], folder / "manifests")
-                    column, items = _manifest(
-                        manifest.files[0].read_bytes(), manifest.files[0].suffix
-                    )
-                if column != "SeriesInstanceUID":
-                    _manifest_records(row, column, items)
-                if column == "SeriesInstanceUID":
-                    client = self._get_imaging_client(progress)
-                    uids = [r[column] for r in items]
-                    missing = set(uids) - set(client.index["SeriesInstanceUID"])
-                    if missing:
-                        entries[i]["missing_series_uids"] = sorted(missing)
+                    url = row.get("download_url") or ""
+                    parsed = _url(url)
+                    suffix = Path(parsed.path).suffix.lower()
+                    if parsed.hostname not in _MANIFEST_HOSTS or suffix not in {
+                        ".tcia",
+                        ".csv",
+                        ".tsv",
+                    }:
                         raise DownloadError(
-                            f"{len(missing)} requested public series are absent from the current imaging index; no payload transfer started"
+                            "Manifest must come from an official TCIA download link"
                         )
-                    if callable(getattr(client, "get_idc_version", None)):
-                        entries[i]["imaging_index_version"] = client.get_idc_version()
-                    imaging_clients[i] = client
-                if scope.get("is_sample"):
-                    entries[i]["sample_manifest"] = str(manifest.files[0])
-                prepared[i] = (manifest, column, items)
+                    content = _get_bytes(url)
+                column, items = _manifest(content, suffix)
+                if row.get("access_level") == "controlled" and column != "drs_uri":
+                    raise DownloadError("Controlled downloads require a DRS manifest")
+                checked = (
+                    items
+                    if column == "SeriesInstanceUID"
+                    else _manifest_records(row, column, items)
+                )
+                jobs.append(
+                    (
+                        [i],
+                        target / title / identifier,
+                        _transfer_csv(checked, column),
+                        len(items),
+                        row.get("access_level") == "controlled",
+                    )
+                )
+            for (title, access, column), batch in file_batches.items():
+                indexes, items = zip(*batch)
+                # TDR owns the collection/participant layout. Reject collisions in
+                # the same identity scope before any file can be overwritten.
+                names = [
+                    (
+                        r.get("participant_id") or r.get("subject_id"),
+                        r.get("study_instance_uid"),
+                        r["file_name"],
+                    )
+                    for r in items
+                ]
+                if len(names) != len(set(names)):
+                    raise DownloadError(
+                        "Selection repeats a filename in the same participant/study scope"
+                    )
+                # TDR's file route derives a job key from the source basename.
+                # Separate colliding keys so similarly named participant files
+                # cannot overwrite each other in the engine's job bookkeeping.
+                batches = []
+                for index, item in batch:
+                    backend_key = Path(urlsplit(item[column]).path).stem
+                    for keys, members in batches:
+                        if backend_key not in keys:
+                            keys.add(backend_key)
+                            members.append((index, item))
+                            break
+                    else:
+                        batches.append(({backend_key}, [(index, item)]))
+                for number, (_, members) in enumerate(batches):
+                    selected, records_ = zip(*members)
+                    folder = target / title / "files"
+                    if number:
+                        folder = folder / ("batch-" + str(number + 1))
+                    jobs.append(
+                        (
+                            list(selected),
+                            folder,
+                            _transfer_csv(records_, column),
+                            len(records_),
+                            access == "controlled",
+                        )
+                    )
         except Exception as error:
             for entry in entries:
                 entry["status"] = "not_attempted"
-            if entries:
-                entries[i]["status"] = "failed_preflight"
+            entries[i]["status"] = "failed_preflight"
             raise DownloadError(
                 (
                     str(error)
                     if isinstance(error, DownloadError)
-                    else "Manifest preflight failed; no payload transfer started"
+                    else "Manifest preflight failed; no transfer started"
                 ),
                 DownloadReport(tuple(entries), scope),
             ) from None
-        for i, row in enumerate(rows):
+        if not progress:
+            warnings.warn(
+                "progress=False silences SDK messages; tcia-data-retriever 0.1.0rc1 still inherits console progress.",
+                UserWarning,
+                stacklevel=2,
+            )
+        for indexes, folder, content, expected, controlled in jobs:
             try:
-                route = entries[i]["route"]
-                folder = (
-                    target
-                    / _safe_name(str(row.get("short_title") or "selection"))
-                    / _safe_name(str(row.get("download_id") or "files"))
+                metadata = folder / "manifests"
+                metadata.mkdir(parents=True, exist_ok=True)
+                manifest = metadata / (
+                    "transfer-" + hashlib.sha256(content).hexdigest()[:16] + ".csv"
                 )
-                entries[i]["destination"] = str(folder)
-                if route == "public_file":
-                    _notify(progress, f"Downloading file {i + 1} of {len(rows)}...")
-                    url = row.get("imageUrl") or row["download_url"]
-                    name = _safe_name(row.get("file_name") or Path(urlsplit(url).path).name)
-                    entries[i]["status"] = _stream_file(
-                        url,
-                        folder / name,
-                        size=_size(row),
-                        checksum=row.get("checksum"),
-                        algorithm=row.get("checksum_algorithm"),
-                        overwrite=overwrite,
-                    )
-                elif row.get("drs_uri"):
-                    _notify(progress, f"Authorizing and downloading file {i + 1} of {len(rows)}...")
-                    location = _authorized_url(row["drs_uri"], key, tokens)
-                    name = _safe_name(row.get("file_name") or row["drs_uri"].rsplit("/", 1)[-1])
-                    entries[i]["status"] = _stream_file(
-                        location,
-                        folder / name,
-                        size=_size(row),
-                        checksum=row.get("checksum"),
-                        algorithm=row.get("checksum_algorithm"),
-                        overwrite=overwrite,
-                    )
-                else:
-                    manifest, column, items = prepared[i]
-                    if column == "SeriesInstanceUID":
-                        client = imaging_clients[i]
-                        uids = [r[column] for r in items]
-                        _notify(
-                            progress,
-                            (
-                                "Checking existing public DICOM files before resuming (this may take a few minutes)..."
-                                if sync_required[i]
-                                else "Starting public DICOM download..."
-                            ),
-                        )
-                        client.download_dicom_series(
-                            seriesInstanceUID=uids,
-                            downloadDir=str(folder),
-                            quiet=True,
-                            show_progress_bar=progress,
-                            use_s5cmd_sync=sync_required[i],
-                        )
-                        entries[i]["status"] = "engine_completed"
-                    else:
-                        child = _manifest_records(row, column, items)
-                        nested = self._download(
-                            child,
-                            target,
-                            scope={"manifest_items": len(child)},
-                            credential_file=credential_file,
-                            dry_run=False,
-                            progress=progress,
-                            overwrite=overwrite,
-                            resume=resume,
-                        )
-                        if not nested.complete:
-                            raise DownloadError("A manifest item did not complete")
-                        entries[i]["status"] = "downloaded"
-                entries[i]["verification"] = (
-                    "upstream engine completion; no independent byte-level verification"
-                    if entries[i]["status"] == "engine_completed"
-                    else "HTTP byte count; metadata size/checksum when supplied"
+                if manifest.is_symlink():
+                    raise DownloadError("Refusing to replace a symlink")
+                with tempfile.NamedTemporaryFile(dir=metadata, delete=False) as temp:
+                    temp.write(content)
+                    temporary = Path(temp.name)
+                temporary.replace(manifest)
+                for i in indexes:
+                    entries[i]["destination"] = str(folder)
+                    if scope.get("is_sample"):
+                        entries[i]["sample_manifest"] = str(manifest)
+                _notify(progress, "Starting the selected image/file transfer...")
+                raw = engine.download(
+                    manifest,
+                    folder,
+                    accept_data_policy=True,
+                    credential_file=key_path if controlled else None,
+                    skip_existing=resume,
                 )
+                summary = _engine_summary(raw, expected)
+                for i in indexes:
+                    entries[i].update(
+                        status="engine_completed",
+                        verification="transfer_engine_report",
+                        engine_summary=summary,
+                    )
             except Exception as error:
-                entries[i]["status"] = "failed"
-                entries[i]["error"] = (
-                    str(error)
-                    if isinstance(error, DownloadError)
-                    else "Transfer failed; backend details were suppressed to protect credentials"
-                )
-                for following in entries[i + 1 :]:
-                    following["status"] = "not_attempted"
+                safe = None
+                raw = getattr(error, "report", None)
+                if isinstance(raw, dict):
+                    safe = {
+                        key: raw[key]
+                        for key in (
+                            "schema_version",
+                            "status",
+                            "error_code",
+                            "total",
+                            "downloaded",
+                            "synced",
+                            "skipped",
+                            "failed",
+                        )
+                        if key in raw
+                    }
+                for i in indexes:
+                    entries[i]["status"] = "failed"
+                    if safe is not None:
+                        entries[i]["engine_summary"] = safe
+                for entry in entries:
+                    if entry["status"] == "planned":
+                        entry["status"] = "not_attempted"
                 raise DownloadError(
-                    "Download did not complete; inspect error.report for accounting",
+                    "Transfer did not complete; inspect error.report for selection accounting",
                     DownloadReport(tuple(entries), scope),
                 ) from None
         return DownloadReport(tuple(entries), scope)

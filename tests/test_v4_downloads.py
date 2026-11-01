@@ -54,31 +54,33 @@ class Client(DownloadsMixin):
         return DownloadPlan(tuple(self.rows), None, {"selected_groups": len(self.rows)})
 
 
-def test_http_download_atomic_and_verified_repeat(tmp_path, monkeypatch):
-    seen = []
-
-    def handler(request):
-        seen.append(request)
-        assert "authorization" not in request.headers
-        return httpx.Response(200, content=b"DATA", headers={"content-length": "4"})
-
-    fake_http(monkeypatch, handler)
-    entry = row(checksum=hashlib.sha256(b"DATA").hexdigest(), checksum_algorithm="sha256")
-    report = Client([entry]).download_dataset("EXAMPLE", tmp_path)
-    assert report.complete and (tmp_path / "EXAMPLE/1/data.bin").read_bytes() == b"DATA"
-    again = Client([entry]).download_dataset("EXAMPLE", tmp_path)
-    assert again.entries[0]["status"] == "verified_existing" and len(seen) == 1
+def test_file_metadata_and_resume_are_delegated_to_tdr(tmp_path, monkeypatch, tdr_calls):
+    checksum = hashlib.md5(b"FAKE").hexdigest()
+    c = Client([row(file_name="data.bin", checksum=checksum, checksum_algorithm="md5")])
+    assert c.download_dataset("EXAMPLE", tmp_path, accept_data_policy=True).complete
+    assert c.download_dataset("EXAMPLE", tmp_path, resume=True, accept_data_policy=True).complete
+    assert [c["options"]["skip_existing"] for c in tdr_calls] == [False, True]
+    record = tdr_calls[0]["records"][0]
+    assert record["file_name"] == "data.bin" and record["md5"] == checksum
+    assert record["file_size_bytes"] == "4"
+    assert tdr_calls[0]["options"]["credential_file"] is None
 
 
-def test_size_failure_preserves_existing_file(tmp_path, monkeypatch):
-    path = tmp_path / "EXAMPLE/1/data.bin"
-    path.parent.mkdir(parents=True)
-    path.write_bytes(b"OLD")
-    fake_http(monkeypatch, lambda r: httpx.Response(200, content=b"BAD"))
-    with pytest.raises(DownloadError) as error:
-        Client([row()]).download_dataset("EXAMPLE", tmp_path, overwrite=True)
-    assert path.read_bytes() == b"OLD" and not list(path.parent.glob("*.part"))
-    assert not error.value.report.complete
+def test_engine_completion_requires_all_selected_files(tmp_path, monkeypatch):
+    from tdr_fakes import install_tdr, success
+
+    calls = install_tdr(monkeypatch, handler=lambda call: success(1))
+    c = Client(
+        [
+            row(download_id="a", file_name="a.bin", download_url="https://files.example.org/a.bin"),
+            row(download_id="b", file_name="b.bin", download_url="https://files.example.org/b.bin"),
+        ]
+    )
+    with pytest.raises(DownloadError) as caught:
+        c.download_dataset("EXAMPLE", tmp_path, accept_data_policy=True)
+    assert len(calls) == 1 and len(calls[0]["records"]) == 2
+    assert not caught.value.report.complete
+    assert all(e["status"] == "failed" for e in caught.value.report.entries)
 
 
 def test_missing_key_preflights_entire_mixed_selection(tmp_path, monkeypatch):
@@ -90,10 +92,12 @@ def test_missing_key_preflights_entire_mixed_selection(tmp_path, monkeypatch):
         drs_uri="drs://nci-crdc.datacommons.io/dg.4DFC/abc",
         file_name="b.zip",
     )
-    report = Client([row(), protected]).download_dataset("EXAMPLE", tmp_path, dry_run=True)
+    report = Client([row(), protected]).download_dataset(
+        "EXAMPLE", tmp_path, dry_run=True, accept_data_policy=True
+    )
     assert report.entries[1]["status"] == "requires_credential" and not report.complete
     with pytest.raises(DownloadError) as error:
-        Client([row(), protected]).download_dataset("EXAMPLE", tmp_path)
+        Client([row(), protected]).download_dataset("EXAMPLE", tmp_path, accept_data_policy=True)
     assert error.value.report.entries[0]["status"] == "planned" and not list(tmp_path.iterdir())
 
 
@@ -109,62 +113,56 @@ def test_unrecognized_drs_never_receives_credentials(tmp_path, monkeypatch, uri)
     fake_http(monkeypatch, lambda r: pytest.fail("No credential request is allowed"))
     protected = row(access_level="controlled", download_url=None, drs_uri=uri, file_name="b.zip")
     with pytest.raises(DownloadError):
-        Client([protected]).download_dataset("EXAMPLE", tmp_path, credential_file="unused")
+        Client([protected]).download_dataset(
+            "EXAMPLE", tmp_path, credential_file="unused", accept_data_policy=True
+        )
 
 
-def test_authenticated_resolution_does_not_forward_key_or_token_to_file_host(tmp_path, monkeypatch):
+def test_controlled_transfer_passes_only_key_path_to_the_engine(tmp_path, monkeypatch, tdr_calls):
     key = tmp_path / "key.json"
-    key.write_text(json.dumps({"api_key": "NOT_A_REAL_TEST_KEY"}))
-    key.chmod(0o600)
+    key.write_text(json.dumps({"api_key": "NEVER-COPY-INTO-MANIFEST"}))
+    protected = row(
+        access_level="controlled",
+        download_url=None,
+        drs_uri="drs://nci-crdc.datacommons.io/dg.4DFC/abc",
+        file_name="a.zip",
+    )
+    fake_http(monkeypatch, lambda _: pytest.fail("SDK must not exchange tokens or stream files"))
+    report = DownloadsMixin().download_files(
+        [protected], tmp_path / "out", credential_file=key, accept_data_policy=True
+    )
+    assert report.complete and len(tdr_calls) == 1
+    assert tdr_calls[0]["options"]["credential_file"] == key.resolve()
+    assert tdr_calls[0]["records"][0]["drs_uri"] == protected["drs_uri"]
+    assert "NEVER-COPY" not in tdr_calls[0]["manifest"].read_text()
+    assert "NEVER-COPY" not in json.dumps(report.scope) + json.dumps(report.entries)
 
-    def handler(request):
-        if request.url.path.endswith("/access_token"):
-            assert request.url.host == "nci-crdc.datacommons.io"
-            assert json.loads(request.content) == {"api_key": "NOT_A_REAL_TEST_KEY"}
-            return httpx.Response(200, json={"access_token": "NOT_A_REAL_ACCESS_TOKEN"})
-        if "/user/data/download/" in request.url.path:
-            assert request.headers["authorization"] == "Bearer NOT_A_REAL_ACCESS_TOKEN"
-            return httpx.Response(
-                200,
-                json={"url": "https://files.example.org/blob?signature=PRIVATE_VALUE"},
+
+def test_engine_failure_is_sanitized(tmp_path, monkeypatch):
+    from tdr_fakes import install_tdr, EngineError
+
+    def failed(call):
+        raise EngineError(
+            dict(
+                schema_version=1,
+                status="failed",
+                error_code="transfer_failed",
+                total=1,
+                downloaded=0,
+                synced=0,
+                skipped=0,
+                failed=1,
+                secret="FAKE-KEY",
             )
-        assert request.url.host == "files.example.org"
-        assert "authorization" not in request.headers and not request.content
-        return httpx.Response(200, content=b"DATA")
+        )
 
-    fake_http(monkeypatch, handler)
-    protected = row(
-        access_level="controlled",
-        download_url=None,
-        drs_uri="drs://nci-crdc.datacommons.io/dg.4DFC/abc",
-        file_name="b.zip",
-    )
-    report = Client([protected]).download_dataset("EXAMPLE", tmp_path, credential_file=key)
-    assert report.complete
-    assert all(
-        s not in str(report)
-        for s in ["NOT_A_REAL_TEST_KEY", "NOT_A_REAL_ACCESS_TOKEN", "PRIVATE_VALUE"]
-    )
-
-
-def test_authentication_failure_is_sanitized(tmp_path, monkeypatch):
-    key = tmp_path / "key.json"
-    key.write_text(json.dumps({"api_key": "NOT_A_REAL_TEST_KEY"}))
-    key.chmod(0o600)
-    fake_http(
-        monkeypatch,
-        lambda r: httpx.Response(403, text="secret body NOT_A_REAL_TEST_KEY"),
-    )
-    protected = row(
-        access_level="controlled",
-        download_url=None,
-        drs_uri="drs://nci-crdc.datacommons.io/dg.4DFC/abc",
-        file_name="b.zip",
-    )
-    with pytest.raises(DownloadError) as error:
-        Client([protected]).download_dataset("EXAMPLE", tmp_path, credential_file=key)
-    assert "NOT_A_REAL_TEST_KEY" not in str(error.value.report)
-    assert error.value.report.entries[0]["status"] == "failed"
+    install_tdr(monkeypatch, handler=failed)
+    with pytest.raises(DownloadError) as caught:
+        Client([row()]).download_dataset("EXAMPLE", tmp_path, accept_data_policy=True)
+    assert not caught.value.report.complete
+    text = str(caught.value) + json.dumps(caught.value.report.entries)
+    assert "FAKE-KEY" not in text and "private engine detail" not in text
+    assert caught.value.report.entries[0]["engine_summary"]["error_code"] == "transfer_failed"
 
 
 def test_bad_controlled_manifest_stops_public_payload_before_authentication(tmp_path, monkeypatch):
@@ -183,50 +181,35 @@ def test_bad_controlled_manifest_stops_public_payload_before_authentication(tmp_
         download_url="https://www.cancerimagingarchive.net/wp-content/uploads/example.csv",
     )
     with pytest.raises(DownloadError) as error:
-        Client([row(), protected]).download_dataset("EXAMPLE", tmp_path, credential_file=key)
+        Client([row(), protected]).download_dataset(
+            "EXAMPLE", tmp_path, credential_file=key, accept_data_policy=True
+        )
     assert error.value.report.entries[0]["status"] == "not_attempted"
     assert error.value.report.entries[1]["status"] == "failed_preflight"
     assert not (tmp_path / "EXAMPLE/1/data.bin").exists()
 
 
-def test_missing_imaging_series_does_not_send_partial_selection(tmp_path, monkeypatch):
+def test_engine_missing_series_failure_retains_whole_selection(tmp_path, monkeypatch):
+    from tdr_fakes import install_tdr
+
+    calls = install_tdr(monkeypatch, available_uids=["1.2.3"])
+    p = tmp_path / "selection.tcia"
+    p.write_text("ListOfSeriesToDownload=\n1.2.3\n1.2.4\n")
+    with pytest.raises(DownloadError) as caught:
+        DownloadsMixin().download_manifest(p, tmp_path / "out", accept_data_policy=True)
+    assert calls[0]["seriesInstanceUID"] == ["1.2.3", "1.2.4"]
+    assert not caught.value.report.complete and caught.value.report.entries[0]["status"] == "failed"
+
+
+def test_dicom_delegates_exact_series_allowlist_to_tdr(tmp_path, monkeypatch, tdr_calls):
     fake_http(
         monkeypatch,
-        lambda r: httpx.Response(200, text="ListOfSeriesToDownload=\n1.2.3\n1.2.4\n"),
+        lambda _: httpx.Response(200, content=b"ListOfSeriesToDownload=\n1.2.3\n1.2.4\n"),
     )
-    calls = []
-    client = SimpleNamespace(
-        index={"SeriesInstanceUID": ["1.2.3"]},
-        download_dicom_series=lambda **kwargs: calls.append(kwargs),
-    )
-    monkeypatch.setitem(sys.modules, "idc_index", SimpleNamespace(IDCClient=lambda: client))
-    monkeypatch.setattr(downloads.importlib.util, "find_spec", lambda name: object())
-    image = row(download_url="https://www.cancerimagingarchive.net/wp-content/uploads/example.tcia")
-    with pytest.raises(DownloadError) as error:
-        Client([image]).download_dataset("EXAMPLE", tmp_path)
-    assert not calls and error.value.report.entries[0]["status"] == "failed_preflight"
-
-
-def test_dicom_delegates_exact_series_allowlist_to_upstream_client(tmp_path, monkeypatch):
-    fake_http(
-        monkeypatch,
-        lambda r: httpx.Response(200, text="ListOfSeriesToDownload=\n1.2.3\n"),
-    )
-    calls = []
-    client = SimpleNamespace(
-        index={"SeriesInstanceUID": ["1.2.3"]},
-        download_dicom_series=lambda **kwargs: calls.append(kwargs),
-    )
-    monkeypatch.setitem(sys.modules, "idc_index", SimpleNamespace(IDCClient=lambda: client))
-    monkeypatch.setattr(downloads.importlib.util, "find_spec", lambda name: object())
-    image = row(download_url="https://www.cancerimagingarchive.net/wp-content/uploads/example.tcia")
-    report = Client([image]).download_dataset("EXAMPLE", tmp_path)
-    assert report.complete and calls[0]["seriesInstanceUID"] == ["1.2.3"]
-    assert report.entries[0]["verification"].startswith("upstream engine")
-
-
-
-
+    c = Client([row(download_url="https://www.cancerimagingarchive.net/wp-content/uploads/a.tcia")])
+    assert c.download_dataset("EXAMPLE", tmp_path, accept_data_policy=True).complete
+    assert tdr_calls[0]["seriesInstanceUID"] == ["1.2.3", "1.2.4"]
+    assert tdr_calls[0]["options"]["accept_data_policy"] is True
 
 
 @pytest.mark.parametrize("filename", ["../outside.bin", "/outside.bin", "..\\outside.bin"])
@@ -236,7 +219,9 @@ def test_file_names_cannot_escape_destination(tmp_path, monkeypatch, filename):
         lambda r: pytest.fail("Invalid filename must stop before a transfer"),
     )
     with pytest.raises(DownloadError):
-        Client([row(file_name=filename)]).download_dataset("EXAMPLE", tmp_path)
+        Client([row(file_name=filename)]).download_dataset(
+            "EXAMPLE", tmp_path, accept_data_policy=True
+        )
 
 
 def test_manifest_helper_rejects_html_and_keeps_existing_manifest(tmp_path, monkeypatch):
@@ -249,28 +234,26 @@ def test_manifest_helper_rejects_html_and_keeps_existing_manifest(tmp_path, monk
     assert path.read_text() == "ORIGINAL"
 
 
-def test_controlled_manifest_uses_authoritative_scope_and_original_filename(tmp_path, monkeypatch):
-    key = tmp_path / "key.json"
-    key.write_text(json.dumps({"api_key": "NOT_A_REAL_TEST_KEY"}))
-    key.chmod(0o600)
-
-    def handler(request):
-        if request.url.host == "www.cancerimagingarchive.net":
-            return httpx.Response(
-                200,
-                text="drs_uri,CTDC File Name,CTDC Size,access_level,short_title\ndrs://nci-crdc.datacommons.io/dg.4DFC/abc,original.zip,4,open,WRONG\n",
-            )
-        if request.url.path.endswith("/access_token"):
-            return httpx.Response(200, json={"access_token": "TEST_TOKEN"})
-        if "/user/data/download/" in request.url.path:
-            return httpx.Response(200, json={"url": "https://files.example.org/blob"})
-        return httpx.Response(200, content=b"DATA")
-
-    fake_http(monkeypatch, handler)
-    protected = row(
-        access_level="controlled",
-        download_url="https://www.cancerimagingarchive.net/wp-content/uploads/example.csv",
+def test_controlled_manifest_preserves_filename_and_scope(tmp_path, monkeypatch, tdr_calls):
+    fake_http(
+        monkeypatch,
+        lambda _: httpx.Response(
+            200,
+            content=b"drs_uri,CTDC File Name\ndrs://nci-crdc.datacommons.io/dg.4DFC/abc,original.zip\n",
+        ),
     )
-    report = Client([protected]).download_dataset("EXAMPLE", tmp_path, credential_file=key)
-    assert report.complete and (tmp_path / "EXAMPLE/1/original.zip").read_bytes() == b"DATA"
-    assert not (tmp_path / "WRONG").exists()
+    key = tmp_path / "key.json"
+    key.write_text('{"api_key":"FAKE"}')
+    c = Client(
+        [
+            row(
+                access_level="controlled",
+                download_url="https://www.cancerimagingarchive.net/wp-content/uploads/files.csv",
+            )
+        ]
+    )
+    assert c.download_dataset(
+        "EXAMPLE", tmp_path / "out", credential_file=key, accept_data_policy=True
+    ).complete
+    assert tdr_calls[0]["records"][0]["file_name"] == "original.zip"
+    assert tdr_calls[0]["options"]["credential_file"] == key.resolve()

@@ -49,3 +49,11 @@ Normal downloads follow IDC copy behavior; resume=True explicitly requests the
 existing-file scan, with a separate preparation message. This applies to manifest,
 dataset and participant-image downloads. HTTP/controlled file semantics are
 unchanged. No REST/MCP or artifact update is required.
+
+The 4.0.0a7 preview delegates supported payload transfers to the published
+tcia-data-retriever 0.1.0rc1 wheel. Custom token exchange and HTTP streaming have
+been removed. The downloads extra is TDR; the cohorts extra retains IDC metadata.
+Policy acceptance is explicit for actual downloads. Current TDR console and
+credential-cache behavior are documented. Local same-object CT/MR tests cover
+fresh and prepared-client cases with byte-level verification; a separate Colab
+notebook is provided. No live controlled-access transfer is claimed.

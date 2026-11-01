@@ -13,7 +13,6 @@ import re
 import tarfile
 import zipfile
 
-
 LEGACY_MODULES = {
     "crdc.py",
     "datacite.py",
@@ -40,22 +39,37 @@ def check_wheel(path: Path) -> None:
         assert metadata["Version"].startswith("4."), "expected v4 package version"
         assert metadata["Requires-Python"] and ">=3.11" in metadata["Requires-Python"]
         requirements = metadata.get_all("Requires-Dist", [])
-        core = [req for req in requirements if "extra ==" not in req and 'extra ==' not in req.lower()]
+        core = [
+            req for req in requirements if "extra ==" not in req and "extra ==" not in req.lower()
+        ]
         core_names = {re.split(r"[ ;<>=!~\[]", req, maxsplit=1)[0].lower() for req in core}
         assert core_names == {"httpx"}, f"unexpected core dependencies: {sorted(core_names)}"
         extras = set(metadata.get_all("Provides-Extra", []))
-        assert {"test", "tables", "examples"}.issubset(extras), f"missing extras: {extras}"
+        assert {"test", "tables", "examples", "downloads", "cohorts"}.issubset(
+            extras
+        ), f"missing extras: {extras}"
+        download_requirements = [
+            req for req in requirements if re.search(r"extra\s*==\s*['\"]downloads['\"]", req)
+        ]
+        cohort_requirements = [
+            req for req in requirements if re.search(r"extra\s*==\s*['\"]cohorts['\"]", req)
+        ]
+        assert any(req.lower().startswith("tcia-data-retriever") for req in download_requirements)
+        assert not any(req.lower().startswith("idc-index") for req in download_requirements)
+        assert any(req.lower().startswith("idc-index") for req in cohort_requirements)
 
 
 def check_sdist(path: Path) -> None:
     with tarfile.open(path, "r:gz") as archive:
         names = archive.getnames()
     assert any(name.endswith("/pyproject.toml") for name in names), "sdist lacks pyproject"
-    assert any(name.endswith("/src/tcia_utils/client.py") for name in names), "sdist lacks v4 client"
+    assert any(
+        name.endswith("/src/tcia_utils/client.py") for name in names
+    ), "sdist lacks v4 client"
     for module in LEGACY_MODULES:
-        assert not any(name.endswith(f"/src/tcia_utils/{module}") for name in names), (
-            f"legacy module in sdist: {module}"
-        )
+        assert not any(
+            name.endswith(f"/src/tcia_utils/{module}") for name in names
+        ), f"legacy module in sdist: {module}"
 
 
 def main() -> None:
