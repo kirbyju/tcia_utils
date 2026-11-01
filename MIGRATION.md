@@ -8,7 +8,7 @@ The 4.0 interface is a new research client, not a compatibility release for ever
 | Query a catalog provider and infer that a DOI is a TCIA publication | Use visible `search_datasets()` / `get_dataset()` records as publication identity; use `get_citation()` for DataCite enrichment |
 | Treat a short title as globally unique | Keep `(dataset_type, short_title)` for Collection versus Analysis Result; `get_dataset()` may return multiple `datasets` rows |
 | Treat a dataset diagnosis or display patient ID as a patient-level fact | Inspect clinical evidence scope and use dataset-scoped participant identity and reviewed crosswalks |
-| Download through package-specific helpers | Use `download_dataset()` / `download_files()` for explicit transfers, or export a selection for Python manifest input; public DICOM delegates to `idc-index` |
+| Download through package-specific helpers | Use `download_dataset()` / `download_files()` for explicit transfers, or export a selection for Python manifest input; supported transfers delegate to pip-installed `tcia-data-retriever`; IDC is optional cohort metadata |
 
 The client needs an explicit TCIA V2 REST `base_url`. `status()` reports its observed fingerprint, profile, and capabilities. The package does not silently fall back to live WordPress, DataCite, IDC, or another host when a snapshot component is unavailable. The client uses REST for metadata; there is no MCP transport. Explicit download methods resolve approved controlled files through the supported API without requiring readers to handle tokens.
 
@@ -27,3 +27,13 @@ exports. `backend`, `retriever`, `package_client`, and `data_retriever_command` 
 removed. Published software requirements remain discovery metadata; inspect
 `python_supported` for SDK execution support. SDK downloads require only Python
 and pip-installed dependencies.
+
+Actual v4 transfers now require `accept_data_policy=True`. Install the downloads
+extra for TDR and the cohorts extra for public DICOM cohort metadata. See the
+current download guide for the shared engine's console, credential-cache, output
+layout and skip-existing behavior.
+
+When upgrading from earlier transfer backends, use a fresh destination. TDR owns
+its file layout and completion metadata; resume=True does not migrate an earlier
+IDC or SDK HTTP output tree. Keep prior downloads separate until you have chosen
+the layout for your workflow.

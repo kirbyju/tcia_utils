@@ -64,108 +64,85 @@ Set `TCIAClient(..., pin_snapshot=True)` to reject a changed release/profile bet
 
 Data Retriever CSVs have exactly one recognized route column: `SeriesInstanceUID`, `imageUrl`, or `drs_uri`. Public and controlled selections, and different routes, go to separate files. A `source_url` is not automatically a deliverable `imageUrl`. Controlled `drs_uri` is public metadata; actual retrieval requires separate authorization. An Aspera package/path handoff has its own format only when exact package/path fields are present. Selection cannot invent `.tcia` files, signed URLs, missing DICOM UIDs, or source-image relationships. Include source images only after an explicit selection choice.
 
-For public DICOM detail, use `idc-index` directly with an evidenced dataset DOI or reviewed patient identifier. Query IDC for series identifiers and viewer URLs, check IDC coverage independently, then supply verified `SeriesInstanceUID` values to a selection. TCIA Utils does not promise series UID discovery from the current REST asset DTO and does not wrap the full `idc-index` API. The download helper delegates public DICOM transfers to `idc-index`; detailed imaging queries remain in that project.
+For public DICOM detail, use `idc-index` directly with an evidenced dataset DOI or reviewed patient identifier. Query IDC for series identifiers and viewer URLs, check IDC coverage independently, then supply verified `SeriesInstanceUID` values to a selection. TCIA Utils does not promise series UID discovery from the current REST asset DTO and does not wrap the full `idc-index` API. Detailed imaging queries remain in IDC; actual downloads delegate to the packaged TCIA Data Retriever.
 
 ## Download from Python
 
-The download scope is **Python and pip-installed dependencies**. Public DICOM
-reuses `idc-index`, including its pip-supplied `s5cmd` executable. Public HTTPS
-files and approved controlled files use the SDK's `httpx` adapter. Data Retriever,
-Aspera CLI, and applications needing a separate installation are not invoked.
+Install `tcia_utils[downloads]` for the packaged transfer engine. Supported public
+DICOM, public files and approved controlled files delegate to
+`tcia-data-retriever==0.1.0rc1`, including its pip-bundled headless executable.
+No separate application installation is required. Core imports and metadata
+queries do not launch it. `tcia_utils[cohorts]` is a separate optional IDC index
+for public DICOM cohort metadata; it is not needed to download a supplied manifest.
 
-```python
-plan = tcia.plan_downloads("CMB-GEC")
-display(plan.to_dataframe())
-# Choose the exact Python-supported group(s) you want from this inventory.
-check = tcia.download_dataset("CMB-GEC", "images", download_ids=imaging_ids, dry_run=True)
-# report = tcia.download_dataset("CMB-GEC", "images", download_ids=imaging_ids, max_items=1)
-# report = tcia.download_files(selected_files, "images", credential_file="approved-key.json")
-```
+Read the [TCIA data usage policy](https://www.cancerimagingarchive.net/data-usage-policies-and-restrictions/)
+and pass `accept_data_policy=True` for actual downloads. Dry runs need no policy
+acceptance and never launch a transfer executable or authenticate controlled data.
+All selected metadata/routes are checked before starting any transfer. Unsupported
+Aspera groups stop the selection; use the official separate application workflow.
 
-`plan_downloads()` consumes the shared REST/MCP download plan. Software labels,
-requirements URLs, category/count fields, and official links describe **all**
-published groups. `python_supported` and `python_support_message` describe this
-SDK's execution scope, independent of the published instructions. A requirement
-label mentioning another application does not prevent supported manifests from
-being processed directly in Python. Unknown or conflicting routes remain
-unsupported. No download group is silently discarded. Use explicit `download_ids`
-or `access_levels` to select a subset; ambiguous short titles need `dataset_type`.
+The SDK retains discovery, cohort filtering, exact selection scope, local/URL
+manifest convenience, max_items sampling and reports. TDR owns payload transfer,
+retries, checksums, authorization and output layout. ZIP archives can be extracted
+automatically. The SDK no longer implements token exchange, DRS resolution or HTTP
+file streaming. Existing files follow TDR copy/skip-existing behavior rather than
+the former SDK-specific verifier. Normal copy can download existing files again.
+Pass `resume=True` with the same destination to request skip-existing checks;
+this is not a byte-range resume guarantee. Do not combine resume and overwrite.
 
-A group requiring an external application reports `requires_external_tool`.
-Actual execution stops the entire selection before any payload transfer, even if
-that application happens to be installed. Follow the official link or separate
-application notebook. Such groups remain in discovery metadata and selection
-accounting; `export_selection()` does not generate application-specific Aspera
-handoffs. Ordinary UID/URL/DRS CSV manifests remain supported Python inputs.
-The SDK no longer exposes `data_retriever_command`, `backend`, `retriever`, or
-`package_client` parameters. Earlier release notes describe earlier versions.
+Progress is on by default. `progress=False` controls SDK messages, but the current
+TDR Python wrapper still inherits console progress; the SDK emits a warning about
+that limitation. It does not maintain a second subprocess/download implementation
+to recreate an unsupported quiet mode. Future wrapper capabilities can be adopted
+at the shared package boundary.
 
-Preparation messages start before network metadata requests or index loading.
-The first public DICOM transfer initializes one IDC client; later transfers through
-the same TCIAClient reuse it. `close()` releases that reference. A destination
-containing only saved manifests does not trigger a sync scan. Downloads use IDC
-normal copy behavior by default, including after a sample; existing files may be
-copied again. To continue an interrupted public DICOM download, pass `resume=True`
-to `download_manifest()`, `download_dataset()`, or `download_images()` and reuse
-the same destination. This explicitly enables synchronization when image hierarchy
-entries exist. It compares remote and local files before the transfer bar appears,
-which can take minutes for a large manifest. It is a check-and-skip operation, not
-a guarantee of byte-range resume or a complete integrity audit. HTTP and controlled
-file routes retain their size/checksum and overwrite behavior; they do not gain
-partial-file resume. Invalid non-boolean resume options fail before metadata
-queries. Reports record `public_dicom_resume_requested`. Pass `progress=False` to silence SDK status output and IDC's transfer
-bar. No dependency installation is performed by download calls.
+For controlled data, pass only `credential_file=...`, never key contents. The
+current TDR release may save a private credential copy in its application cache;
+see [TDR's storage documentation](https://github.com/TCIA/data-retriever/blob/618d8bc4e493cabc20b9afc41d54a3ce8a2b0df5/python/README.md).
+Use an isolated/temporary runtime if that persistence is inappropriate. The SDK
+passes a credential path only to controlled jobs, validates recognized DRS routes,
+and excludes secrets and temporary URLs from reports. Public metadata and manifests
+do not grant access approval. No live controlled transfer is claimed by this review.
 
-A dry run checks metadata/local prerequisites without authentication or payloads;
-sample dry runs may read small manifests. It never initializes the IDC index.
-Actual downloads validate all selected manifests/index coverage before transferring
-payloads. Missing dependencies, authorization, unsupported routes, or unavailable
-series stop the selection.
-
-Controlled downloads currently use a narrow `httpx` integration with a recognized
-CRDC/Gen3 host, not the `gen3` package or a general DRS client. Your JSON key-file
-path stays local. The adapter exchanges its key for an access token, resolves
-selected DRS identifiers to temporary HTTPS URLs, then streams through a separate
-client without the authorization token. Keys, tokens and signed URLs stay out of
-reports and metadata services. This does not grant or expand access approval.
-
-`DownloadReport.complete` describes the selected scope, including a sample when
-requested. `engine_completed` records IDC's completion without independent byte
-verification. HTTP files check response length and supplied size/checksum metadata,
-write atomically, and preserve existing complete files on failure. HTTP downloads
-restart interrupted files; they do not currently resume partial files. Existing
-files are skipped only when available size/checksum checks match. Failures preserve
-per-group accounting, and later groups are marked not attempted. Metadata-only
-notebook validation does not prove a real authorized transfer.
+Reports retain each selected row and sampled scope, with a sanitized versioned
+engine summary. Successful engine counts must cover every selected series/file;
+partial or malformed success never completes the SDK selection. On a batch failure,
+per-file successes cannot be inferred from the aggregate engine report: the SDK
+conservatively marks the affected batch failed and later batches not attempted.
+`engine_completed` records the transfer engine's completion; it is not a separate
+SDK integrity audit. Metadata-only tests are not real transfer evidence.
 
 ## Download a manifest directly
 
 ```python
 report = tcia.download_manifest("cohort.tcia", "images", dry_run=True)
-# report = tcia.download_manifest("cohort.tcia", "images")
-# report = tcia.download_manifest("https://example.org/cohort.csv", "images")
-# report = tcia.download_manifest("controlled.csv", "images", credential_file="approved-key.json")
+# report = tcia.download_manifest("cohort.tcia", "images", accept_data_policy=True)
+# report = tcia.download_manifest("https://example.org/cohort.csv", "images", accept_data_policy=True)
+# report = tcia.download_manifest("controlled.csv", "images", credential_file="approved-key.json", accept_data_policy=True)
 ```
 
 Pass a local path (including `Path`) or an HTTPS URL. Supported formats are
 `.tcia`, `.csv`, and `.tsv`. A tabular manifest must have exactly one recognized
-route column. UID rows use the existing public-DICOM adapter, file URLs use the
-HTTP adapter, and DRS rows use the approved controlled-file adapter. The method
-does not require a REST plan and does not upload the manifest or key to the service.
+route column. The SDK validates the selection and prepares a normalized TDR
+input manifest; the shared package handles each supported route. This does not
+require a REST plan or upload the manifest/key to the metadata service.
 
 A dry run reads the small manifest (10 MB cap) and checks local prerequisites;
 it transfers no payload, performs no authentication, and does not initialize the
-imaging index. Actual UID transfers check **every** selected series against the
-index before transferring any. Missing UIDs stop the selection and appear in the
-failure report. Controlled UID-only manifests are not sent through a public route;
+Python imaging index. Metadata syntax and routes are checked before launching
+TDR. Actual availability and transfer verification belong to the engine; a failed
+run may already have transferred some files. Aggregate failures never establish
+complete acquisition, and the SDK does not invent per-file failure identifiers.
+Controlled UID-only manifests are not sent through a public route;
 use a supported approved DRS manifest. DRS manifests cannot be declared open.
 
 Malformed/mixed route columns, unrecognized DRS hosts, non-HTTPS file routes,
 unsafe names, and duplicate destinations fail before payload transfer. Original
 CSV filenames, sizes, and supported checksum fields are retained. Existing files
 follow the same verification/overwrite behavior as dataset downloads. Data files
-are grouped under `destination/manifest/<manifest-hash-prefix>/`; the original
-small manifest is saved in its `manifests/` subdirectory. Reports retain a content
+are grouped under `destination/manifest/<manifest-hash-prefix>/`; a
+normalized transfer manifest is saved in its `manifests/` subdirectory. Use
+`save_manifests()` when you also need an unmodified copy of an official manifest. Reports retain a content
 hash and item count, not keys, signed URLs, or a guessed dataset/participant identity.
 
 
@@ -176,17 +153,17 @@ items. This is a real transfer check; `dry_run=True` remains metadata/setup only
 
 ```python
 # First whole series from a local or HTTPS manifest.
-report = tcia.download_manifest("cohort.tcia", "sample", max_items=1)
+report = tcia.download_manifest("cohort.tcia", "sample", max_items=1, accept_data_policy=True)
 display(report.to_dataframe())
 print(report.scope)
 
 # Or sample a particular published download group.
 report = tcia.download_dataset(
-    "CMB-GEC", "sample", download_ids=[imaging_download_id], max_items=1
+    "CMB-GEC", "sample", download_ids=[imaging_download_id], max_items=1, accept_data_policy=True
 )
 
 # File records from a participant query can be sampled the same way.
-report = tcia.download_files(file_records, "sample", max_items=2)
+report = tcia.download_files(file_records, "sample", max_items=2, accept_data_policy=True)
 ```
 
 The limit applies **across the complete selection**, in input/manifest order,
@@ -244,8 +221,8 @@ controlled file routes. Those issues block `download_images()` rather than
 silently reducing the image selection. All selection methods retain dataset-scoped
 identity and distinguish public slide copies from submitted originals.
 
-`download_images(plan, destination, max_items=1)` delegates to the same Python
-manifest/file adapters used elsewhere. The limit is global and counts whole series
+`download_images(plan, destination, max_items=1, accept_data_policy=True)` delegates to the same packaged TDR
+interface used by the manifest/file helpers. The limit is global and counts whole series
 or slide files; one CT series includes all its DICOM instances. Omit max_items to
 retrieve the complete planned public selection. This does not include controlled
 images, prove image quality or completeness outside indexed coverage, or change
@@ -267,3 +244,8 @@ separate display table with missing cells labeled "Not reported", preserving lis
 cells, zero counts, booleans and provenance attributes. The raw frame and CSV/JSON
 exports retain their original missing values. Formatting avoids pandas' implicit
 object downcasting and is tested with pandas 2.2 and 3.1.
+
+When upgrading from earlier transfer backends, use a fresh destination. TDR owns
+its file layout and completion metadata; resume=True does not migrate an earlier
+IDC or SDK HTTP output tree. Keep prior downloads separate until you have chosen
+the layout for your workflow.

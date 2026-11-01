@@ -15,6 +15,7 @@ from ._downloads import (
     _url,
     _validate_max_items,
     _validate_resume,
+    _validate_policy,
 )
 from ._errors import InvalidRequestError, ProtocolError
 from ._research import records
@@ -77,6 +78,25 @@ def _count(value):
 
 
 class ParticipantImagesMixin:
+    def _get_imaging_client(self, progress):
+        client = getattr(self, "_imaging_client", None)
+        if client is None:
+            _notify(
+                progress,
+                "Preparing the public DICOM index (first use in this client may take a moment)...",
+            )
+            try:
+                from idc_index import IDCClient
+            except ImportError:
+                raise DownloadError(
+                    "Install tcia_utils[cohorts] for public DICOM cohort metadata"
+                ) from None
+            client = IDCClient()
+            self._imaging_client = client
+        else:
+            _notify(progress, "Reusing the prepared public DICOM index...")
+        return client
+
     def plan_participant_images(self, participants, *, modality, file_format, progress=True):
         """Find public images for exact dataset-scoped participants, without payload transfers.
 
@@ -315,9 +335,11 @@ class ParticipantImagesMixin:
         overwrite=False,
         progress=True,
         resume=False,
+        accept_data_policy=False,
     ):
-        """Download a participant image plan; resume=True synchronizes public DICOM only."""
+        """Download a participant image plan through TDR; resume=True requests skip-existing checks."""
         _validate_resume(resume)
+        _validate_policy(accept_data_policy, dry_run)
         if not isinstance(plan, ParticipantImagePlan):
             raise InvalidRequestError(
                 "Supply a ParticipantImagePlan from plan_participant_images()"
@@ -374,6 +396,7 @@ class ParticipantImagesMixin:
             progress=progress,
             overwrite=overwrite,
             resume=resume,
+            accept_data_policy=accept_data_policy,
             manifest_inputs=inputs,
             max_items=max_items,
         )
