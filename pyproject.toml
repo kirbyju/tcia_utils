@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tcia_utils"
-version = "4.0.0a7"
+version = "4.0.0a8"
 authors = [{ name="Justin Kirby", email="justin.kirby@nih.gov" }]
 description = "A small Python client for TCIA research discovery and evidence."
 readme = "README.md"
@@ -32,8 +32,7 @@ test = [
 ]
 tables = ["pandas>=2"]
 downloads = ["tcia-data-retriever==0.1.0rc1"]
-cohorts = ["idc-index>=0.13.4,<1"]
-examples = ["tcia-data-retriever==0.1.0rc1", "pandas>=2,<4", "idc-index>=0.13.4,<1", "nbformat>=5,<6", "nbclient>=0.11,<1", "ipykernel>=7,<8", "nibabel>=5,<6"]
+examples = ["tcia-data-retriever==0.1.0rc1", "pandas>=2,<4", "nbformat>=5,<6", "nbclient>=0.11,<1", "ipykernel>=7,<8", "nibabel>=5,<6"]
 
 [tool.hatch.build]
 exclude = [

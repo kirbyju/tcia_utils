@@ -1,7 +1,7 @@
 {
   "repository": "kirbyju/TCIA_Notebooks",
-  "ref": "7ec9f47f60b8d06a88c673925be25d9b2d4d8ffb",
+  "ref": "6ac0757dc918f8a5f103181bf939dad36a2ef6e1",
   "directory": "tcia_utils_v4",
-  "package_version": "4.0.0a7",
+  "package_version": "4.0.0a8",
   "notebook_count": 1
 }

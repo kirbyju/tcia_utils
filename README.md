@@ -2,12 +2,12 @@
 
 TCIA Utils is a Python client for discovering TCIA datasets, participants, clinical evidence, available data, citations, and verified analytical publications. It uses the shared TCIA V2 REST service. A researcher can start with a question about a dataset without choosing the underlying catalog or storage system.
 
-Version **4.0.0a7** is an opt-in preview for testing the redesigned interface.
+Version **4.0.0a8** is an opt-in preview for testing the redesigned interface.
 Ordinary pip installations continue selecting stable 3.x. Install this version
 explicitly in a fresh Python 3.11+ environment:
 
 ```sh
-python -m pip install "tcia_utils[tables,downloads]==4.0.0a7"
+python -m pip install "tcia_utils[tables,downloads]==4.0.0a8"
 ```
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/TCIA_Dataset_and_Participant_Queries.ipynb)
@@ -47,7 +47,7 @@ with TCIAClient(base_url="https://tcia.duckdns.org", pin_snapshot=True) as tcia:
     #     download_ids=[chosen_download_id], max_items=1, accept_data_policy=True)
 ```
 
-Optional transfers delegate to `tcia-data-retriever==0.1.0rc1`, including its pip-bundled headless executable. `tcia_utils[downloads]` installs it; `tcia_utils[cohorts]` separately provides IDC metadata for public DICOM cohort queries. The SDK prepares exact, bounded selections and reports; TDR owns downloads, retries, verification, authorization and output layout. No separate Go/desktop installation is needed. Aspera groups remain external-only. See the [download guide](docs/v4/user-guide.md#download-from-python) for policy acceptance, credential-cache behavior and current interface limits.
+Optional transfers delegate to `tcia-data-retriever==0.1.0rc1`, including its pip-bundled headless executable. `tcia_utils[downloads]` installs it. IDC's additional public DICOM query and viewer features are used through its separately installed tools; `tcia_utils` does not install or wrap `idc-index`. The SDK prepares exact, bounded selections and reports; TDR owns downloads, retries, verification, authorization and output layout. No separate Go/desktop installation is needed. Aspera groups remain external-only. See the [download guide](docs/v4/user-guide.md#download-from-python) for policy acceptance, credential-cache behavior and current interface limits.
 
 Use [the task-oriented guide](docs/v4/user-guide.md) for methods, evidence scope, selection exports, and tool handoffs. The [migration guide](MIGRATION.md) explains the 3.x API change; [troubleshooting](docs/v4/troubleshooting.md) covers setup and response errors. The canonical [guided workshop](https://github.com/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/TCIA_Dataset_and_Participant_Queries.ipynb) teaches dataset discovery/download planning, participant cohorts, brain MR segmentations, and controlled CT/SEG access in one conversational lesson. It uses real public metadata by default; public image cells run bounded samples; controlled transfers remain opt-in. It shows download categories and uses package helpers for page collection, clinical enrichment, manifest saving, and direct Python downloads. Original slide packages need configured transfer software; indexed NIfTI paths still require their published package rather than an invented per-file URL.
 

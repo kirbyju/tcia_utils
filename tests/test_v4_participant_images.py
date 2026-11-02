@@ -1,15 +1,13 @@
 """Synthetic, dataset-scoped cohort-to-image selections; no imaging payloads."""
 
 from pathlib import Path
-from types import SimpleNamespace
 import json
 import httpx
 import pytest
 from tcia_utils import DownloadError, InvalidRequestError, ProtocolError
-from tcia_utils._downloads import DownloadPlan, DownloadsMixin
+from tcia_utils._downloads import DownloadsMixin
 from tcia_utils._images import ParticipantImagesMixin
 from tcia_utils._results import Page, Provenance, Completeness
-import tcia_utils._images as images
 import tcia_utils._downloads as downloads
 
 FP = Provenance("https://metadata.example.org", "fp", "tag", "research_detail", {}, "2026-10-30")
@@ -45,32 +43,12 @@ def asset(name="P1", title="EXAMPLE", **changes):
 
 
 class Client(DownloadsMixin, ParticipantImagesMixin):
-    def __init__(self, assets=(), index=None):
+    def __init__(self, assets=()):
         self.assets = assets
-        self.index = index
         self.calls = []
 
     def _observe_status(self):
         return None, FP
-
-    def plan_downloads(self, title, **kwargs):
-        self.calls.append(("plan", title, kwargs))
-        return DownloadPlan(
-            (
-                {
-                    "short_title": title,
-                    "dataset_type": "Collection",
-                    "download_id": "official",
-                    "access_level": "open",
-                    "download_method": "dicom_manifest",
-                    "download_url": "https://www.cancerimagingarchive.net/cohort.tcia",
-                },
-            ),
-            FP,
-        )
-
-    def _get_imaging_client(self, progress):
-        return SimpleNamespace(index=self.index, get_idc_version=lambda: "v-test")
 
     def search_public_assets(self, **kwargs):
         self.calls.append(("assets", kwargs))
@@ -89,43 +67,8 @@ class Client(DownloadsMixin, ParticipantImagesMixin):
         )
 
 
-def fake_manifest(monkeypatch, uids=("1.2.3", "1.2.4")):
-    monkeypatch.setattr(
-        images,
-        "_get_bytes",
-        lambda _: ("ListOfSeriesToDownload=\n" + "\n".join(uids) + "\n").encode(),
-    )
 
 
-def test_dicom_selection_uses_manifest_patient_and_modality_not_collection_name_guess(monkeypatch):
-    pd = pytest.importorskip("pandas")
-    fake_manifest(monkeypatch)
-    index = pd.DataFrame(
-        [
-            {
-                "PatientID": "P1",
-                "Modality": "CT",
-                "SeriesInstanceUID": "1.2.3",
-                "StudyInstanceUID": "1.1",
-                "instanceCount": 42,
-                "series_size_MB": 2.5,
-            },
-            {"PatientID": "P1", "Modality": "MR", "SeriesInstanceUID": "1.2.4"},
-            {
-                "PatientID": "P1",
-                "Modality": "CT",
-                "SeriesInstanceUID": "9.9.9",
-            },  # Other dataset despite identical ID.
-        ]
-    )
-    c = Client(index=index)
-    plan = c.plan_participant_images(
-        [person(), person()], modality="CT", file_format="DICOM", progress=False
-    )
-    assert len(plan.rows) == 1 and plan.rows[0]["series_instance_uid"] == "1.2.3"
-    assert plan.rows[0]["instance_count"] == 42 and plan.rows[0]["size_bytes"] == 2_500_000
-    assert plan.scope["requested_participants"] == 1
-    assert c.calls[0][2] == {"dataset_type": "collection", "access_levels": ["open"]}
 
 
 def test_slide_selection_does_not_cross_dataset_or_use_source_url():
@@ -182,18 +125,9 @@ def test_unknown_namespace_never_joins_by_bare_patient_id():
 )
 def test_invalid_participant_identity_is_rejected(rows):
     with pytest.raises(InvalidRequestError):
-        Client().plan_participant_images(rows, modality="CT", file_format="DICOM", progress=False)
+        Client().plan_participant_images(rows, modality="Whole Slide Image", file_format="non-DICOM", progress=False)
 
 
-def test_missing_manifest_series_is_not_silently_ignored(monkeypatch, tmp_path):
-    pd = pytest.importorskip("pandas")
-    fake_manifest(monkeypatch)
-    index = pd.DataFrame([{"PatientID": "P1", "Modality": "CT", "SeriesInstanceUID": "1.2.3"}])
-    c = Client(index=index)
-    plan = c.plan_participant_images([person()], modality="CT", file_format="DICOM", progress=False)
-    assert plan.unresolved[0]["series_instance_uids"] == ["1.2.4"]
-    with pytest.raises(DownloadError):
-        c.download_images(plan, tmp_path, progress=False, accept_data_policy=True)
 
 
 def test_slide_download_delegates_only_the_bounded_filtered_cohort(
@@ -214,26 +148,6 @@ def test_slide_download_delegates_only_the_bounded_filtered_cohort(
     assert report.scope["sample_selected_items"] == 1 and report.scope["sample_omitted_items"] == 1
 
 
-@pytest.mark.parametrize("resume", [False, True])
-def test_dicom_download_reuses_bounded_tdr_manifest_adapter(
-    monkeypatch, tmp_path, resume, tdr_calls
-):
-    pd = pytest.importorskip("pandas")
-    fake_manifest(monkeypatch)
-    index = pd.DataFrame(
-        [
-            {"PatientID": "P1", "Modality": "CT", "SeriesInstanceUID": uid}
-            for uid in ["1.2.3", "1.2.4"]
-        ]
-    )
-    c = Client(index=index)
-    plan = c.plan_participant_images([person()], modality="CT", file_format="DICOM", progress=False)
-    report = c.download_images(plan, tmp_path, max_items=1, resume=resume, accept_data_policy=True)
-    assert report.complete and tdr_calls[0]["seriesInstanceUID"] == ["1.2.3"]
-    assert tdr_calls[0]["options"]["skip_existing"] is resume
-    assert (
-        report.scope["participant_image_selection"] and report.scope["sample_available_items"] == 2
-    )
 
 
 @pytest.mark.parametrize("changed_snapshot", [False, True])
@@ -289,3 +203,12 @@ def test_same_title_and_id_in_collection_and_analysis_result_keep_separate_cover
         [person(), ar], modality="Whole Slide Image", file_format="non-DICOM", progress=False
     )
     assert [r["matching_items"] for r in plan.coverage] == [1, 0]
+
+
+def test_public_dicom_detail_is_an_external_idc_capability(monkeypatch):
+    import sys
+    monkeypatch.setitem(sys.modules, "idc_index", None)
+    c = Client()
+    with pytest.raises(InvalidRequestError, match="provided by IDC"):
+        c.plan_participant_images([person()], modality="CT", file_format="DICOM", progress=False)
+    assert c.calls == []

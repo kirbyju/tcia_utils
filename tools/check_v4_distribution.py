@@ -45,18 +45,15 @@ def check_wheel(path: Path) -> None:
         core_names = {re.split(r"[ ;<>=!~\[]", req, maxsplit=1)[0].lower() for req in core}
         assert core_names == {"httpx"}, f"unexpected core dependencies: {sorted(core_names)}"
         extras = set(metadata.get_all("Provides-Extra", []))
-        assert {"test", "tables", "examples", "downloads", "cohorts"}.issubset(
+        assert {"test", "tables", "examples", "downloads"}.issubset(
             extras
         ), f"missing extras: {extras}"
         download_requirements = [
             req for req in requirements if re.search(r"extra\s*==\s*['\"]downloads['\"]", req)
         ]
-        cohort_requirements = [
-            req for req in requirements if re.search(r"extra\s*==\s*['\"]cohorts['\"]", req)
-        ]
         assert any(req.lower().startswith("tcia-data-retriever") for req in download_requirements)
-        assert not any(req.lower().startswith("idc-index") for req in download_requirements)
-        assert any(req.lower().startswith("idc-index") for req in cohort_requirements)
+        assert "cohorts" not in extras
+        assert not any(req.lower().startswith("idc-index") for req in requirements)
 
 
 def check_sdist(path: Path) -> None:

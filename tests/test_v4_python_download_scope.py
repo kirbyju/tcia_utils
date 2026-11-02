@@ -2,7 +2,6 @@
 
 import inspect
 from pathlib import Path
-from types import SimpleNamespace
 import sys
 
 import httpx
@@ -11,10 +10,6 @@ from tcia_utils import DownloadError, InvalidRequestError, TCIAClient
 from tcia_utils._downloads import DownloadsMixin
 import tcia_utils._downloads as downloads
 from test_v4_downloads import Client, row, fake_http
-
-
-def install_fake_index(monkeypatch, factory):
-    monkeypatch.setitem(sys.modules, "idc_index", SimpleNamespace(IDCClient=factory))
 
 
 def test_early_progress_precedes_manifest_fetch_and_transfer(
@@ -49,9 +44,8 @@ def test_transfer_resume_is_explicit_without_a_local_idc_index(
         if api == "dataset"
         else DownloadsMixin()
     )
-    monkeypatch.setattr(
-        c, "_get_imaging_client", lambda _: pytest.fail("TDR owns transfer indexing"), raising=False
-    )
+    monkeypatch.setitem(sys.modules, "idc_index", None)
+    monkeypatch.setitem(sys.modules, "pandas", None)
     download = c.download_dataset if api == "dataset" else c.download_manifest
     source = "EXAMPLE" if api == "dataset" else path
     for resume in [False, False, True]:
@@ -86,15 +80,6 @@ def test_public_transfers_never_receive_a_supplied_controlled_key(tmp_path, monk
         p, tmp_path / "out", credential_file=key, accept_data_policy=True
     )
     assert tdr_calls[0]["options"]["credential_file"] is None
-
-
-def test_close_releases_lazy_index_reference(monkeypatch):
-    obj = SimpleNamespace(index={"SeriesInstanceUID": ["1.2.3"]})
-    install_fake_index(monkeypatch, lambda: obj)
-    c = TCIAClient(base_url="https://metadata.example.org")
-    assert c._get_imaging_client(False) is obj
-    c.close()
-    assert c._imaging_client is None
 
 
 def test_failed_transfer_does_not_poison_the_next_attempt(tmp_path, monkeypatch):
