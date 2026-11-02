@@ -46,7 +46,7 @@ def test_import_and_construction_are_inert():
         assert seen == []
         assert tc._transport.base_url == "https://example.test"
     check = subprocess.run(
-        [sys.executable, "-c", "import sys, tcia_utils; assert not any(x in sys.modules for x in ('tcia_utils.nbia', 'tcia_utils.idc', 'tcia_utils.wordpress', 'pandas')); assert tcia_utils.TCIAClient.__name__ == 'TCIAClient'"],
+        [sys.executable, "-c", "import sys, tcia_utils; assert not any(x in sys.modules for x in ('tcia_utils.nbia', 'tcia_utils.idc', 'tcia_utils.wordpress', 'idc_index', 'pandas')); assert tcia_utils.TCIAClient.__name__ == 'TCIAClient'"],
         capture_output=True, text=True, check=False, env=os.environ.copy(),
     )
     assert check.returncode == 0, check.stderr

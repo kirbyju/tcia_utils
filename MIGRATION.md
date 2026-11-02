@@ -29,7 +29,8 @@ removed. Published software requirements remain discovery metadata; inspect
 and pip-installed dependencies.
 
 Actual v4 transfers now require `accept_data_policy=True`. Install the downloads
-extra for TDR and the cohorts extra for public DICOM cohort metadata. See the
+extra for TDR. Install IDC's tools independently for additional public DICOM queries;
+`tcia_utils` does not provide a cohorts/IDC extra. See the
 current download guide for the shared engine's console, credential-cache, output
 layout and skip-existing behavior.
 

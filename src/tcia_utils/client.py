@@ -68,8 +68,6 @@ class TCIAClient(DatasetMethods, CitationMethods, ParticipantsMixin, ClinicalMix
 
     def close(self) -> None:
         self._transport.close()
-        # Release the lazily loaded upstream client and its in-memory indexes.
-        self._imaging_client = None
 
     def _observe_status(self) -> tuple[ServiceStatus, Provenance]:
         ready = self._transport.request_json("GET", "/v2/ready")

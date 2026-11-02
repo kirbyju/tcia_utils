@@ -1,18 +1,10 @@
 """Dataset-scoped image selections from an existing participant cohort."""
 
 from dataclasses import dataclass
-from pathlib import Path
-import csv
-import hashlib
-import io
-import math
 
 from ._downloads import (
     DownloadError,
-    _get_bytes,
-    _manifest,
     _notify,
-    _url,
     _validate_max_items,
     _validate_resume,
     _validate_policy,
@@ -70,45 +62,24 @@ def _same_snapshot(result, provenance):
         raise ProtocolError("Metadata changed during image planning; restart the cohort query")
 
 
-def _count(value):
-    try:
-        return int(value) if value is not None and math.isfinite(float(value)) else None
-    except (TypeError, ValueError):
-        return None
-
-
 class ParticipantImagesMixin:
-    def _get_imaging_client(self, progress):
-        client = getattr(self, "_imaging_client", None)
-        if client is None:
-            _notify(
-                progress,
-                "Preparing the public DICOM index (first use in this client may take a moment)...",
-            )
-            try:
-                from idc_index import IDCClient
-            except ImportError:
-                raise DownloadError(
-                    "Install tcia_utils[cohorts] for public DICOM cohort metadata"
-                ) from None
-            client = IDCClient()
-            self._imaging_client = client
-        else:
-            _notify(progress, "Reusing the prepared public DICOM index...")
-        return client
-
     def plan_participant_images(self, participants, *, modality, file_format, progress=True):
         """Find public images for exact dataset-scoped participants, without payload transfers.
 
-        file_format is DICOM or non-DICOM. DICOM selections are anchored to an
-        official TCIA manifest and exact IDC PatientID. Non-DICOM selections use
+        This helper selects non-DICOM files using TCIA's public asset metadata.
+        Public DICOM series queries belong to IDC's separate tools. Selections use
         explicit public file routes, never arbitrary source URLs. Missing routes
         remain unresolved and block execution. Coverage includes zero-match subjects.
         """
         if not isinstance(modality, str) or not modality.strip():
             raise InvalidRequestError("modality must be a nonempty string")
-        if not isinstance(file_format, str) or file_format.casefold() not in {"dicom", "non-dicom"}:
-            raise InvalidRequestError("file_format must be DICOM or non-DICOM")
+        if isinstance(file_format, str) and file_format.casefold() == "dicom":
+            raise InvalidRequestError(
+                "Public DICOM series queries are provided by IDC; use idc-index directly. "
+                "Download selected series with download_manifest()."
+            )
+        if not isinstance(file_format, str) or file_format.casefold() != "non-dicom":
+            raise InvalidRequestError("file_format must be non-DICOM for TCIA file planning")
         requested = records(participants)
         identities = {}
         for row in requested:
@@ -133,144 +104,62 @@ class ParticipantImagesMixin:
         _notify(progress, "Planning images for the selected participants...")
         _, provenance = self._observe_status()
         rows, unresolved, notes = [], [], []
-        manifest_sources = []
         groups = {}
         for (kind, title, person), row in identities.items():
             groups.setdefault((kind, title), {})[person] = row
-        index_version = None
         for (kind, title), people in groups.items():
-            if file_format.casefold() == "dicom":
-                plan = self.plan_downloads(
-                    title, dataset_type=kind.replace(" ", "_"), access_levels=["open"]
-                )
-                _same_snapshot(plan, provenance)
-                manifest_uids = {}
-                for group in plan.rows:
-                    if group.get("download_method") not in {"dicom_manifest", "tabular_manifest"}:
+            page = self.search_public_assets(
+                short_titles=[title], modalities=[modality], limit=500
+            )
+            for current in page.iter_pages():
+                _same_snapshot(current, provenance)
+                for asset in current.items:
+                    if (
+                        str(asset.get("dataset_type") or "").casefold().replace("_", " ")
+                        != kind
+                        or asset.get("short_title") != title
+                        or str(asset.get("modality") or "").casefold() != modality.casefold()
+                        or str(asset.get("file_format") or "").casefold() == "dicom"
+                    ):
                         continue
-                    url = _url(group.get("download_url"))
-                    if url.hostname not in {
-                        "www.cancerimagingarchive.net",
-                        "cancerimagingarchive.net",
-                        "wiki.cancerimagingarchive.net",
-                    }:
-                        raise DownloadError(
-                            "DICOM manifest must use an official TCIA download link"
+                    person = asset.get("subject_id")
+                    if person not in people:
+                        continue
+                    if asset.get("subject_id_namespace") != f"tcia_dataset:{title}":
+                        unresolved.append(
+                            {
+                                "short_title": title,
+                                "participant_id": person,
+                                "asset_id": asset.get("asset_id"),
+                                "reason": "unverified_participant_namespace",
+                            }
                         )
-                    suffix = Path(url.path).suffix.lower()
-                    if suffix not in {".tcia", ".csv", ".tsv"}:
-                        raise DownloadError("Unsupported DICOM manifest format")
-                    content = _get_bytes(group["download_url"])
-                    column, items = _manifest(content, suffix)
-                    manifest_sources.append(
-                        {
-                            "short_title": title,
-                            "download_id": group["download_id"],
-                            "source_url": group["download_url"],
-                            "sha256": hashlib.sha256(content).hexdigest(),
-                        }
+                        continue
+                    route = (
+                        asset.get("asset_granularity") == "file"
+                        and bool(asset.get("imageUrl"))
+                        and asset.get("access_level")
+                        in {"open", "public", "open_noncommercial"}
                     )
-                    if column == "SeriesInstanceUID":
-                        for item in items:
-                            manifest_uids.setdefault(item[column], group)
-                if not manifest_uids:
-                    notes.append(f"{title}: no supported public DICOM manifest found")
-                    continue
-                client = self._get_imaging_client(progress)
-                index_version = client.get_idc_version()
-                missing = sorted(set(manifest_uids) - set(client.index["SeriesInstanceUID"]))
-                if missing:
-                    unresolved.append(
-                        {
-                            "short_title": title,
-                            "reason": "published_series_absent_from_public_index",
-                            "series_instance_uids": missing,
-                        }
-                    )
-                selected = client.index.loc[
-                    client.index["SeriesInstanceUID"].isin(manifest_uids)
-                    & client.index["PatientID"].isin(people)
-                    & client.index["Modality"].str.casefold().eq(modality.casefold())
-                ]
-                for item in selected.to_dict("records"):
-                    person, uid = item["PatientID"], item["SeriesInstanceUID"]
-                    group = manifest_uids[uid]
-                    size_mb = item.get("series_size_MB")
-                    rows.append(
-                        {
-                            "dataset_type": group["dataset_type"],
-                            "short_title": title,
-                            "participant_id": person,
-                            "participant_key": people[person]["participant_key"],
-                            "study_instance_uid": item.get("StudyInstanceUID"),
-                            "series_instance_uid": uid,
-                            "modality": item["Modality"],
-                            "file_format": "DICOM",
-                            "asset_granularity": "series",
-                            "instance_count": _count(item.get("instanceCount")),
-                            "size_bytes": (
-                                _count(float(size_mb) * 1_000_000) if size_mb is not None else None
-                            ),
-                            "access_level": group["access_level"],
-                            "identifier_source": "idc-index",
-                            "download_representation": "public_dicom_series",
-                            "python_supported": True,
-                            "source_download_id": group["download_id"],
-                        }
-                    )
-            else:
-                page = self.search_public_assets(
-                    short_titles=[title], modalities=[modality], limit=500
-                )
-                for current in page.iter_pages():
-                    _same_snapshot(current, provenance)
-                    for asset in current.items:
-                        if (
-                            str(asset.get("dataset_type") or "").casefold().replace("_", " ")
-                            != kind
-                            or asset.get("short_title") != title
-                            or str(asset.get("modality") or "").casefold() != modality.casefold()
-                            or str(asset.get("file_format") or "").casefold() == "dicom"
-                        ):
-                            continue
-                        person = asset.get("subject_id")
-                        if person not in people:
-                            continue
-                        if asset.get("subject_id_namespace") != f"tcia_dataset:{title}":
-                            unresolved.append(
-                                {
-                                    "short_title": title,
-                                    "participant_id": person,
-                                    "asset_id": asset.get("asset_id"),
-                                    "reason": "unverified_participant_namespace",
-                                }
-                            )
-                            continue
-                        route = (
-                            asset.get("asset_granularity") == "file"
-                            and bool(asset.get("imageUrl"))
-                            and asset.get("access_level")
-                            in {"open", "public", "open_noncommercial"}
+                    record = {
+                        **asset,
+                        "participant_id": person,
+                        "participant_key": people[person]["participant_key"],
+                        "python_supported": bool(route),
+                        "file_name": asset.get("download_file_name") or asset.get("file_name"),
+                        "download_id": asset.get("asset_id"),
+                        "download_method": "direct_file",
+                    }
+                    rows.append(record)
+                    if not route:
+                        unresolved.append(
+                            {
+                                "short_title": title,
+                                "participant_id": person,
+                                "asset_id": asset.get("asset_id"),
+                                "reason": "no_explicit_public_file_download_route; update the API or use official collection instructions",
+                            }
                         )
-                        record = {
-                            **asset,
-                            "participant_id": person,
-                            "participant_key": people[person]["participant_key"],
-                            "python_supported": bool(route),
-                            "file_name": asset.get("download_file_name") or asset.get("file_name"),
-                            "download_id": asset.get("asset_id"),
-                            "download_method": "direct_file",
-                        }
-                        rows.append(record)
-                        if not route:
-                            unresolved.append(
-                                {
-                                    "short_title": title,
-                                    "participant_id": person,
-                                    "asset_id": asset.get("asset_id"),
-                                    "reason": "no_explicit_public_file_download_route; update the API or use official collection instructions",
-                                }
-                            )
         unique = {}
         for row in rows:
             key = (
@@ -317,10 +206,8 @@ class ParticipantImagesMixin:
                 "requested_participants": len(identities),
                 "selected_items": len(rows),
                 "metadata_snapshot": provenance.release_fingerprint,
-                "imaging_index_version": index_version,
-                "manifest_sources": manifest_sources,
                 "notes": notes,
-                "scope_note": "All indexed matching public images for exact dataset-scoped participants; zero-match subjects and unresolved routes remain explicit. Controlled files are not included.",
+                "scope_note": "Matching TCIA public non-DICOM file metadata for exact dataset-scoped participants; zero-match subjects and unresolved routes remain explicit. Controlled files are not included.",
             },
             provenance,
         )
@@ -348,43 +235,14 @@ class ParticipantImagesMixin:
         _notify(progress, "Preparing the selected participant images...")
         if plan.unresolved:
             raise DownloadError(
-                "Image selection has unresolved routes or public-index coverage; inspect plan.unresolved before downloading"
+                "Image selection has unresolved file routes; inspect plan.unresolved before downloading"
             )
         if not plan.rows:
             raise InvalidRequestError(
                 "No matching public images were found for these participants and filters"
             )
-        rows, inputs, dicom = [], {}, {}
-        for record in plan.rows:
-            if record.get("asset_granularity") == "series" and record.get("file_format") == "DICOM":
-                key = (
-                    record["dataset_type"],
-                    record["short_title"],
-                    record["access_level"],
-                )
-                dicom.setdefault(key, []).append(record["series_instance_uid"])
-            else:
-                rows.append(dict(record))
-        for (kind, title, access), uids in dicom.items():
-            stream = io.StringIO(newline="")
-            writer = csv.writer(stream)
-            writer.writerow(["SeriesInstanceUID"])
-            writer.writerows([[uid] for uid in uids])
-            content = stream.getvalue().encode()
-            inputs[len(rows)] = (content, ".csv")
-            rows.append(
-                {
-                    "dataset_type": kind,
-                    "short_title": title,
-                    "access_level": access,
-                    "download_id": "cohort-" + hashlib.sha256(content).hexdigest()[:12],
-                    "download_method": "dicom_manifest",
-                    "requirement_status": "declared",
-                    "manifest_item_count": len(uids),
-                }
-            )
         return self._download(
-            rows,
+            [dict(row) for row in plan.rows],
             destination,
             scope={
                 **plan.scope,
@@ -397,6 +255,5 @@ class ParticipantImagesMixin:
             overwrite=overwrite,
             resume=resume,
             accept_data_policy=accept_data_policy,
-            manifest_inputs=inputs,
             max_items=max_items,
         )

@@ -118,6 +118,8 @@ jobs:
           python -m venv examples-venv
           wheel=$(find dist -name '*.whl' -print -quit)
           examples-venv/bin/python -m pip install "${wheel}[examples]" pytest
+      - name: Install the notebook's separate IDC integration
+        run: examples-venv/bin/python -m pip install 'idc-index==0.13.4' 'idc-index-data==25.0.5'
       - name: Check optional imports and packaged transfer executable
         run: |
           examples-venv/bin/python - <<'PYCODE'

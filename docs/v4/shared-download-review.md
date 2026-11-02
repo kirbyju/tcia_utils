@@ -57,3 +57,11 @@ Policy acceptance is explicit for actual downloads. Current TDR console and
 credential-cache behavior are documented. Local same-object CT/MR tests cover
 fresh and prepared-client cases with byte-level verification; a separate Colab
 notebook is provided. No live controlled-access transfer is claimed.
+
+
+## 4.0.0a8: independent IDC features
+
+The SDK no longer installs or wraps idc-index and has no cohorts extra. The
+notebook's optional IDC section directly queries its separately installed client;
+TCIA non-DICOM planning and TDR-backed manifest/file downloads remain independent.
+The older implementation notes above describe their dated review builds.
