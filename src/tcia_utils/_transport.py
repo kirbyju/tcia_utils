@@ -68,9 +68,9 @@ class Transport:
             raise InvalidRequestError("Route identifiers must not contain dot path segments")
         if not httpx.URL(self.base_url + path).path.startswith("/v2/"):
             raise InvalidRequestError("Request must remain within TCIA V2 routes")
-        # The currently mapped POST routes are searches. No transfer/write route is accepted.
-        if method == "POST" and not path.endswith("/search"):
-            raise InvalidRequestError("POST is supported only for V2 searches")
+        # Allow metadata searches and the shared image plan; no transfer/write route.
+        if method == "POST" and not (path.endswith("/search") or path == "/v2/participants/download-plan"):
+            raise InvalidRequestError("POST is supported only for V2 searches and participant download planning")
         for attempt in range(self.retries + 1):
             try:
                 response = self._client.request(method, self.base_url + path, params=params, json=json_body)
