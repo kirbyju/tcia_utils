@@ -355,8 +355,11 @@ class ParticipantImagesMixin:
 
         Notes:
             Actual transfers use the downloads extra (pip-installed tcia-data-retriever).
-            TDR owns authorization, retry/checksum behavior, archive extraction and file layout.
-            Normal copy may download existing files again; use resume=True for skip-existing checks.
+            TDR owns authorization, retry/checksum behavior, file layout and route-specific extraction.
+            TDR normally checks/reuses existing files without resume=True. Keep the same
+            destination when expanding a sample. RC2 counts reused direct/controlled files
+            under Downloaded; Synced denotes public DICOM sync jobs. resume=True explicitly
+            requests skip-existing checks, not partial-file byte-range resume.
             Only the plan's exact public images are selected; related source images are not
             added. Empty or unresolved plans cannot start a transfer. max_items applies across
             the selected series/files and retains sample scope."""

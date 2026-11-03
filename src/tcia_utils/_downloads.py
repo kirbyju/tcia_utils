@@ -927,11 +927,17 @@ class DownloadsMixin:
 
         Notes:
             Actual transfers use the downloads extra (pip-installed tcia-data-retriever).
-            TDR owns authorization, retry/checksum behavior, archive extraction and file layout;
+            TDR owns authorization, retry/checksum behavior, file layout and route-specific extraction;
             supplied CLI/Python keys are used only for this invocation, without a saved copy.
-            Normal copy may download existing files again; use resume=True for skip-existing checks.
+            TDR normally checks/reuses existing files without resume=True. Keep the same
+            destination when expanding a sample. RC2 counts reused direct/controlled files
+            under Downloaded; Synced denotes public DICOM sync jobs. resume=True explicitly
+            requests skip-existing checks, not partial-file byte-range resume.
             A dry run still reads/fetches the small manifest. max_items selects first items in
-            manifest order. This method does not require a preceding plan_downloads() call.
+            manifest order. Standalone direct/controlled file manifests use the generic
+            collection label "manifest"; TDR preserves supplied filenames and keeps these
+            ZIP files as archives. Use download_dataset() when you want known dataset context.
+            This method does not require a preceding plan_downloads() call.
 
         Example:
             report = tcia.download_manifest("cohort.tcia", "sample", max_items=1,
@@ -1062,9 +1068,12 @@ class DownloadsMixin:
 
         Notes:
             Actual transfers use the downloads extra (pip-installed tcia-data-retriever).
-            TDR owns authorization, retry/checksum behavior, archive extraction and file layout;
+            TDR owns authorization, retry/checksum behavior, file layout and route-specific extraction;
             supplied CLI/Python keys are used only for this invocation, without a saved copy.
-            Normal copy may download existing files again; use resume=True for skip-existing checks.
+            TDR normally checks/reuses existing files without resume=True. Keep the same
+            destination when expanding a sample. RC2 counts reused direct/controlled files
+            under Downloaded; Synced denotes public DICOM sync jobs. resume=True explicitly
+            requests skip-existing checks, not partial-file byte-range resume.
             Calls plan_downloads() internally; you need not call it first. Unsupported groups
             or missing prerequisites stop the selection rather than silently omitting data.
             max_items samples across groups in inventory order. Packages without file-level
@@ -1131,9 +1140,12 @@ class DownloadsMixin:
 
         Notes:
             Actual transfers use the downloads extra (pip-installed tcia-data-retriever).
-            TDR owns authorization, retry/checksum behavior, archive extraction and file layout;
+            TDR owns authorization, retry/checksum behavior, file layout and route-specific extraction;
             supplied CLI/Python keys are used only for this invocation, without a saved copy.
-            Normal copy may download existing files again; use resume=True for skip-existing checks.
+            TDR normally checks/reuses existing files without resume=True. Keep the same
+            destination when expanding a sample. RC2 counts reused direct/controlled files
+            under Downloaded; Synced denotes public DICOM sync jobs. resume=True explicitly
+            requests skip-existing checks, not partial-file byte-range resume.
             max_items selects the first N records. Package or manifest rows must use
             download_dataset() or download_manifest(); source_url alone is not a file route."""
         _validate_max_items(max_items)
