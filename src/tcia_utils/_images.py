@@ -1,6 +1,9 @@
 """Dataset-scoped image selections from an existing participant cohort."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+import csv
+import hashlib
+import io
 
 from ._downloads import (
     DownloadError,
@@ -21,6 +24,7 @@ class ParticipantImagePlan:
     unresolved: tuple[dict, ...]
     scope: dict
     provenance: object
+    providers: dict = field(default_factory=dict)
 
     def to_dataframe(self):
         return _frame(
@@ -49,7 +53,12 @@ class ParticipantImagePlan:
             columns=(
                 None
                 if self.coverage
-                else ["short_title", "participant_id", "matching_items", "downloadable_items"]
+                else [
+                    "short_title",
+                    "participant_id",
+                    "matching_items",
+                    "downloadable_items",
+                ]
             ),
         )
 
@@ -59,143 +68,179 @@ def _same_snapshot(result, provenance):
         provenance.release_fingerprint,
         provenance.installed_profile,
     ):
-        raise ProtocolError("Metadata changed during image planning; restart the cohort query")
+        raise ProtocolError(
+            "Metadata changed during image planning; restart the cohort query"
+        )
 
 
 class ParticipantImagesMixin:
-    def plan_participant_images(self, participants, *, modality, file_format, progress=True):
-        """Find public images for exact dataset-scoped participants, without payload transfers.
-
-        This helper selects non-DICOM files using TCIA's public asset metadata.
-        Public DICOM series queries belong to IDC's separate tools. Selections use
-        explicit public file routes, never arbitrary source URLs. Missing routes
-        remain unresolved and block execution. Coverage includes zero-match subjects.
-        """
+    def plan_participant_images(
+        self, participants, *, modality, file_format, progress=True
+    ):
+        """Get one shared public-image plan; provider queries run on the service."""
         if not isinstance(modality, str) or not modality.strip():
             raise InvalidRequestError("modality must be a nonempty string")
-        if isinstance(file_format, str) and file_format.casefold() == "dicom":
-            raise InvalidRequestError(
-                "Public DICOM series queries are provided by IDC; use idc-index directly. "
-                "Download selected series with download_manifest()."
-            )
-        if not isinstance(file_format, str) or file_format.casefold() != "non-dicom":
-            raise InvalidRequestError("file_format must be non-DICOM for TCIA file planning")
+        if not isinstance(file_format, str) or file_format.casefold() not in {
+            "dicom",
+            "non-dicom",
+        }:
+            raise InvalidRequestError("file_format must be DICOM or non-DICOM")
+        file_format = "DICOM" if file_format.casefold() == "dicom" else "non-DICOM"
         requested = records(participants)
         identities = {}
         for row in requested:
-            kind = str(row.get("dataset_type") or "").casefold().replace("_", " ")
-            title, person, key = (
-                row.get("short_title"),
-                row.get("display_participant_id"),
-                row.get("participant_key"),
-            )
-            if kind not in {"collection", "analysis result"} or not all(
-                isinstance(v, str) and v.strip() for v in (title, person, key)
+            key = row.get("participant_key")
+            if not all(
+                isinstance(row.get(k), str) and row[k].strip()
+                for k in (
+                    "participant_key",
+                    "dataset_type",
+                    "short_title",
+                    "display_participant_id",
+                )
             ):
                 raise InvalidRequestError(
-                    "Use participant query records with dataset_type, short_title, display_participant_id and participant_key"
+                    "Use dataset-scoped participant query records with participant_key"
                 )
-            identity = (kind, title, person)
-            if identity in identities and identities[identity]["participant_key"] != key:
+            if key in identities and any(
+                identities[key][k] != row[k]
+                for k in ("dataset_type", "short_title", "display_participant_id")
+            ):
                 raise InvalidRequestError(
-                    "A dataset-scoped participant has conflicting participant keys"
+                    "A participant key has conflicting dataset-scoped identities"
                 )
-            identities[identity] = row
+            identities[key] = row
         _notify(progress, "Planning images for the selected participants...")
         _, provenance = self._observe_status()
-        rows, unresolved, notes = [], [], []
-        groups = {}
-        for (kind, title, person), row in identities.items():
-            groups.setdefault((kind, title), {})[person] = row
-        for (kind, title), people in groups.items():
-            page = self.search_public_assets(
-                short_titles=[title], modalities=[modality], limit=500
+        keys = sorted(identities)
+        rows, coverage, unresolved, providers = [], [], [], {}
+        for start in range(0, len(keys), 100):
+            batch = keys[start : start + 100]
+            result = self._result(
+                "POST",
+                "/v2/participants/download-plan",
+                json_body={
+                    "participant_keys": batch,
+                    "modality": modality,
+                    "file_format": file_format,
+                },
+                capability="participant_search",
+                required_fields={
+                    "plan_version": int,
+                    "rows": list,
+                    "coverage": list,
+                    "unresolved": list,
+                    "scope": dict,
+                    "providers": dict,
+                    "complete": bool,
+                },
             )
-            for current in page.iter_pages():
-                _same_snapshot(current, provenance)
-                for asset in current.items:
-                    if (
-                        str(asset.get("dataset_type") or "").casefold().replace("_", " ")
-                        != kind
-                        or asset.get("short_title") != title
-                        or str(asset.get("modality") or "").casefold() != modality.casefold()
-                        or str(asset.get("file_format") or "").casefold() == "dicom"
-                    ):
-                        continue
-                    person = asset.get("subject_id")
-                    if person not in people:
-                        continue
-                    if asset.get("subject_id_namespace") != f"tcia_dataset:{title}":
-                        unresolved.append(
-                            {
-                                "short_title": title,
-                                "participant_id": person,
-                                "asset_id": asset.get("asset_id"),
-                                "reason": "unverified_participant_namespace",
-                            }
-                        )
-                        continue
-                    route = (
-                        asset.get("asset_granularity") == "file"
-                        and bool(asset.get("imageUrl"))
-                        and asset.get("access_level")
-                        in {"open", "public", "open_noncommercial"}
+            _same_snapshot(result, provenance)
+            data = result.data
+            if (
+                data["plan_version"] != 1
+                or data["scope"].get("requested_participants") != len(batch)
+                or data["scope"].get("selected_items") != len(data["rows"])
+                or data["scope"].get("file_format") != file_format
+                or str(data["scope"].get("modality", "")).casefold()
+                != modality.casefold()
+                or data["scope"].get("metadata_snapshot")
+                not in {None, provenance.release_fingerprint}
+            ):
+                raise ProtocolError(
+                    "Shared image plan has inconsistent scope or metadata snapshot"
+                )
+            covered = set()
+            for item in data["coverage"]:
+                key = item.get("participant_key")
+                if key not in batch or key in covered:
+                    raise ProtocolError(
+                        "Shared image plan has invalid participant coverage"
                     )
-                    record = {
-                        **asset,
-                        "participant_id": person,
-                        "participant_key": people[person]["participant_key"],
-                        "python_supported": bool(route),
-                        "file_name": asset.get("download_file_name") or asset.get("file_name"),
-                        "download_id": asset.get("asset_id"),
-                        "download_method": "direct_file",
-                    }
-                    rows.append(record)
-                    if not route:
-                        unresolved.append(
-                            {
-                                "short_title": title,
-                                "participant_id": person,
-                                "asset_id": asset.get("asset_id"),
-                                "reason": "no_explicit_public_file_download_route; update the API or use official collection instructions",
-                            }
+                expected = identities[key]
+                if (
+                    str(item.get("dataset_type", "")).casefold().replace("_", " ")
+                    != expected["dataset_type"].casefold().replace("_", " ")
+                    or item.get("short_title") != expected["short_title"]
+                    or item.get("participant_id") != expected["display_participant_id"]
+                ):
+                    raise ProtocolError(
+                        "Shared image plan changed a dataset-scoped participant identity"
+                    )
+                covered.add(key)
+            if covered != set(batch):
+                raise ProtocolError("Shared image plan omitted participant coverage")
+            for item in data["rows"]:
+                key = item.get("participant_key")
+                if key not in batch:
+                    raise ProtocolError(
+                        "Shared image plan includes an unrequested participant"
+                    )
+                expected = identities[key]
+                if (
+                    item.get("short_title") != expected["short_title"]
+                    or item.get("participant_id") != expected["display_participant_id"]
+                    or str(item.get("dataset_type", "")).casefold().replace("_", " ")
+                    != expected["dataset_type"].casefold().replace("_", " ")
+                    or str(item.get("modality", "")).casefold() != modality.casefold()
+                    or item.get("access_level")
+                    not in {"open", "public", "open_noncommercial"}
+                    or (
+                        file_format == "DICOM"
+                        and (
+                            item.get("file_format") != "DICOM"
+                            or not item.get("series_instance_uid")
                         )
-        unique = {}
-        for row in rows:
-            key = (
-                row["dataset_type"],
-                row["short_title"],
-                row["participant_id"],
-                row.get("series_instance_uid") or row.get("asset_id"),
-            )
-            unique.setdefault(key, row)
-        rows = sorted(
-            unique.values(),
-            key=lambda r: (
-                r["short_title"],
-                r["participant_id"],
-                str(r.get("series_instance_uid") or r.get("asset_id")),
-            ),
-        )
-        coverage = []
-        for (kind, title, person), participant in identities.items():
-            matched = [
-                r
-                for r in rows
-                if str(r["dataset_type"]).casefold().replace("_", " ") == kind
-                and r["short_title"] == title
-                and r["participant_id"] == person
-            ]
-            coverage.append(
-                {
-                    "dataset_type": participant["dataset_type"],
-                    "short_title": title,
-                    "participant_id": person,
-                    "participant_key": participant["participant_key"],
-                    "matching_items": len(matched),
-                    "downloadable_items": sum(bool(r["python_supported"]) for r in matched),
-                }
-            )
+                    )
+                    or (
+                        file_format == "non-DICOM"
+                        and item.get("file_format") == "DICOM"
+                    )
+                ):
+                    raise ProtocolError(
+                        "Shared image plan includes out-of-scope images"
+                    )
+            if any(r.get("participant_key") not in batch for r in data["unresolved"]):
+                raise ProtocolError(
+                    "Shared image plan includes unrequested unresolved identities"
+                )
+            if data["complete"] != (not data["unresolved"]):
+                raise ProtocolError(
+                    "Shared image plan has inconsistent completion accounting"
+                )
+            for item in data["coverage"]:
+                matches = [
+                    r
+                    for r in data["rows"]
+                    if r["participant_key"] == item["participant_key"]
+                ]
+                if (
+                    any(type(r.get("python_supported")) is not bool for r in matches)
+                    or item.get("matching_items") != len(matches)
+                    or item.get("downloadable_items")
+                    != sum(r["python_supported"] for r in matches)
+                ):
+                    raise ProtocolError(
+                        "Shared image plan has inconsistent coverage counts"
+                    )
+            if file_format == "DICOM" and data["rows"]:
+                provider = data["providers"].get("IDC")
+                if not isinstance(provider, dict) or any(
+                    not isinstance(provider.get(k), str) or not provider[k]
+                    for k in ("idc_version", "idc_index_data_version", "api_version")
+                ):
+                    raise ProtocolError(
+                        "Shared DICOM plan lacks its provider data version"
+                    )
+            for provider, version in data["providers"].items():
+                if provider in providers and providers[provider] != version:
+                    raise ProtocolError(
+                        "Provider metadata changed between image-plan batches; restart the query"
+                    )
+                providers[provider] = version
+            rows.extend(data["rows"])
+            coverage.extend(data["coverage"])
+            unresolved.extend(data["unresolved"])
         return ParticipantImagePlan(
             tuple(rows),
             tuple(coverage),
@@ -203,13 +248,15 @@ class ParticipantImagesMixin:
             {
                 "modality": modality,
                 "file_format": file_format,
-                "requested_participants": len(identities),
+                "requested_participants": len(keys),
                 "selected_items": len(rows),
                 "metadata_snapshot": provenance.release_fingerprint,
-                "notes": notes,
-                "scope_note": "Matching TCIA public non-DICOM file metadata for exact dataset-scoped participants; zero-match subjects and unresolved routes remain explicit. Controlled files are not included.",
+                "plan_version": 1,
+                "provider_versions": providers,
+                "scope_note": "Shared dataset-scoped public image plan; controlled images are excluded.",
             },
             provenance,
+            providers,
         )
 
     def download_images(
@@ -241,8 +288,34 @@ class ParticipantImagesMixin:
             raise InvalidRequestError(
                 "No matching public images were found for these participants and filters"
             )
+        rows, inputs, groups = [], {}, {}
+        for item in plan.rows:
+            if item.get("file_format") == "DICOM":
+                groups.setdefault(
+                    (item["dataset_type"], item["short_title"], item["access_level"]),
+                    [],
+                ).append(item["series_instance_uid"])
+            else:
+                rows.append(dict(item))
+        for (kind, title, access), uids in groups.items():
+            stream = io.StringIO(newline="")
+            writer = csv.writer(stream)
+            writer.writerow(["SeriesInstanceUID"])
+            writer.writerows([[uid] for uid in uids])
+            content = stream.getvalue().encode()
+            inputs[len(rows)] = (content, ".csv")
+            rows.append(
+                {
+                    "dataset_type": kind,
+                    "short_title": title,
+                    "access_level": access,
+                    "download_id": "cohort-" + hashlib.sha256(content).hexdigest()[:12],
+                    "download_method": "dicom_manifest",
+                    "manifest_item_count": len(uids),
+                }
+            )
         return self._download(
-            [dict(row) for row in plan.rows],
+            rows,
             destination,
             scope={
                 **plan.scope,
@@ -256,4 +329,5 @@ class ParticipantImagesMixin:
             resume=resume,
             accept_data_policy=accept_data_policy,
             max_items=max_items,
+            manifest_inputs=inputs,
         )

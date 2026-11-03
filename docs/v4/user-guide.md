@@ -2,7 +2,7 @@
 
 ## Install and connect
 
-The 4.0.0a8 preview requires Python 3.11 or newer. Install the preview in a fresh environment as shown in the [README](../../README.md). Install `tcia_utils[tables]` only if you want pandas conversion; the core client imports no pandas, notebooks, or imaging libraries. The [notebook environment](https://github.com/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/requirements.txt) pins the separately tested example tools.
+The 4.0.0a9 preview requires Python 3.11 or newer. Install the preview in a fresh environment as shown in the [README](../../README.md). Install `tcia_utils[tables]` only if you want pandas conversion; the core client imports no pandas, notebooks, or imaging libraries. The [notebook environment](https://github.com/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/requirements.txt) pins the separately tested example tools.
 
 Set an explicit `base_url` for a TCIA V2 REST host. `TCIAClient` does not select a host, authenticate, transfer files, or contact the network until a method is called. Close it with a `with` block or `close()`.
 
@@ -64,7 +64,7 @@ Set `TCIAClient(..., pin_snapshot=True)` to reject a changed release/profile bet
 
 Data Retriever CSVs have exactly one recognized route column: `SeriesInstanceUID`, `imageUrl`, or `drs_uri`. Public and controlled selections, and different routes, go to separate files. A `source_url` is not automatically a deliverable `imageUrl`. Controlled `drs_uri` is public metadata; actual retrieval requires separate authorization. An Aspera package/path handoff has its own format only when exact package/path fields are present. Selection cannot invent `.tcia` files, signed URLs, missing DICOM UIDs, or source-image relationships. Include source images only after an explicit selection choice.
 
-For public DICOM detail, use `idc-index` directly with an evidenced dataset DOI or reviewed patient identifier. Query IDC for series identifiers and viewer URLs, check IDC coverage independently, then supply verified `SeriesInstanceUID` values to a selection. TCIA Utils does not promise series UID discovery from the current REST asset DTO and does not wrap the `idc-index` API. Detailed imaging queries remain in IDC; actual downloads delegate to the packaged TCIA Data Retriever.
+For basic public DICOM series selection from a TCIA cohort, use `plan_participant_images()` as described below. The shared service checks dataset-scoped identities and reuses versioned IDC metadata. Advanced DICOM relationships, acquisition queries and viewers remain available through IDC's own tools. Actual downloads delegate to the packaged TCIA Data Retriever.
 
 ## Download from Python
 
@@ -72,9 +72,9 @@ Install `tcia_utils[downloads]` for the packaged transfer engine. Supported publ
 DICOM, public files and approved controlled files delegate to
 `tcia-data-retriever==0.1.0rc1`, including its pip-bundled headless executable.
 No separate application installation is required. Core imports and metadata
-queries do not launch it. IDC is an independent notebook/application integration.
-Install `idc-index` separately for its additional public DICOM query features;
-it is not needed to download a supplied manifest.
+queries do not launch it. Basic public participant image planning and manifest
+downloads need no IDC Python package. Install IDC's tools independently for
+advanced public DICOM query features.
 
 Read the [TCIA data usage policy](https://www.cancerimagingarchive.net/data-usage-policies-and-restrictions/)
 and pass `accept_data_policy=True` for actual downloads. Dry runs need no policy
@@ -213,15 +213,22 @@ coverage including zero matches, and retains unsupported routes as unresolved.
 that selection through the same TDR adapter as other supported file downloads.
 Unresolved routes block transfer; source links do not become invented download URLs.
 
-Public DICOM series lookup, index metadata and viewers are additional IDC features.
-Use the independently installed `idc-index` directly, as demonstrated in the
-workshop's optional IDC section. Match an explicit collection/DOI and participant
-identity; do not infer cross-dataset identity from a bare patient ID. Save selected
-Series UIDs as a CSV manifest and call `download_manifest(..., max_items=1,
-accept_data_policy=True)` to use the TCIA downloader. The SDK does not import,
-construct or wrap an IDC client, and none of its extras installs `idc-index`.
-Whole-dataset and explicit-manifest DICOM downloads remain supported without IDC's
-Python package.
+Use the same `plan_participant_images(cohort, modality="CT", file_format="DICOM")`
+for public DICOM series. The SDK sends TCIA participant keys to the shared service;
+provider identity matching and queries run there. Both public DICOM and non-DICOM
+plans use that service contract. `plan.providers` retains IDC metadata versions,
+and `scope` retains the TCIA snapshot. The SDK batches at 100 participants, checks
+coverage and rejects version drift or out-of-scope records before any transfer.
+
+The service must expose `POST /v2/participants/download-plan` (query API 0.6.0+).
+It returns explicit zero matches, unresolved identities/routes, and errors for
+unavailable or truncated providers. `download_images()` blocks unresolved plans
+and delegates the bounded selection to TDR. No images or credentials go through
+the planning service. The current planner is public-only; use the existing
+controlled-file inventory and approved-key download workflow for controlled data.
+
+Advanced public DICOM relationships, acquisition exploration and viewers remain
+with IDC's own tools. The SDK does not import or install IDC's Python package.
 
 ## Multi-value fields and display tables
 

@@ -65,3 +65,15 @@ The SDK no longer installs or wraps idc-index and has no cohorts extra. The
 notebook's optional IDC section directly queries its separately installed client;
 TCIA non-DICOM planning and TDR-backed manifest/file downloads remain independent.
 The older implementation notes above describe their dated review builds.
+
+
+## 4.0.0a9: shared public image planning
+
+Basic participant image planning now uses the TCIA service for both public DICOM
+and non-DICOM. The service validates TCIA identities and reuses versioned IDC REST
+metadata for DICOM. The SDK has no IDC dependency. The workshop uses the same plan
+and download functions for CT series and whole-slide files. API 0.6.0 adds the
+metadata-only route and read-only MCP tool; TDR still transfers files locally.
+Recorded notebook validation uses projected plans from verified retained source
+records and identities; deployment is checked separately. No payload transfers
+were performed for this implementation.
