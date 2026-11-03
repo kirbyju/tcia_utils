@@ -2,7 +2,7 @@
 
 ## Install and connect
 
-The 4.0.0a10 preview requires Python 3.11 or newer. Install the preview in a fresh environment as shown in the [README](../../README.md). Install `tcia_utils[tables]` only if you want pandas conversion; the core client imports no pandas, notebooks, or imaging libraries. The [notebook environment](https://github.com/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/requirements.txt) pins the separately tested example tools.
+The 4.0.0a11 preview requires Python 3.11 or newer. Install the preview in a fresh environment as shown in the [README](../../README.md). Install `tcia_utils[tables]` only if you want pandas conversion; the core client imports no pandas, notebooks, or imaging libraries. The [notebook environment](https://github.com/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/requirements.txt) pins the separately tested example tools.
 
 Set an explicit `base_url` for a TCIA V2 REST host. `TCIAClient` does not select a host, authenticate, transfer files, or contact the network until a method is called. Close it with a `with` block or `close()`.
 
@@ -50,7 +50,7 @@ Set `TCIAClient(..., pin_snapshot=True)` to reject a changed release/profile bet
 
 ## Work with dictionaries and JSON without pandas
 
-Install the core package with `python -m pip install "tcia_utils==4.0.0a10"`.
+Install the core package with `python -m pip install "tcia_utils==4.0.0a11"`.
 Pandas is optional: searching, clinical enrichment, image planning, manifest
 exports and downloads accept ordinary Python records. Actual transfers also need
 the `downloads` extra; table conversions need the `tables` extra.

@@ -59,7 +59,7 @@ def _checked_participant_page(page):
 
 
 class ParticipantsMixin:
-    """Participant methods composed into ``TCIAClient`` by the facade owner."""
+    """Dataset-scoped participant discovery and linking coverage exposed by TCIAClient."""
 
     def search_participants(
         self,
@@ -76,6 +76,34 @@ class ParticipantsMixin:
         limit: int = 25,
         cursor: str | None = None,
     ):
+        """Find dataset-scoped participants by available data.
+
+        Args:
+            query: Optional participant free-text search; use clinical methods for diagnosis evidence.
+            short_titles: Nonempty sequence of dataset short titles, or None.
+            dataset_type: "collection", "analysis_result", or "both" (default).
+            access_levels: Nonempty sequence of published labels, or None to omit this filter.
+            data_categories: Nonempty sequence of published labels, or None to omit this filter.
+            data_types: Nonempty sequence of published labels, or None to omit this filter.
+            file_formats: Nonempty sequence of published labels, or None to omit this filter.
+            geometry_statuses: Nonempty sequence of published labels, or None to omit this filter.
+            modalities: Nonempty sequence of published labels, or None to omit this filter.
+            limit: Maximum records on this page, not an archive-wide total; see the bound below.
+            cursor: Opaque next_cursor from the same query, or None for the first page.
+
+        Returns:
+            Page of dictionaries. Use .items for this page, .iter_pages() for further pages,
+            .to_dict()/.to_json() for metadata-preserving exports, or .to_dataframe() with the tables extra.
+
+        Raises:
+            InvalidRequestError: A filter, identifier, or limit is invalid.
+            ProtocolError: Returned metadata or snapshot identity is inconsistent.
+            TCIAError: The service, a required component, or an HTTP request is unavailable.
+
+        Notes:
+            limit is 1–500 (default 25). Carry participant_key, dataset_type and short_title
+            into subsequent calls. Identical display IDs in different datasets do not establish
+            the same person. A missing indexed record is not proof that source data are absent."""
         if query is not None and not isinstance(query, str):
             raise InvalidRequestError("query must be a string")
         body = {"dataset_type": _dataset_type(dataset_type, allow_both=True)}
@@ -95,6 +123,22 @@ class ParticipantsMixin:
         return _checked_participant_page(page)
 
     def get_participant(self, participant_key: str):
+        """Read one canonical participant and its retained source identifiers.
+
+        Args:
+            participant_key: Exact dataset-scoped key from search_participants(); not a display patient ID.
+
+        Returns:
+            Result with .data["participant"], identifiers, count and identity_scope.
+
+        Raises:
+            InvalidRequestError: A filter, identifier, or limit is invalid.
+            ProtocolError: Returned metadata or snapshot identity is inconsistent.
+            TCIAError: The service, a required component, or an HTTP request is unavailable.
+
+        Notes:
+            The response describes an indexed identity, not complete clinical history or all
+            image files. Use list_participant_assets() or plan_participant_images() for available images."""
         result = self._result(
             "GET", f"/v2/participants/{_segment(participant_key, 'participant_key')}",
             capability="participant_search",
@@ -117,6 +161,24 @@ class ParticipantsMixin:
         return result
 
     def get_coverage(self, short_title: str, *, dataset_type: str | None = None):
+        """Inspect participant linking coverage for a dataset.
+
+        Args:
+            short_title: Published dataset short title.
+            dataset_type: Optional "collection" or "analysis_result"; omit for the route default.
+
+        Returns:
+            Result with participant_count, coverage_complete, unlinked_dataset_assets,
+            participant_link_issues and source summaries in .data.
+
+        Raises:
+            InvalidRequestError: A filter, identifier, or limit is invalid.
+            ProtocolError: Returned metadata or snapshot identity is inconsistent.
+            TCIAError: The service, a required component, or an HTTP request is unavailable.
+
+        Notes:
+            coverage_complete refers to indexed participant linking, not complete clinical
+            coverage, complete image inventories, or an archive-wide count of unique people."""
         wire_type = _dataset_type(dataset_type, allow_both=False) if dataset_type is not None else None
         params = {"dataset_type": wire_type} if wire_type is not None else {}
         result = self._result(

@@ -2,12 +2,12 @@
 
 TCIA Utils is a Python client for discovering TCIA datasets, participants, clinical evidence, available data, citations, and verified analytical publications. It uses the shared TCIA V2 REST service. A researcher can start with a question about a dataset without choosing the underlying catalog or storage system.
 
-Version **4.0.0a10** is an opt-in preview for testing the redesigned interface.
+Version **4.0.0a11** is an opt-in preview for testing the redesigned interface.
 Ordinary pip installations continue selecting stable 3.x. Install this version
 explicitly in a fresh Python 3.11+ environment:
 
 ```sh
-python -m pip install "tcia_utils[tables,downloads]==4.0.0a10"
+python -m pip install "tcia_utils[tables,downloads]==4.0.0a11"
 ```
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/TCIA_Dataset_and_Participant_Queries.ipynb)
@@ -31,7 +31,7 @@ with TCIAClient(base_url="https://tcia.duckdns.org") as tcia:
 
 Searches return one `Page` at a time. Call `page.next_page()` or iterate `page.iter_pages()` when more results are needed. Detail calls return a `Result` containing the service's named fields and notes. Both expose observed release provenance and completeness. `partial` means more cursor pages are available; `unknown` means the route has no exhaustive cursor or contains a bounded sublist. An empty successful page is a real zero-match result. Failures raise typed `TCIAError` subclasses: for example, `ServiceUnavailableError` for a missing capability or HTTP 503, `HTTPResponseError` for HTTP 500, and `TransportError` for a connection failure.
 
-For pandas-free applications, install `tcia_utils==4.0.0a10` without extras.
+For pandas-free applications, install `tcia_utils==4.0.0a11` without extras.
 Every public result provides `.to_dict()` and `.to_json()`; these retain records,
 provenance and completeness instead of requiring a DataFrame. For example,
 `page.to_json(indent=2)` serializes the current search page, while
@@ -61,7 +61,7 @@ Use [the task-oriented guide](docs/v4/user-guide.md) for methods, evidence scope
 
 This alpha is for community testing. The [service compatibility review](docs/v4/design/service-compatibility.md) and [notebook validation](docs/v4/design/notebook-validation.md) preserve dated verification and earlier failure history. The four original hosted-route failures were repaired and subsequently passed live checks. API availability, indexed coverage, and the active metadata snapshot can change; retain response provenance with research exports. Clinical summaries are derived metadata, and some routes are bounded rather than exhaustive.
 
-Visible TCIA Collection and Analysis Result records establish dataset publication. DataCite metadata and publication metrics enrich those records but do not establish publication by themselves. Public metadata about controlled data does not grant payload access. For public DICOM series detail and viewer URLs, use `idc-index` directly. Selection export prepares route-specific manifests without transferring payloads. Explicit `download_dataset()` and `download_files()` calls perform transfers; public notebook samples run with max_items=1, while controlled examples require the reader's approved key and explicit selection.
+Visible TCIA Collection and Analysis Result records establish dataset publication. DataCite metadata and publication metrics enrich those records but do not establish publication by themselves. Public metadata about controlled data does not grant payload access. For advanced public DICOM metadata queries and viewers, use IDC's own tools. Selection export prepares route-specific manifests without transferring payloads. Explicit `download_dataset()` and `download_files()` calls perform transfers; public notebook samples run with max_items=1, while controlled examples require the reader's approved key and explicit selection.
 
 TCIA data use remains subject to the [TCIA Data Usage Policy](https://www.cancerimagingarchive.net/data-usage-policies-and-restrictions/).
 
@@ -81,11 +81,12 @@ before any payload starts; missing series are reported rather than silently
 skipped. The client handles parsing and transfer adapters internally. The REST
 service does not receive local manifests or credentials.
 
-The new shared plan requires the unpublished query-service endpoint
-`/v2/datasets/{short_title}/download-plan`. An older service produces a clear
-upgrade message; the client does not silently copy the server's routing logic.
-Standalone `download_manifest()` does not need that endpoint. See
-[the local review handoff](docs/v4/shared-download-review.md).
+`plan_downloads()` is an optional metadata-only review of download groups, access
+terms, software requirements and Python route support. `download_dataset()` does
+this planning internally; you do not need to call both. `download_manifest()` can
+use an existing manifest directly. The shared service owns the published-requirement
+interpretation; inspecting a plan does not check personal access approval.
+See [the download guide](docs/v4/user-guide.md#download-from-python).
 
 
 To test a transfer or keep a demo small, pass `max_items=1` to

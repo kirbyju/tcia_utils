@@ -49,13 +49,36 @@ def _check_bounded(data: dict, short_title: str, key: str, limit: int) -> None:
 
 
 class ClinicalMixin:
-    """Clinical methods composed into ``TCIAClient`` by the facade owner."""
+    """Bounded clinical records, evidence and conflicts exposed by TCIAClient."""
 
     def list_clinical_subjects(
         self, short_title: str, *, subject_ids: Sequence[str] | None = None,
         include_clinical_only: bool = False, has_conflicts: bool | None = None,
         include_inferred: bool = True, limit: int = 50,
     ):
+        """Read a bounded set of resolved clinical subject records.
+
+        Args:
+            short_title: Collection short title; clinical subject IDs are scoped to this dataset.
+            subject_ids: Nonempty sequence of exact clinical subject IDs, or None.
+            include_clinical_only: Include subjects without an indexed image link (default False).
+            has_conflicts: True/False to filter subjects with conflicts, or None for either.
+            include_inferred: Include supported inferred clinical values (default True); False requests recorded values only.
+            limit: Maximum subject records, 1–500 (default 50); no cursor is available.
+
+        Returns:
+            Result with .data["subjects"], count, limit, identity_scope and inclusion flags;
+            completeness is unknown because this route is bounded.
+
+        Raises:
+            InvalidRequestError: A filter, identifier, or limit is invalid.
+            ProtocolError: Returned metadata or snapshot identity is inconsistent.
+            TCIAError: The service, a required component, or an HTTP request is unavailable.
+
+        Notes:
+            Inspect primary_diagnosis_is_inferred and field-level evidence before treating a
+            value as recorded for a person. A dataset label is not a confirmed patient diagnosis.
+            Use clinical_for_participants() to enrich an explicit cohort in checked batches."""
         _limit(limit)
         _boolean(include_clinical_only, "include_clinical_only")
         _boolean(include_inferred, "include_inferred")
@@ -87,6 +110,27 @@ class ClinicalMixin:
         source_kinds: Sequence[str] | None = None,
         inferred: bool | None = None, limit: int = 100,
     ):
+        """Read source-backed clinical facts and their evidence scope.
+
+        Args:
+            short_title: Collection short title.
+            subject_id: Optional exact dataset-scoped clinical subject ID.
+            concepts: Nonempty sequence of clinical concept names, or None.
+            source_kinds: Nonempty sequence of source-kind labels, or None.
+            inferred: True for inferred facts, False for recorded facts, or None for both.
+            limit: Maximum facts, 1–500 (default 100); no cursor is available.
+
+        Returns:
+            Result with .data["facts"], count, limit and note; completeness is unknown.
+
+        Raises:
+            InvalidRequestError: A filter, identifier, or limit is invalid.
+            ProtocolError: Returned metadata or snapshot identity is inconsistent.
+            TCIAError: The service, a required component, or an HTTP request is unavailable.
+
+        Notes:
+            Keep source, evidence_scope and is_inferred fields with extracted values. A short
+            response or an empty result does not establish complete clinical coverage."""
         _limit(limit)
         params = {"limit": limit}
         if subject_id is not None:
@@ -114,6 +158,25 @@ class ClinicalMixin:
         self, short_title: str, *, subject_id: str | None = None,
         concepts: Sequence[str] | None = None, limit: int = 100,
     ):
+        """Read disagreements among clinical sources without choosing a winner.
+
+        Args:
+            short_title: Collection short title.
+            subject_id: Optional exact dataset-scoped clinical subject ID.
+            concepts: Nonempty sequence of clinical concept names, or None.
+            limit: Maximum conflict records, 1–500 (default 100); no cursor is available.
+
+        Returns:
+            Result with .data["conflicts"], count, limit and note; completeness is unknown.
+
+        Raises:
+            InvalidRequestError: A filter, identifier, or limit is invalid.
+            ProtocolError: Returned metadata or snapshot identity is inconsistent.
+            TCIAError: The service, a required component, or an HTTP request is unavailable.
+
+        Notes:
+            These records retain unresolved source differences. An empty bounded response
+            does not prove every clinical value has been reviewed or reconciled."""
         _limit(limit)
         params = {"limit": limit}
         if subject_id is not None:

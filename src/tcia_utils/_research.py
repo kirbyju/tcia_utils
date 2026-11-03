@@ -15,14 +15,26 @@ def records(value):
 
 
 class ResearchMixin:
+    """Checked dataset and clinical enrichment of explicit record selections."""
     def describe_datasets(self, datasets):
-        """Enrich explicit dataset records with details and published data categories.
+        """Enrich explicit dataset records with their full published metadata.
 
-        Current search responses already include data_categories. Use this helper
-        when full detail fields are needed, retaining dataset type and rejecting a
-        changed snapshot or ambiguous identity.
-        No external-resource label is reclassified as a downloadable data category.
-        """
+        Args:
+            datasets: List/tuple of dictionaries or DataFrame containing short_title and dataset_type.
+
+        Returns:
+            Result with .data["datasets"], notes and one consistent snapshot. data_categories
+            retains the published download categories; no pandas is needed for record input/output.
+
+        Raises:
+            InvalidRequestError: A filter, identifier, or limit is invalid.
+            ProtocolError: Returned metadata or snapshot identity is inconsistent.
+            TCIAError: The service, a required component, or an HTTP request is unavailable.
+
+        Notes:
+            Search already returns categories. Use this helper when you need fuller detail.
+            Ambiguous dataset identity or snapshot drift raises instead of guessing. External
+            resource labels are not reclassified as TCIA download categories."""
         rows = records(datasets)
         _, provenance = self._observe_status()
         cache, described, notes = {}, [], []
@@ -65,11 +77,25 @@ class ResearchMixin:
         )
 
     def clinical_for_participants(self, participants, *, include_inferred=True):
-        """Get clinical rows for exact Collection-scoped participant identifiers.
+        """Enrich an explicit participant cohort with clinical evidence in checked batches.
 
-        Unmatched identifiers are reported, never guessed or joined across datasets.
-        Batching cannot silently turn a capped service response into a full result.
-        """
+        Args:
+            participants: List/tuple of participant dictionaries or DataFrame with short_title and display_participant_id; Collections only.
+            include_inferred: Include supported inferred values (default True); False requests recorded values only.
+
+        Returns:
+            Result with subjects, values, unmatched, matched_count and requested_count in .data.
+            values contains flattened concepts with their source evidence and inference flags.
+
+        Raises:
+            InvalidRequestError: A filter, identifier, or limit is invalid.
+            ProtocolError: Returned metadata or snapshot identity is inconsistent.
+            TCIAError: The service, a required component, or an HTTP request is unavailable.
+
+        Notes:
+            IDs are matched exactly within each Collection. No ID conversion or cross-dataset
+            join is guessed. Capped or inconsistent batches fail rather than silently truncating.
+            Complete here means the explicit cohort was processed, not that clinical coverage is complete."""
         rows = records(participants)
         _, provenance = self._observe_status()
         groups = {}

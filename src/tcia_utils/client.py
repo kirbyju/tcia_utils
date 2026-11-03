@@ -40,7 +40,13 @@ def _identity_matches(first: Provenance, later: Provenance) -> None:
 
 
 class TCIAClient(DatasetMethods, CitationMethods, ParticipantsMixin, ClinicalMixin, AvailableDataMixin, DownloadsMixin, ParticipantImagesMixin, ResearchMixin):
-    """Reusable synchronous client for a configured TCIA V2 REST host."""
+    """Task-oriented synchronous client for TCIA dataset and participant workflows.
+
+    Use an explicit service base_url and a with block. Metadata queries return Page
+    or Result objects, with pandas-free to_dict()/to_json() exports. Optional table
+    conversion uses the tables extra; actual downloads use the downloads extra.
+    See __init__ for connection, timeout, retry and snapshot-pinning options.
+    Construction and import do not make requests or install software."""
 
     select = staticmethod(select)
     export_selection = staticmethod(export_selection)
@@ -54,6 +60,30 @@ class TCIAClient(DatasetMethods, CitationMethods, ParticipantsMixin, ClinicalMix
         http_client: httpx.Client | None = None,
         pin_snapshot: bool = False,
     ) -> None:
+        """Create a reusable client for an explicitly configured TCIA REST service.
+
+        Args:
+            base_url: HTTP(S) service root, without a /v2 suffix; no default host is chosen.
+            timeout: Per-request timeout in seconds, greater than 0 and at most 120 (default 15).
+            retries: Additional retries for transient HTTP/transport failures, 0–3 (default 2).
+            http_client: Optional httpx.Client for custom transport/TLS configuration; closed by close() or context-manager exit.
+            pin_snapshot: Reject a changed metadata fingerprint/profile across calls (default False); start a new client after a refresh.
+
+        Returns:
+            None. Initializes the client without requests, authentication, installation or transfers.
+
+        Raises:
+            InvalidRequestError: The service URL, timeout, retries or pin_snapshot option is invalid.
+
+        Notes:
+            Use a with block or close() to release HTTP resources. Core metadata methods
+            need only httpx; pandas is optional for table conversion, and actual transfers use
+            the downloads extra. Search methods return Page; detail methods return Result.
+            Both retain provenance and completeness and support to_dict()/to_json().
+
+        Example:
+            with TCIAClient(base_url="https://tcia.duckdns.org", pin_snapshot=True) as tcia:
+                print(tcia.search_datasets(query="lung").to_json(indent=2))"""
         if not isinstance(pin_snapshot, bool):
             raise InvalidRequestError("pin_snapshot must be a boolean")
         self._pin_snapshot = pin_snapshot
@@ -67,6 +97,14 @@ class TCIAClient(DatasetMethods, CitationMethods, ParticipantsMixin, ClinicalMix
         self.close()
 
     def close(self) -> None:
+        """Close this client and its HTTP resources.
+
+        Returns:
+            None.
+
+        Notes:
+            Safe to call more than once. A supplied http_client is also closed. Subsequent
+            network operations on this TCIAClient raise TransportError."""
         self._transport.close()
 
     def _observe_status(self) -> tuple[ServiceStatus, Provenance]:
@@ -113,6 +151,21 @@ class TCIAClient(DatasetMethods, CitationMethods, ParticipantsMixin, ClinicalMix
         return ServiceStatus(ready, observed_caps, fingerprint, release_tag, profile), provenance
 
     def status(self) -> Result[ServiceStatus]:
+        """Check readiness, installed profile, capabilities and matching bundle identity.
+
+        Returns:
+            Result containing ServiceStatus in .data and observed provenance/completeness.
+            .to_dict()/to_json() preserve the same status information without pandas.
+
+        Raises:
+            InvalidRequestError: A filter, identifier, or limit is invalid.
+            ProtocolError: Returned metadata or snapshot identity is inconsistent.
+            TCIAError: The service, a required component, or an HTTP request is unavailable.
+
+        Notes:
+            This performs readiness and bundle requests. Liveness alone would not establish
+            that the metadata are queryable. The observed snapshot is not automatically
+            compared with the latest published release."""
         status, provenance = self._observe_status()
         return Result(status, (), provenance, Completeness("complete"))
 

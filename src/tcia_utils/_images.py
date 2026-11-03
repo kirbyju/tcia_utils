@@ -21,6 +21,18 @@ from ._results import _frame
 
 @dataclass(frozen=True)
 class ParticipantImagePlan(JsonExportMixin):
+    """Public images selected for exact dataset-scoped participants.
+
+    Attributes:
+        rows: Matching public series/file dictionaries, with routes and source details.
+        coverage: Match/downloadable counts and state for each requested participant.
+        unresolved: Identifier, route or access issues that block a download.
+        scope: Filters, requested/selected counts and TCIA metadata identity.
+        provenance: Observed TCIA service metadata identity.
+        providers: Versions of external metadata providers used by the service.
+
+    An unavailable provider raises during planning rather than becoming zero matches.
+    No payloads are transferred by constructing or exporting this plan."""
     rows: tuple[dict, ...]
     coverage: tuple[dict, ...]
     unresolved: tuple[dict, ...]
@@ -29,6 +41,17 @@ class ParticipantImagePlan(JsonExportMixin):
     providers: dict = field(default_factory=dict)
 
     def to_dataframe(self):
+        """Display the selected public series/files without changing the plan.
+
+        Returns:
+            A pandas.DataFrame of rows; empty plans retain useful image-selection columns.
+
+        Raises:
+            ImportError: The optional tables dependency is unavailable.
+
+        Notes:
+            Requires the tables extra. Coverage, unresolved reasons and provider versions
+            remain on the plan; .to_dict()/.to_json() export them with the rows."""
         return _frame(
             self.rows,
             columns=(
@@ -50,6 +73,17 @@ class ParticipantImagePlan(JsonExportMixin):
         )
 
     def coverage_to_dataframe(self):
+        """Display image-matching coverage for every requested participant.
+
+        Returns:
+            A pandas.DataFrame of coverage, including matching_items and downloadable_items.
+
+        Raises:
+            ImportError: The optional tables dependency is unavailable.
+
+        Notes:
+            Requires the tables extra. Zero matches apply to the queried metadata and
+            selection; they do not prove the archive or original dataset contains no images."""
         return _frame(
             self.coverage,
             columns=(
@@ -76,10 +110,33 @@ def _same_snapshot(result, provenance):
 
 
 class ParticipantImagesMixin:
+    """Shared public participant image planning and downloads exposed by TCIAClient."""
     def plan_participant_images(
         self, participants, *, modality, file_format, progress=True
     ):
-        """Get one shared public-image plan; provider queries run on the service."""
+        """Find public images belonging to an explicit dataset-scoped participant cohort.
+
+        Args:
+            participants: List/tuple of search_participants() records or DataFrame with participant_key, dataset_type, short_title and display_participant_id.
+            modality: Requested modality, such as "CT" or "Whole Slide Image".
+            file_format: "DICOM" or "non-DICOM" (case-insensitive).
+            progress: Show the SDK planning message (default True).
+
+        Returns:
+            ParticipantImagePlan with rows, per-participant coverage including zero matches,
+            unresolved reasons, selection scope, TCIA provenance and provider versions.
+
+        Raises:
+            InvalidRequestError: A filter, identifier, or limit is invalid.
+            ProtocolError: Returned metadata or snapshot identity is inconsistent.
+            TCIAError: The service, a required component, or an HTTP request is unavailable.
+
+        Notes:
+            The shared service resolves exact TCIA identities and reuses versioned IDC
+            metadata for public DICOM. No IDC Python package is required. Requests are batched
+            at 100 participants and checked for version drift. This planner is public-only;
+            use controlled-file inventory methods for controlled data. An unavailable provider
+            is an error, not a zero-match result. Planning never transfers images."""
         if not isinstance(modality, str) or not modality.strip():
             raise InvalidRequestError("modality must be a nonempty string")
         if not isinstance(file_format, str) or file_format.casefold() not in {
@@ -273,7 +330,36 @@ class ParticipantImagesMixin:
         resume=False,
         accept_data_policy=False,
     ):
-        """Download a participant image plan through TDR; resume=True requests skip-existing checks."""
+        """Download the public image selection returned by plan_participant_images().
+
+        Args:
+            plan: ParticipantImagePlan with matching rows and no unresolved issues.
+            destination: Local destination directory (string or pathlib.Path). TDR owns its output layout.
+            accept_data_policy: Set True after accepting the TCIA data usage policy. Required for actual transfers; default False.
+            dry_run: True to inspect metadata and prerequisites without a payload transfer or authentication; default False.
+            progress: Show SDK preparation messages (default True). The packaged transfer engine displays its own console progress.
+            max_items: Positive limit on whole series/files, not bytes, or None for the full selection. Samples keep their scope in the report.
+            overwrite: Request replacement behavior; default False. Cannot be combined with resume=True.
+            resume: Request TDR skip-existing checks (default False); does not guarantee byte-range resume.
+
+        Returns:
+            DownloadReport with per-entry outcomes and selection scope. .complete describes
+            only the selected sample/full selection; inspect entries and scope before claiming
+            a dataset is complete. DownloadError.report retains outcomes when a transfer fails.
+
+        Raises:
+            InvalidRequestError: Selection or options are invalid.
+            DownloadError: A route, prerequisite, authorization or transfer fails; inspect .report when present.
+            TCIAError: A metadata request fails.
+            OSError: A local input or destination cannot be read or written.
+
+        Notes:
+            Actual transfers use the downloads extra (pip-installed tcia-data-retriever).
+            TDR owns authorization, retry/checksum behavior, archive extraction and file layout.
+            Normal copy may download existing files again; use resume=True for skip-existing checks.
+            Only the plan's exact public images are selected; related source images are not
+            added. Empty or unresolved plans cannot start a transfer. max_items applies across
+            the selected series/files and retains sample scope."""
         _validate_resume(resume)
         _validate_policy(accept_data_policy, dry_run)
         if not isinstance(plan, ParticipantImagePlan):
