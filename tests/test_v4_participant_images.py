@@ -139,6 +139,7 @@ def test_downloads_use_one_bounded_tdr_path(tmp_path, tdr_calls, dicom):
     assert tdr_calls[0]["downloadDir"] == str(tmp_path)
     assert report.entries[0]["destination"] == str(tmp_path)
     assert tdr_calls[0]["options"]["skip_existing"] is True
+    assert tdr_calls[0]["options"]["progress"] == "plain"
     if dicom:
         assert tdr_calls[0]["seriesInstanceUID"] == ["1.2.3"]
     else:

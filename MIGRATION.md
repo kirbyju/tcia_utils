@@ -1,6 +1,6 @@
 # Moving from TCIA Utils 3.x to 4.0
 
-The 4.0 interface is a new research client, not a compatibility release for every 3.x provider module. Pin a 3.x environment for existing scripts until you have moved each workflow deliberately. Version `4.0.0a12` is an opt-in alpha. Install it explicitly with `python -m pip install "tcia_utils==4.0.0a12"`; ordinary pip installs continue selecting the stable release.
+The 4.0 interface is a new research client, not a compatibility release for every 3.x provider module. Pin a 3.x environment for existing scripts until you have moved each workflow deliberately. Version `4.0.0a13` is an opt-in alpha. Install it explicitly with `python -m pip install "tcia_utils==4.0.0a13"`; ordinary pip installs continue selecting the stable release.
 
 | 3.x pattern | 4.0 approach |
 | --- | --- |
@@ -31,7 +31,7 @@ and pip-installed dependencies.
 Actual v4 transfers now require `accept_data_policy=True`. Install the downloads
 extra for TDR. Install IDC's tools independently for additional public DICOM queries;
 `tcia_utils` does not provide a cohorts/IDC extra. See the
-current download guide for the shared engine's console, credential-cache, output
+current download guide for the shared engine's console, credential-lifetime, output
 layout and skip-existing behavior.
 
 When upgrading from earlier transfer backends, use a fresh destination. TDR owns

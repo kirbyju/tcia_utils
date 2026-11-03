@@ -2,7 +2,7 @@
 
 ## Install and connect
 
-The 4.0.0a12 preview requires Python 3.11 or newer. Install the preview in a fresh environment as shown in the [README](../../README.md). Install `tcia_utils[tables]` only if you want pandas conversion; the core client imports no pandas, notebooks, or imaging libraries. The [notebook environment](https://github.com/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/requirements.txt) pins the separately tested example tools.
+The 4.0.0a13 preview requires Python 3.11 or newer. Install the preview in a fresh environment as shown in the [README](../../README.md). Install `tcia_utils[tables]` only if you want pandas conversion; the core client imports no pandas, notebooks, or imaging libraries. The [notebook environment](https://github.com/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/requirements.txt) pins the separately tested example tools.
 
 Set an explicit `base_url` for a TCIA V2 REST host. `TCIAClient` does not select a host, authenticate, transfer files, or contact the network until a method is called. Close it with a `with` block or `close()`.
 
@@ -50,7 +50,7 @@ Set `TCIAClient(..., pin_snapshot=True)` to reject a changed release/profile bet
 
 ## Work with dictionaries and JSON without pandas
 
-Install the core package with `python -m pip install "tcia_utils==4.0.0a12"`.
+Install the core package with `python -m pip install "tcia_utils==4.0.0a13"`.
 Pandas is optional: searching, clinical enrichment, image planning, manifest
 exports and downloads accept ordinary Python records. Actual transfers also need
 the `downloads` extra; table conversions need the `tables` extra.
@@ -127,7 +127,7 @@ For basic public DICOM series selection from a TCIA cohort, use `plan_participan
 
 Install `tcia_utils[downloads]` for the packaged transfer engine. Supported public
 DICOM, public files and approved controlled files delegate to
-`tcia-data-retriever==0.1.0rc1`, including its pip-bundled headless executable.
+`tcia-data-retriever==0.1.0rc2`, including its pip-bundled headless executable.
 No separate application installation is required. Core imports and metadata
 queries do not launch it. Basic public participant image planning and manifest
 downloads need no IDC Python package. Install IDC's tools independently for
@@ -148,19 +148,27 @@ the former SDK-specific verifier. Normal copy can download existing files again.
 Pass `resume=True` with the same destination to request skip-existing checks;
 this is not a byte-range resume guarantee. Do not combine resume and overwrite.
 
-Progress is on by default. `progress=False` controls SDK messages, but the current
-TDR Python wrapper still inherits console progress; the SDK emits a warning about
-that limitation. It does not maintain a second subprocess/download implementation
-to recreate an unsupported quiet mode. Future wrapper capabilities can be adopted
-at the shared package boundary.
+Progress is on by default. The SDK asks TDR RC2 for `plain` progress: readable
+newline snapshots, normally about every five seconds during active transfers,
+plus phase messages and a final result. TDR forwards child-process output through
+Python's stdout/stderr so Colab and Jupyter can display it while the call runs.
+Active-file byte counts/percentages appear when available; a short transfer may
+finish before a periodic update. `progress=False` silences SDK messages only;
+TDR progress remains enabled and the SDK reports that limitation. No separate
+progress renderer or subprocess launcher is maintained in this package.
 
-For controlled data, pass only `credential_file=...`, never key contents. The
-current TDR release may save a private credential copy in its application cache;
-see [TDR's storage documentation](https://github.com/TCIA/data-retriever/blob/618d8bc4e493cabc20b9afc41d54a3ce8a2b0df5/python/README.md).
-Use an isolated/temporary runtime if that persistence is inappropriate. The SDK
-passes a credential path only to controlled jobs, validates recognized DRS routes,
-and excludes secrets and temporary URLs from reports. Public metadata and manifests
-do not grant access approval. No live controlled transfer is claimed by this review.
+After upgrading in Colab/Jupyter, restart a runtime that already imported the older
+TDR wrapper, then rerun from the top. The current downloads extra requires
+`tcia-data-retriever==0.1.0rc2`.
+
+For controlled data, pass only `credential_file=...`, never key contents. TDR RC2
+uses the supplied key for that CLI/Python invocation only; it does not save a copy
+or fall back to a saved GUI key. The desktop GUI's credential behavior is separate.
+See [TDR's progress and credential documentation](https://github.com/TCIA/data-retriever/blob/2dcad4bd6fe0bd62b42e67834d0ad42240694f42/docs/cli-progress-and-credentials.md).
+The SDK passes a credential path only to controlled jobs, validates recognized DRS
+routes, and excludes secrets and temporary URLs from reports. Public metadata and
+manifests do not grant access approval. No live controlled transfer is claimed by
+this review.
 
 Reports retain each selected row and sampled scope, with a sanitized versioned
 engine summary. Successful engine counts must cover every selected series/file;

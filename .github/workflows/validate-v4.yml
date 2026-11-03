@@ -124,10 +124,15 @@ jobs:
           import nbformat, pandas, tcia_utils
           import subprocess
           import tcia_data_retriever as tdr
+          from inspect import signature
+          assert tdr.build_info()["version"] == "0.1.0rc2"
+          assert "progress" in signature(tdr.download).parameters
           print(tcia_utils.__file__)
           result = subprocess.run([str(tdr.executable()), "--version"], check=True, capture_output=True, text=True)
           assert result.stdout.strip() == tdr.build_info()["version"]
           PYCODE
+      - name: Check live progress through the installed TDR wrapper
+        run: examples-venv/bin/python -m pytest -q tests/test_v4_tdr_progress.py
       - name: Validate the guided workshop notebook
         run: examples-venv/bin/python tools/validate_v4_notebooks.py notebook-examples/tcia_utils_v4 --require-count 1
       - name: Check cohort, credential-path, and geometry examples

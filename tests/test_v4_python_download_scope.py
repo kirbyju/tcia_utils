@@ -9,6 +9,7 @@ import pytest
 from tcia_utils import DownloadError, InvalidRequestError, TCIAClient
 from tcia_utils._downloads import DownloadsMixin
 import tcia_utils._downloads as downloads
+from tcia_utils._downloads import _tdr as REAL_BACKEND
 from test_v4_downloads import Client, row, fake_http
 
 
@@ -64,7 +65,7 @@ def test_dry_run_never_launches_tdr_for_resume(tmp_path, monkeypatch, tdr_calls)
 def test_progress_false_explains_the_current_engine_console_limit(tmp_path, monkeypatch, capsys):
     p = tmp_path / "cohort.tcia"
     p.write_text("ListOfSeriesToDownload=\n1.2.3\n")
-    with pytest.warns(UserWarning, match="inherits console progress"):
+    with pytest.warns(UserWarning, match="TDR transfer progress remains enabled"):
         DownloadsMixin().download_manifest(
             p, tmp_path / "out", progress=False, accept_data_policy=True
         )
@@ -158,3 +159,25 @@ def test_resume_for_files_uses_the_engine_skip_existing_option(tmp_path, monkeyp
         p, tmp_path / "out", resume=True, accept_data_policy=True
     )
     assert report.complete and tdr_calls[0]["options"]["skip_existing"] is True
+
+
+@pytest.mark.parametrize('entrypoint', ['manifest', 'dataset', 'files'])
+def test_sdk_requests_plain_progress_from_the_shared_engine(tmp_path, tdr_calls, entrypoint):
+    manifest = tmp_path / 'one.csv'
+    manifest.write_text('SeriesInstanceUID\n1.2.3\n')
+    if entrypoint == 'manifest':
+        DownloadsMixin().download_manifest(manifest, tmp_path / 'out', accept_data_policy=True)
+    elif entrypoint == 'dataset':
+        Client([row()]).download_dataset('EXAMPLE', tmp_path / 'out', accept_data_policy=True)
+    else:
+        DownloadsMixin().download_files([row()], tmp_path / 'out', accept_data_policy=True)
+    assert all(call['options']['progress'] == 'plain' for call in tdr_calls)
+
+
+def test_old_imported_wrapper_requests_a_runtime_restart(monkeypatch):
+    from types import SimpleNamespace
+    # Use the real loader despite the autouse fake engine.
+    monkeypatch.setitem(sys.modules, 'tcia_data_retriever',
+                        SimpleNamespace(download=lambda manifest, destination: None))
+    with pytest.raises(DownloadError, match='restart'):
+        REAL_BACKEND()
