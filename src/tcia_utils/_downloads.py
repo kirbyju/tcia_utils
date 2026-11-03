@@ -899,7 +899,7 @@ class DownloadsMixin:
 
         Args:
             manifest: Local path or HTTPS URL for .tcia, CSV or TSV with exactly one SeriesInstanceUID, imageUrl or drs_uri route column.
-            destination: Local destination directory (string or pathlib.Path). TDR owns its output layout.
+            destination: Local destination root (string or pathlib.Path), passed directly to TDR without SDK dataset/manifest subfolders.
             credential_file: Path to your approved JSON API key for controlled files, or None for open data; pass a path, not key contents.
             accept_data_policy: Set True after accepting the TCIA data usage policy. Required for actual transfers; default False.
             dry_run: True to inspect metadata and prerequisites without a payload transfer or authentication; default False.
@@ -1032,7 +1032,7 @@ class DownloadsMixin:
 
         Args:
             short_title: Published dataset short title.
-            destination: Local destination directory (string or pathlib.Path). TDR owns its output layout.
+            destination: Local destination root (string or pathlib.Path), passed directly to TDR without SDK dataset/manifest subfolders.
             credential_file: Path to your approved JSON API key for controlled files, or None for open data; pass a path, not key contents.
             accept_data_policy: Set True after accepting the TCIA data usage policy. Required for actual transfers; default False.
             dry_run: True to inspect metadata and prerequisites without a payload transfer or authentication; default False.
@@ -1104,7 +1104,7 @@ class DownloadsMixin:
 
         Args:
             files: List/tuple of file-grain dictionaries or DataFrame with an explicit public imageUrl/download_url or approved controlled drs_uri.
-            destination: Local destination directory (string or pathlib.Path). TDR owns its output layout.
+            destination: Local destination root (string or pathlib.Path), passed directly to TDR without SDK dataset/manifest subfolders.
             credential_file: Path to your approved JSON API key for controlled files, or None for open data; pass a path, not key contents.
             accept_data_policy: Set True after accepting the TCIA data usage policy. Required for actual transfers; default False.
             dry_run: True to inspect metadata and prerequisites without a payload transfer or authentication; default False.
@@ -1277,11 +1277,28 @@ class DownloadsMixin:
                 ) from None
         target = Path(destination)
         jobs, file_batches = [], {}
+        file_targets = set()
+
+        def check_file_targets(items):
+            # All jobs share the caller's root. Keep collision checks across groups,
+            # including separate public and controlled batches, before any transfer.
+            for item in items:
+                identity = (
+                    item.get("short_title") or "selection",
+                    item.get("participant_id") or item.get("subject_id") or "",
+                    item.get("study_instance_uid") or "",
+                    item["file_name"],
+                )
+                if identity in file_targets:
+                    raise DownloadError(
+                        "Selection repeats a filename in the same participant/study scope"
+                    )
+                file_targets.add(identity)
+
         # Read and validate every route before launching the transfer engine.
         try:
             for i, row in enumerate(rows):
                 title = _safe_name(str(row.get("short_title") or "selection"))
-                identifier = _safe_name(str(row.get("download_id") or "files"))
                 if row.get("drs_uri") or entries[i]["route"] == "public_file":
                     column = "drs_uri" if row.get("drs_uri") else "imageUrl"
                     item = dict(row)
@@ -1291,6 +1308,7 @@ class DownloadsMixin:
                         else row.get("imageUrl") or row["download_url"]
                     )
                     checked = _manifest_records(row, column, [item])[0]
+                    check_file_targets([checked])
                     group = (title, row["access_level"], column)
                     file_batches.setdefault(group, []).append((i, checked))
                     continue
@@ -1317,31 +1335,18 @@ class DownloadsMixin:
                     if column == "SeriesInstanceUID"
                     else _manifest_records(row, column, items)
                 )
+                if column != "SeriesInstanceUID":
+                    check_file_targets(checked)
                 jobs.append(
                     (
                         [i],
-                        target / title / identifier,
+                        target,
                         _transfer_csv(checked, column),
                         len(items),
                         row.get("access_level") == "controlled",
                     )
                 )
-            for (title, access, column), batch in file_batches.items():
-                indexes, items = zip(*batch)
-                # TDR owns the collection/participant layout. Reject collisions in
-                # the same identity scope before any file can be overwritten.
-                names = [
-                    (
-                        r.get("participant_id") or r.get("subject_id"),
-                        r.get("study_instance_uid"),
-                        r["file_name"],
-                    )
-                    for r in items
-                ]
-                if len(names) != len(set(names)):
-                    raise DownloadError(
-                        "Selection repeats a filename in the same participant/study scope"
-                    )
+            for (_, access, column), batch in file_batches.items():
                 # TDR's file route derives a job key from the source basename.
                 # Separate colliding keys so similarly named participant files
                 # cannot overwrite each other in the engine's job bookkeeping.
@@ -1355,15 +1360,12 @@ class DownloadsMixin:
                             break
                     else:
                         batches.append(({backend_key}, [(index, item)]))
-                for number, (_, members) in enumerate(batches):
+                for _, members in batches:
                     selected, records_ = zip(*members)
-                    folder = target / title / "files"
-                    if number:
-                        folder = folder / ("batch-" + str(number + 1))
                     jobs.append(
                         (
                             list(selected),
-                            folder,
+                            target,
                             _transfer_csv(records_, column),
                             len(records_),
                             access == "controlled",

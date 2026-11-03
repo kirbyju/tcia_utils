@@ -334,7 +334,7 @@ class ParticipantImagesMixin:
 
         Args:
             plan: ParticipantImagePlan with matching rows and no unresolved issues.
-            destination: Local destination directory (string or pathlib.Path). TDR owns its output layout.
+            destination: Local destination root (string or pathlib.Path), passed directly to TDR without SDK dataset/manifest subfolders.
             accept_data_policy: Set True after accepting the TCIA data usage policy. Required for actual transfers; default False.
             dry_run: True to inspect metadata and prerequisites without a payload transfer or authentication; default False.
             progress: Show SDK preparation messages (default True). The packaged transfer engine displays its own console progress.
