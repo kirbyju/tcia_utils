@@ -19,6 +19,8 @@ from typing import Any, Iterable, Mapping
 from urllib.parse import urlsplit
 
 
+from ._serialization import JsonExportMixin
+
 _PRIVATE_KEYS = {
     "apikey", "authorization", "awsaccesskeyid", "clientsecret", "credential",
     "password", "privatekey", "secret", "secretkey", "sessiontoken", "sig", "signature", "token",
@@ -85,7 +87,7 @@ def _json_copy(value: Any, label: str, *, allow_private_url: bool = False) -> An
 
 
 @dataclass(frozen=True)
-class Selection:
+class Selection(JsonExportMixin):
     records: tuple[dict[str, Any], ...]
     release_identity: dict[str, Any]
     query_scope: dict[str, Any]
@@ -94,7 +96,7 @@ class Selection:
 
 
 @dataclass(frozen=True)
-class ExportReport:
+class ExportReport(JsonExportMixin):
     destination: Path
     files: tuple[Path, ...]
     exported: int

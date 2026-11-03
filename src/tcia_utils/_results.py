@@ -6,11 +6,13 @@ from dataclasses import dataclass, field, asdict
 from copy import deepcopy
 from typing import Any, Callable, Generic, Iterator, Mapping, TypeVar
 
+from ._serialization import JsonExportMixin
+
 T = TypeVar("T")
 
 
 @dataclass(frozen=True)
-class Provenance:
+class Provenance(JsonExportMixin):
     base_url: str
     release_fingerprint: str
     release_tag: str | None
@@ -20,7 +22,7 @@ class Provenance:
 
 
 @dataclass(frozen=True)
-class Completeness:
+class Completeness(JsonExportMixin):
     state: str
     reason: str | None = None
 
@@ -30,7 +32,7 @@ class Completeness:
 
 
 @dataclass(frozen=True)
-class ServiceStatus:
+class ServiceStatus(JsonExportMixin):
     readiness: Mapping[str, Any]
     capabilities: Mapping[str, bool | None]
     release_fingerprint: str
@@ -68,7 +70,7 @@ def format_table(data, *, columns=None, missing_label="Not reported"):
 
 
 @dataclass(frozen=True)
-class Result(Generic[T]):
+class Result(JsonExportMixin, Generic[T]):
     data: T
     notes: tuple[str, ...]
     provenance: Provenance
@@ -91,7 +93,7 @@ class Result(Generic[T]):
 
 
 @dataclass(frozen=True)
-class Page(Generic[T]):
+class Page(JsonExportMixin, Generic[T]):
     items: tuple[T, ...]
     count: int
     limit: int

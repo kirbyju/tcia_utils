@@ -2,7 +2,7 @@
 
 ## Install and connect
 
-The 4.0.0a9 preview requires Python 3.11 or newer. Install the preview in a fresh environment as shown in the [README](../../README.md). Install `tcia_utils[tables]` only if you want pandas conversion; the core client imports no pandas, notebooks, or imaging libraries. The [notebook environment](https://github.com/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/requirements.txt) pins the separately tested example tools.
+The 4.0.0a10 preview requires Python 3.11 or newer. Install the preview in a fresh environment as shown in the [README](../../README.md). Install `tcia_utils[tables]` only if you want pandas conversion; the core client imports no pandas, notebooks, or imaging libraries. The [notebook environment](https://github.com/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/requirements.txt) pins the separately tested example tools.
 
 Set an explicit `base_url` for a TCIA V2 REST host. `TCIAClient` does not select a host, authenticate, transfer files, or contact the network until a method is called. Close it with a `with` block or `close()`.
 
@@ -47,6 +47,63 @@ wanted for an explicit selection.
 `Page.to_dataframe()` converts one page; `Page.to_dataframe(all_pages=True)` collects all cursor pages and checks their release/profile before conversion. The DataFrame retains provenance in `attrs["tcia_provenance"]`. `Result.to_dataframe(key="records_field", columns=[...])` converts a named record list, with optional columns for empty-table schemas. These methods require the optional `tables` extra. For a result with multiple lists, name the desired key explicitly.
 
 Set `TCIAClient(..., pin_snapshot=True)` to reject a changed release/profile between independent calls in one session. Restart the workflow with a new client after a metadata update.
+
+## Work with dictionaries and JSON without pandas
+
+Install the core package with `python -m pip install "tcia_utils==4.0.0a10"`.
+Pandas is optional: searching, clinical enrichment, image planning, manifest
+exports and downloads accept ordinary Python records. Actual transfers also need
+the `downloads` extra; table conversions need the `tables` extra.
+
+Use `.to_dict()` for a JSON-compatible Python dictionary or `.to_json(indent=2)`
+for readable JSON text. Both preserve the result envelope, including available
+provenance, query scope, notes and completeness. They work on search pages, detail
+results (including status and clinical results), participant image plans, dataset
+download plans, selections, and manifest/export/download reports.
+
+```python
+from pathlib import Path
+import json
+from tcia_utils import TCIAClient
+
+with TCIAClient(base_url="https://tcia.duckdns.org", pin_snapshot=True) as tcia:
+    page = tcia.search_datasets(query="lung", limit=10)
+    saved_page = page.to_dict()
+    print(saved_page["items"][0]["short_title"] if saved_page["items"] else "No matches")
+    print(saved_page["completeness"]["state"])
+    Path("lung-datasets-page.json").write_text(page.to_json(indent=2), encoding="utf-8")
+
+    details = tcia.get_dataset("CMB-GEC")
+    saved_details = details.to_dict()
+    print(saved_details["data"]["datasets"])
+    Path("cmb-gec.json").write_text(details.to_json(indent=2), encoding="utf-8")
+
+    # Fetch every page deliberately, retaining each page's scope and metadata.
+    pages = [part.to_dict() for part in page.iter_pages()]
+    Path("lung-datasets-pages.json").write_text(
+        json.dumps(pages, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+```
+
+`.to_dict()` and `.to_json()` make no requests and never collect extra pages.
+A search page exports `items`, paging fields, `query`, `response`, `provenance`
+and `completeness`. A detail result exports `data`, `notes`, `provenance` and
+`completeness`. A partial page stays partial in the export. Clinical routes with
+unknown completeness stay unknown, even when no more records were returned.
+`.iter_pages()` explicitly fetches additional search pages and checks their
+snapshot identity; it cannot expand a bounded clinical route into exhaustive data.
+
+If you only need records, `.items`, `.data` and image-plan `.rows` remain available.
+For example, pass `list(participant_page.items)` directly to
+`clinical_for_participants()` or `plan_participant_images()` without constructing
+a DataFrame. Plans retain `coverage`, `unresolved`, `scope`, `provenance` and
+provider versions when serialized. Download reports include `complete` and
+`scope`; completing a sample does not mean the full dataset was downloaded.
+
+The exported dictionary is independent of the original result. Nested arrays
+stay arrays, booleans stay booleans, missing values become JSON `null`, and local
+paths become strings. Unsupported values and nonfinite numbers raise an error
+instead of silently being converted to text. `.to_json()` returns text; it does not write a file by itself.
 
 ## Participants, clinical evidence, and available data
 

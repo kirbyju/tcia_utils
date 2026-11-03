@@ -14,11 +14,13 @@ from ._downloads import (
 )
 from ._errors import InvalidRequestError, ProtocolError
 from ._research import records
+from ._serialization import JsonExportMixin
+
 from ._results import _frame
 
 
 @dataclass(frozen=True)
-class ParticipantImagePlan:
+class ParticipantImagePlan(JsonExportMixin):
     rows: tuple[dict, ...]
     coverage: tuple[dict, ...]
     unresolved: tuple[dict, ...]
