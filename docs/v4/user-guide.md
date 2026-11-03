@@ -113,13 +113,30 @@ instead of silently being converted to text. `.to_json()` returns text; it does 
 
 `clinical_for_participants(participants)` accepts participant records or a DataFrame from `search_participants()`. It fetches clinical subjects in batches using exact Collection-scoped display IDs, rejects capped or inconsistent responses, and retains unmatched IDs. Its `subjects` list contains the full clinical records; `values` flattens resolved concepts into rows with `participant_id`, inference flags, evidence scope, and complete source evidence. Use `.to_dataframe("values")` for display/export. Filter this table using the selected dataset and participant IDs. A successful batch collection does not establish complete clinical coverage or validate a new identity crosswalk.
 
-The current `search_participants()` filters imaging availability, not clinical
-diagnosis or primary disease site. For a combined cohort, first obtain modality
-candidates, enrich their clinical records, then require both `primary_diagnosis`
-and `primary_site` to match. The workshop demonstrates CT + carcinoma + lung using
-literal, case-insensitive substring matching. Disease site refers to the clinical
-field, not the anatomy covered by a scan. Its recorded-only option checks both
-inference flags and retains those flags in the saved results.
+Combine imaging and clinical criteria in one query:
+
+```python
+page = tcia.search_participants(
+    short_titles=["CMB-LCA", "NSCLC-Radiomics"], modalities=["CT"],
+    diagnosis="Carcinoma", primary_site="Lung", include_inferred=True,
+)
+pages = [part.to_dict() for part in page.iter_pages()]  # pandas is optional
+```
+
+Every supplied criterion must match; filtering occurs before pagination. Clinical
+text matching is literal and case-insensitive, without synonym expansion. Disease
+site refers to the clinical field, not the anatomy covered by a scan. Clinical
+filters currently support Collections; `dataset_type="both"` returns Collections
+when clinical criteria are active. Use `include_inferred=False` to require
+patient-level evidence and non-inferred values for each selected clinical field.
+Unknown inference flags do not meet that requirement. With no text criteria,
+`include_inferred=False` selects participants with any patient-level clinical evidence.
+
+Each row's `clinical_match` retains the matching labels, inference flags and evidence
+scope. The response's `clinical_query` records the applied criteria and metadata
+snapshot. Missing clinical metadata raises an error rather than returning an empty
+cohort. Use `clinical_for_participants()` afterward to explore all known clinical
+concepts for the matches; it is no longer needed to apply diagnosis/site filters.
 
 `list_participant_assets()` and `search_public_assets()` describe available public metadata, including non-DICOM packages and narrowly reviewed IDC-missing DICOM exceptions. `search_controlled_datasets()` and `list_controlled_files()` expose public inventory metadata about controlled files without granting retrieval rights. `search_annotation_downloads()` identifies DICOM annotation downloads at a bounded level; it does not prove a source-image relationship. Keep `asset_granularity`, `inventory_status`, access route, and unknown sizes visible. A missing series identifier or route URL stays unresolved; do not parse opaque asset IDs into DICOM UIDs.
 
