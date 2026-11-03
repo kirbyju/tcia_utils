@@ -113,6 +113,14 @@ instead of silently being converted to text. `.to_json()` returns text; it does 
 
 `clinical_for_participants(participants)` accepts participant records or a DataFrame from `search_participants()`. It fetches clinical subjects in batches using exact Collection-scoped display IDs, rejects capped or inconsistent responses, and retains unmatched IDs. Its `subjects` list contains the full clinical records; `values` flattens resolved concepts into rows with `participant_id`, inference flags, evidence scope, and complete source evidence. Use `.to_dataframe("values")` for display/export. Filter this table using the selected dataset and participant IDs. A successful batch collection does not establish complete clinical coverage or validate a new identity crosswalk.
 
+The current `search_participants()` filters imaging availability, not clinical
+diagnosis or primary disease site. For a combined cohort, first obtain modality
+candidates, enrich their clinical records, then require both `primary_diagnosis`
+and `primary_site` to match. The workshop demonstrates CT + carcinoma + lung using
+literal, case-insensitive substring matching. Disease site refers to the clinical
+field, not the anatomy covered by a scan. Its recorded-only option checks both
+inference flags and retains those flags in the saved results.
+
 `list_participant_assets()` and `search_public_assets()` describe available public metadata, including non-DICOM packages and narrowly reviewed IDC-missing DICOM exceptions. `search_controlled_datasets()` and `list_controlled_files()` expose public inventory metadata about controlled files without granting retrieval rights. `search_annotation_downloads()` identifies DICOM annotation downloads at a bounded level; it does not prove a source-image relationship. Keep `asset_granularity`, `inventory_status`, access route, and unknown sizes visible. A missing series identifier or route URL stays unresolved; do not parse opaque asset IDs into DICOM UIDs.
 
 ## Select and hand off
