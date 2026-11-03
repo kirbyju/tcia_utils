@@ -2,11 +2,12 @@
 
 from collections.abc import Mapping
 from ._errors import InvalidRequestError, ProtocolError
+from ._serialization import JsonExportMixin
 from ._results import Result, Completeness
 
 
 def records(value):
-    if hasattr(value, "to_dict") and not isinstance(value, Mapping):
+    if hasattr(value, "to_dict") and not isinstance(value, (Mapping, JsonExportMixin)):
         value = value.to_dict("records")
     if not isinstance(value, (list, tuple)) or any(not isinstance(r, Mapping) for r in value):
         raise InvalidRequestError("Supply a list of records or a DataFrame")

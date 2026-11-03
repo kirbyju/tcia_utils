@@ -25,6 +25,8 @@ from ._errors import (
     NotFoundError,
     ServiceUnavailableError,
 )
+from ._serialization import JsonExportMixin
+
 from ._results import _frame
 from ._research import records
 from ._datasets import _segment, _filters
@@ -47,7 +49,7 @@ class DownloadError(TCIAError):
 
 
 @dataclass(frozen=True)
-class DownloadPlan:
+class DownloadPlan(JsonExportMixin):
     rows: tuple[dict, ...]
     provenance: object
     scope: dict = field(default_factory=dict)
@@ -86,7 +88,7 @@ class DownloadPlan:
 
 
 @dataclass(frozen=True)
-class ManifestReport:
+class ManifestReport(JsonExportMixin):
     destination: Path
     records: tuple[dict, ...]
 
@@ -99,7 +101,7 @@ class ManifestReport:
 
 
 @dataclass(frozen=True)
-class DownloadReport:
+class DownloadReport(JsonExportMixin):
     entries: tuple[dict, ...]
     scope: dict = field(default_factory=dict)
 
@@ -110,6 +112,10 @@ class DownloadReport:
             r["status"] in {"downloaded", "verified_existing", "engine_completed"}
             for r in self.entries
         )
+
+    def to_dict(self):
+        """Include completion for this selection, including sample/dry-run scope."""
+        return {**super().to_dict(), "complete": self.complete}
 
     def to_dataframe(self):
         return _frame(self.entries)

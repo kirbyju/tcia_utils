@@ -2,17 +2,17 @@
 
 TCIA Utils is a Python client for discovering TCIA datasets, participants, clinical evidence, available data, citations, and verified analytical publications. It uses the shared TCIA V2 REST service. A researcher can start with a question about a dataset without choosing the underlying catalog or storage system.
 
-Version **4.0.0a9** is an opt-in preview for testing the redesigned interface.
+Version **4.0.0a10** is an opt-in preview for testing the redesigned interface.
 Ordinary pip installations continue selecting stable 3.x. Install this version
 explicitly in a fresh Python 3.11+ environment:
 
 ```sh
-python -m pip install "tcia_utils[tables,downloads]==4.0.0a9"
+python -m pip install "tcia_utils[tables,downloads]==4.0.0a10"
 ```
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/TCIA_Dataset_and_Participant_Queries.ipynb)
 
-The [guided workshop](https://github.com/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/TCIA_Dataset_and_Participant_Queries.ipynb) pins this preview and queries real public metadata. Its default run keeps image transfers off; optional samples use max_items. Report feedback through [GitHub issues](https://github.com/kirbyju/tcia_utils/issues), including the failing operation, package/Python versions, and error message. Do not include credentials. Existing 3.x scripts should stay in a separate environment; see [migration guidance](MIGRATION.md).
+The [guided workshop](https://github.com/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/TCIA_Dataset_and_Participant_Queries.ipynb) pins its own tested preview version and queries real public metadata. Public samples use `max_items=1`; controlled transfers remain opt-in. Report feedback through [GitHub issues](https://github.com/kirbyju/tcia_utils/issues), including the failing operation, package/Python versions, and error message. Do not include credentials. Existing 3.x scripts should stay in a separate environment; see [migration guidance](MIGRATION.md).
 
 The client requires Python 3.11 or newer and `httpx`. Notebook dependencies are in [the tutorial requirements](https://github.com/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/requirements.txt). The built wheel is the package used for notebook verification; an editable checkout is not required.
 
@@ -30,6 +30,14 @@ with TCIAClient(base_url="https://tcia.duckdns.org") as tcia:
 ```
 
 Searches return one `Page` at a time. Call `page.next_page()` or iterate `page.iter_pages()` when more results are needed. Detail calls return a `Result` containing the service's named fields and notes. Both expose observed release provenance and completeness. `partial` means more cursor pages are available; `unknown` means the route has no exhaustive cursor or contains a bounded sublist. An empty successful page is a real zero-match result. Failures raise typed `TCIAError` subclasses: for example, `ServiceUnavailableError` for a missing capability or HTTP 503, `HTTPResponseError` for HTTP 500, and `TransportError` for a connection failure.
+
+For pandas-free applications, install `tcia_utils==4.0.0a10` without extras.
+Every public result provides `.to_dict()` and `.to_json()`; these retain records,
+provenance and completeness instead of requiring a DataFrame. For example,
+`page.to_json(indent=2)` serializes the current search page, while
+`details.to_dict()["data"]` accesses a detail result's native dictionaries and lists.
+Exports never fetch extra pages. See [the JSON guide](docs/v4/user-guide.md#work-with-dictionaries-and-json-without-pandas)
+for saving results and collecting pages explicitly.
 
 Collection search now returns `data_categories` directly from the shared service, without per-dataset enrichment calls. `plan_downloads()` consumes the shared REST/MCP download plan, including WordPress-derived software requirements and one software-help catalog. Runtime prerequisite checks remain in the Python client.
 
