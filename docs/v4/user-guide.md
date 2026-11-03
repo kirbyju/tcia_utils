@@ -2,7 +2,7 @@
 
 ## Install and connect
 
-The 4.0.0a11 preview requires Python 3.11 or newer. Install the preview in a fresh environment as shown in the [README](../../README.md). Install `tcia_utils[tables]` only if you want pandas conversion; the core client imports no pandas, notebooks, or imaging libraries. The [notebook environment](https://github.com/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/requirements.txt) pins the separately tested example tools.
+The 4.0.0a12 preview requires Python 3.11 or newer. Install the preview in a fresh environment as shown in the [README](../../README.md). Install `tcia_utils[tables]` only if you want pandas conversion; the core client imports no pandas, notebooks, or imaging libraries. The [notebook environment](https://github.com/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/requirements.txt) pins the separately tested example tools.
 
 Set an explicit `base_url` for a TCIA V2 REST host. `TCIAClient` does not select a host, authenticate, transfer files, or contact the network until a method is called. Close it with a `with` block or `close()`.
 
@@ -50,7 +50,7 @@ Set `TCIAClient(..., pin_snapshot=True)` to reject a changed release/profile bet
 
 ## Work with dictionaries and JSON without pandas
 
-Install the core package with `python -m pip install "tcia_utils==4.0.0a11"`.
+Install the core package with `python -m pip install "tcia_utils==4.0.0a12"`.
 Pandas is optional: searching, clinical enrichment, image planning, manifest
 exports and downloads accept ordinary Python records. Actual transfers also need
 the `downloads` extra; table conversions need the `tables` extra.
@@ -198,11 +198,21 @@ Malformed/mixed route columns, unrecognized DRS hosts, non-HTTPS file routes,
 unsafe names, and duplicate destinations fail before payload transfer. Original
 CSV filenames, sizes, and supported checksum fields are retained. Existing files
 follow the same verification/overwrite behavior as dataset downloads. Data files
-are grouped under `destination/manifest/<manifest-hash-prefix>/`; a
-normalized transfer manifest is saved in its `manifests/` subdirectory. Use
+use the destination you supply as the TDR output root. TDR creates its collection,
+participant, study and series hierarchy beneath that root; the SDK adds no dataset,
+manifest-hash, files or batch folders around it. A normalized transfer manifest is
+saved under `destination/manifests/`; TDR maintains its own `metadata/` alongside
+the data folders. Use
 `save_manifests()` when you also need an unmodified copy of an official manifest. Reports retain a content
 hash and item count, not keys, signed URLs, or a guessed dataset/participant identity.
 
+
+When continuing a download made before a12, use the previous TDR output root as
+`destination` with `resume=True`. For example, if the collection folder is inside
+`old-root/manifest/<hash>/cmb_gec/`, pass `old-root/manifest/<hash>/` as the
+destination. Existing files are not moved automatically. Sample and full downloads
+now use the same root; omit `max_items` to expand the selection without adding
+another SDK directory layer.
 
 ## Try a sample before a larger transfer
 

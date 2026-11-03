@@ -2,12 +2,12 @@
 
 TCIA Utils is a Python client for discovering TCIA datasets, participants, clinical evidence, available data, citations, and verified analytical publications. It uses the shared TCIA V2 REST service. A researcher can start with a question about a dataset without choosing the underlying catalog or storage system.
 
-Version **4.0.0a11** is an opt-in preview for testing the redesigned interface.
+Version **4.0.0a12** is an opt-in preview for testing the redesigned interface.
 Ordinary pip installations continue selecting stable 3.x. Install this version
 explicitly in a fresh Python 3.11+ environment:
 
 ```sh
-python -m pip install "tcia_utils[tables,downloads]==4.0.0a11"
+python -m pip install "tcia_utils[tables,downloads]==4.0.0a12"
 ```
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/TCIA_Dataset_and_Participant_Queries.ipynb)
@@ -31,7 +31,7 @@ with TCIAClient(base_url="https://tcia.duckdns.org") as tcia:
 
 Searches return one `Page` at a time. Call `page.next_page()` or iterate `page.iter_pages()` when more results are needed. Detail calls return a `Result` containing the service's named fields and notes. Both expose observed release provenance and completeness. `partial` means more cursor pages are available; `unknown` means the route has no exhaustive cursor or contains a bounded sublist. An empty successful page is a real zero-match result. Failures raise typed `TCIAError` subclasses: for example, `ServiceUnavailableError` for a missing capability or HTTP 503, `HTTPResponseError` for HTTP 500, and `TransportError` for a connection failure.
 
-For pandas-free applications, install `tcia_utils==4.0.0a11` without extras.
+For pandas-free applications, install `tcia_utils==4.0.0a12` without extras.
 Every public result provides `.to_dict()` and `.to_json()`; these retain records,
 provenance and completeness instead of requiring a DataFrame. For example,
 `page.to_json(indent=2)` serializes the current search page, while
@@ -94,6 +94,11 @@ To test a transfer or keep a demo small, pass `max_items=1` to
 marks a sample and counts what was selected and omitted. The limit counts whole
 DICOM series/files, not bytes; original packages without file-level selection
 cannot be sampled. See the sample-download section of the v4 user guide.
+
+The destination is passed directly to TDR, which creates the collection,
+participant, study and series folders beneath it. The SDK adds no dataset or
+manifest-hash directory layers. Normalized transfer lists are kept in
+`destination/manifests/`. See the download guide for resuming older output trees.
 
 Download preparation is visible immediately. Actual transfers require explicit
 `accept_data_policy=True`. `resume=True` requests TDR skip-existing behavior;
