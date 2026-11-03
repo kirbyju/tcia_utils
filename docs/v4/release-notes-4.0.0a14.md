@@ -17,7 +17,11 @@ The updated workshop places all criteria before its first participant query and
 explores clinical details only for the matches. Download behavior is unchanged.
 
 Validation: 315 SDK tests; 95 shared-server tests, including 14 clinical-search
-cases; a local API-to-SDK check using recorded public metadata reproduced 322
-combined matches (5 CMB-LCA and 317 NSCLC-Radiomics), or 5 with recorded-only
-diagnosis/site evidence. These are local results, not deployment verification.
-No imaging payloads were transferred.
+cases; 36 clinical-search checks against an installed wheel without pandas; and
+20 notebook checks. The complete notebook passed against deployed server 0.7.0
+and then replayed its actual recorded responses offline. REST and MCP confirmed
+the same snapshot and filters. The default search returned 322 combined matches
+(5 CMB-LCA and 317 NSCLC-Radiomics), or 5 with recorded-only diagnosis/site evidence.
+Public CT and slide planning returned 41 series and 6 slide files for the selected
+CMB-LCA participants. All sample transfers were dry runs; no imaging payloads or
+controlled credentials were used.
