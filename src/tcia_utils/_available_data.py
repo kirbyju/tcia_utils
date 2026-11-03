@@ -194,6 +194,8 @@ class AvailableDataMixin:
 
         Notes:
             DRS identifiers and public file descriptions are not download authorization.
+            file_size_bytes is a reported inventory size; file_size_basis describes its source.
+            Only download_size_bytes is an exact payload count; download_size_label may be rounded.
             Use the approved-key workflow for actual transfers; missing indexed metadata does
             not prove no matching controlled data exist."""
         result = self._available_bounded(

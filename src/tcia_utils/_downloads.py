@@ -516,6 +516,33 @@ def _size(row):
         return None
 
 
+def _transfer_size(row, column):
+    if "download_size_bytes" in row:
+        value = row["download_size_bytes"]
+        if (value is None or isinstance(value, str) and not value.strip()
+                or isinstance(value, float) and value != value):
+            return None
+        try:
+            size = int(value)
+            if isinstance(value, bool) or not 0 <= size <= 2**63 - 1:
+                raise ValueError()
+            if isinstance(value, str):
+                if not re.fullmatch(r"[0-9]+", value.strip()):
+                    raise ValueError()
+            elif size != value:
+                raise ValueError()
+        except (TypeError, ValueError, OverflowError):
+            raise DownloadError("download_size_bytes must be an exact nonnegative integer byte count") from None
+        return size
+    if column == "drs_uri" and (
+        "source_metadata_url" in row or "source_manifest_url" in row
+    ):
+        # Public controlled-inventory sizes can describe uncompressed series or
+        # rounded archive estimates. Neither is an exact payload assertion.
+        return None
+    return _size(row)
+
+
 def _prerequisite_guidance(status):
     guidance = {
         "requires_external_tool": (
@@ -633,12 +660,13 @@ def _transfer_csv(items, column):
         record = {column: item[column]}
         if column != "SeriesInstanceUID":
             algorithm = str(item.get("checksum_algorithm") or "").lower()
+            payload_size = _transfer_size(item, column)
             record.update(
                 file_name=item.get("file_name") or "",
                 collection=item.get("short_title") or "selection",
                 participant_id=item.get("participant_id") or item.get("subject_id") or "",
                 study_id=item.get("study_instance_uid") or "",
-                file_size_bytes=_size(item) if _size(item) is not None else "",
+                file_size_bytes=payload_size if payload_size is not None else "",
                 md5=item.get("md5") or (item.get("checksum") if algorithm == "md5" else "") or "",
                 sha256=item.get("sha256")
                 or (item.get("checksum") if algorithm == "sha256" else "")
@@ -931,7 +959,9 @@ class DownloadsMixin:
             supplied CLI/Python keys are used only for this invocation, without a saved copy.
             TDR normally checks/reuses existing files without resume=True. Keep the same
             destination when expanding a sample. RC2 counts reused direct/controlled files
-            under Downloaded; Synced denotes public DICOM sync jobs. resume=True explicitly
+            under Downloaded; Synced denotes public DICOM sync jobs. For controlled inventory
+            records, only download_size_bytes is an exact payload-size assertion; reported
+            file_size_bytes may describe uncompressed series data. resume=True explicitly
             requests skip-existing checks, not partial-file byte-range resume.
             A dry run still reads/fetches the small manifest. max_items selects first items in
             manifest order. Standalone direct/controlled file manifests use the generic
@@ -1072,7 +1102,9 @@ class DownloadsMixin:
             supplied CLI/Python keys are used only for this invocation, without a saved copy.
             TDR normally checks/reuses existing files without resume=True. Keep the same
             destination when expanding a sample. RC2 counts reused direct/controlled files
-            under Downloaded; Synced denotes public DICOM sync jobs. resume=True explicitly
+            under Downloaded; Synced denotes public DICOM sync jobs. For controlled inventory
+            records, only download_size_bytes is an exact payload-size assertion; reported
+            file_size_bytes may describe uncompressed series data. resume=True explicitly
             requests skip-existing checks, not partial-file byte-range resume.
             Calls plan_downloads() internally; you need not call it first. Unsupported groups
             or missing prerequisites stop the selection rather than silently omitting data.
@@ -1144,7 +1176,9 @@ class DownloadsMixin:
             supplied CLI/Python keys are used only for this invocation, without a saved copy.
             TDR normally checks/reuses existing files without resume=True. Keep the same
             destination when expanding a sample. RC2 counts reused direct/controlled files
-            under Downloaded; Synced denotes public DICOM sync jobs. resume=True explicitly
+            under Downloaded; Synced denotes public DICOM sync jobs. For controlled inventory
+            records, only download_size_bytes is an exact payload-size assertion; reported
+            file_size_bytes may describe uncompressed series data. resume=True explicitly
             requests skip-existing checks, not partial-file byte-range resume.
             max_items selects the first N records. Package or manifest rows must use
             download_dataset() or download_manifest(); source_url alone is not a file route."""

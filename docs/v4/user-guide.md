@@ -214,6 +214,23 @@ conservatively marks the affected batch failed and later batches not attempted.
 `engine_completed` records the transfer engine's completion; it is not a separate
 SDK integrity audit. Metadata-only tests are not real transfer evidence.
 
+## Controlled archive sizes
+
+A public controlled-file inventory's `file_size_bytes` can describe uncompressed
+DICOM series data. It must not be compared with the compressed ZIP payload.
+Server 0.7.1 adds `file_size_basis`, `download_size_bytes` (an exact manifest byte
+count only), and `download_size_label` (possibly rounded). Available manifest
+payload checksums are retained as `checksum` and `checksum_algorithm`.
+
+The adapter forwards exact `download_size_bytes` for validation and leaves
+ambiguous inventory sizes out of the transfer manifest. It does not disable TDR's
+checksum or response Content-Length checks. Explicit user file records/manifests
+with known payload byte sizes retain that validation; `download_size_bytes` is the
+unambiguous field when a record also contains reported series metadata.
+Creating `metadata/metadata.csv` happens during preparation and does not prove that
+payload files were downloaded. A missing-column warning from TDR's public-series
+cache loader is separate from a later size-validation failure.
+
 ## Download a manifest directly
 
 ```python
@@ -240,7 +257,7 @@ use a supported approved DRS manifest. DRS manifests cannot be declared open.
 
 Malformed/mixed route columns, unrecognized DRS hosts, non-HTTPS file routes,
 unsafe names, and duplicate destinations fail before payload transfer. Original
-CSV filenames, sizes, and supported checksum fields are retained. Existing files
+CSV filenames, explicit payload sizes, and supported checksum fields are retained. Existing files
 follow the same verification/overwrite behavior as dataset downloads. Data files
 use the destination you supply as the TDR output root. TDR creates folders from
 the available metadata; public DICOM generally has collection, participant, study
