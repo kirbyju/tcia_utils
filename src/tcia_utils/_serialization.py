@@ -33,16 +33,43 @@ def _json_value(value):
 
 
 class JsonExportMixin:
+    """Pandas-free dictionary and JSON exports shared by public result objects."""
     def to_dict(self) -> dict:
-        """Return an independent JSON-compatible copy of the public result fields.
+        """Copy the public result fields into a JSON-compatible Python dictionary.
 
-        No request is made and no further pages are fetched. Tuples become lists,
-        paths become strings, and unsupported values raise rather than being lost.
-        """
+        Returns:
+            A new nested dictionary retaining records and available provenance, scope, notes
+            and completeness. Tuples become lists, local paths become strings, and None stays None.
+
+        Raises:
+            TypeError: A value cannot be represented or a dictionary key is not a string.
+            ValueError: A number is nonfinite (NaN or infinity).
+
+        Notes:
+            Makes no requests and never collects more pages. Internal dataclass fields such
+            as a page's fetch callback are omitted; metadata dictionary keys are retained.
+            Changing the exported dictionary does not change the original result."""
         return _json_value(self)
 
     def to_json(self, *, indent: int | None = None) -> str:
-        """Return the full result as JSON text; use indent=2 for readable output."""
+        """Serialize the full public result envelope to JSON text without pandas.
+
+        Args:
+            indent: Optional JSON indentation width; None (default) uses one line. Use 2 for readable output.
+
+        Returns:
+            A Unicode JSON string with the same content as .to_dict(). Does not write a file.
+
+        Raises:
+            TypeError: A value or dictionary key is unsupported.
+            ValueError: A number is nonfinite (NaN or infinity).
+
+        Notes:
+            Makes no requests and exports only the current search page. Preserve paging and
+            completeness fields when saving results; use iter_pages() explicitly for more pages.
+
+        Example:
+            Path("metadata.json").write_text(result.to_json(indent=2), encoding="utf-8")"""
         return json.dumps(
             self.to_dict(), ensure_ascii=False, allow_nan=False, indent=indent
         )

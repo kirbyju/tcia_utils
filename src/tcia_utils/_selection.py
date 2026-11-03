@@ -88,6 +88,16 @@ def _json_copy(value: Any, label: str, *, allow_private_url: bool = False) -> An
 
 @dataclass(frozen=True)
 class Selection(JsonExportMixin):
+    """Explicit metadata selection for offline route-specific export.
+
+    Attributes:
+        records: Copied dictionaries with evidenced dataset/access/route identity.
+        release_identity: Observed metadata release information.
+        query_scope: Filters and scope used to form the selection.
+        coverage: Optional known coverage and gap information.
+        include_source_images: Whether explicitly supplied source-image records are kept.
+
+    Creating or serializing this object neither discovers images nor downloads files."""
     records: tuple[dict[str, Any], ...]
     release_identity: dict[str, Any]
     query_scope: dict[str, Any]
@@ -97,6 +107,17 @@ class Selection(JsonExportMixin):
 
 @dataclass(frozen=True)
 class ExportReport(JsonExportMixin):
+    """Local manifest-export accounting.
+
+    Attributes:
+        destination: Directory written by export_selection().
+        files: Tuple of written manifest/companion paths.
+        exported: Input records exported to a supported route.
+        deduplicated: Records accounted for as duplicate route targets.
+        excluded: Records omitted by an explicit selection rule.
+        unresolved: Records lacking an acceptable exact route.
+
+    Successful export does not establish that any image files were transferred."""
     destination: Path
     files: tuple[Path, ...]
     exported: int
@@ -113,10 +134,26 @@ def select(
     coverage: Mapping[str, Any] | None = None,
     include_source_images: bool = False,
 ) -> Selection:
-    """Capture an explicit set of metadata rows for offline export.
+    """Capture explicit metadata records and their scope for offline manifest export.
 
-    No identifier or route is inferred from an opaque asset ID or source URL.
-    """
+    Args:
+        records: Iterable of route-bearing record dictionaries; identifiers and dataset/access labels must be explicit.
+        release_identity: Observed Provenance or dictionary containing release_fingerprint.
+        query_scope: Dictionary describing the query and filters that produced these records.
+        coverage: Optional dictionary describing selection coverage and known gaps.
+        include_source_images: Keep explicitly supplied source_image records (default False); does not discover or add related images.
+
+    Returns:
+        Selection containing copied records, release identity, query scope and coverage.
+        It supports .to_dict()/.to_json() without pandas.
+
+    Raises:
+        ValueError: Identity/scope/records are invalid, not JSON-compatible, or contain disallowed credential/private fields.
+
+    Notes:
+        Local operation: no API query, credentials or file transfer. Opaque asset IDs
+        and source_url do not establish download routes. Unsafe credential-bearing metadata
+        is rejected by the existing export contract."""
     if is_dataclass(release_identity) and not isinstance(release_identity, type):
         release_identity = asdict(release_identity)
     if not isinstance(release_identity, Mapping) or not release_identity.get("release_fingerprint"):
@@ -234,7 +271,27 @@ def export_selection(
     *,
     overwrite: bool = False,
 ) -> ExportReport:
-    """Write safe route manifests and an accounting companion to a directory."""
+    """Write route-specific manifests and an accounting companion for a selection.
+
+    Args:
+        selection: Selection created by select(); unresolved or unsupported routes are accounted for rather than invented.
+        destination: Specific output directory (string or pathlib.Path); created if needed.
+        overwrite: Allow replacement of this export's files (default False). Unrelated files still prevent overwrite.
+
+    Returns:
+        ExportReport with destination, written files and exported/deduplicated/excluded/
+        unresolved counts. selection.json preserves accounting, scope and source context.
+
+    Raises:
+        TypeError: selection is not a Selection.
+        ValueError: Destination or metadata violates the export contract.
+        FileExistsError: The destination is nonempty or contains unrelated files.
+        OSError: Files cannot be written.
+
+    Notes:
+        Local file writes only; no payload transfer or authorization. CSV manifests
+        separate public SeriesInstanceUID/imageUrl routes from controlled drs_uri routes.
+        Source images are included only if supplied and explicitly selected."""
     if not isinstance(selection, Selection):
         raise TypeError("selection must be a Selection")
     target = Path(destination)

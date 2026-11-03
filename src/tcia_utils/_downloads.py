@@ -41,15 +41,36 @@ _MANIFEST_HOSTS = {
 
 
 class DownloadError(TCIAError):
-    """A transfer did not complete; the report retains all selected entries."""
+    """A download could not start or complete. Inspect .report when present for
+    selection outcomes; the exception inherits TCIAError problem fields."""
 
     def __init__(self, message, report=None):
+        """Create a transfer error with optional selection outcomes.
+
+        Args:
+            message: Human-readable failure summary.
+            report: Optional DownloadReport containing readiness or transfer outcomes.
+
+        Returns:
+            None. Initializes an error with code="download_failed" and an optional .report."""
         super().__init__(message, code="download_failed")
         self.report = report
 
 
 @dataclass(frozen=True)
 class DownloadPlan(JsonExportMixin):
+    """Inspectable dataset download groups and their published requirements.
+
+    Attributes:
+        rows: Selected download-group dictionaries with Python-route support labels.
+        provenance: Observed TCIA metadata identity.
+        scope: Dataset identity, selected/inventory group counts and filters.
+        software: Shared catalog of software labels, help links and instructions.
+        notes: Retained caveats from the shared planning service.
+
+    This is metadata, not an authenticated preflight or promise that every group is
+    Python-supported. to_dataframe() resolves readable requirement labels; to_dict()/
+    to_json() retain rows and the catalog without pandas."""
     rows: tuple[dict, ...]
     provenance: object
     scope: dict = field(default_factory=dict)
@@ -57,6 +78,18 @@ class DownloadPlan(JsonExportMixin):
     notes: tuple[str, ...] = ()
 
     def to_dataframe(self):
+        """Display download groups with readable published software requirements.
+
+        Returns:
+            A pandas.DataFrame with one row per group and a download_requirements label resolved
+            from this plan's software catalog.
+
+        Raises:
+            ImportError: The optional tables dependency is unavailable.
+
+        Notes:
+            Requires the tables extra. python_supported describes route support, not access
+            approval or successful prerequisite checks. No files are transferred."""
         rows = [
             {
                 **row,
@@ -89,35 +122,99 @@ class DownloadPlan(JsonExportMixin):
 
 @dataclass(frozen=True)
 class ManifestReport(JsonExportMixin):
+    """Accounting for small official manifests saved locally.
+
+    Attributes:
+        destination: Local directory where manifests were saved.
+        records: Manifest names, source URLs, hashes, route columns and item counts.
+
+    The files property forms local manifest paths. Saving a manifest does not download
+    its listed images or authorize controlled access."""
     destination: Path
     records: tuple[dict, ...]
 
     @property
     def files(self):
+        """Get local paths of the manifests named in this report.
+
+        Returns:
+            Tuple of pathlib.Path objects formed from destination and each record's manifest name.
+
+        Notes:
+            This property does not check file existence or download their contents."""
         return tuple(self.destination / row["manifest"] for row in self.records)
 
     def to_dataframe(self):
+        """Display the saved manifest inventory.
+
+        Returns:
+            A pandas.DataFrame of records, including manifest names, source URLs, hashes and item counts.
+
+        Raises:
+            ImportError: The optional tables dependency is unavailable.
+
+        Notes:
+            Requires the tables extra; does not reread files or download images."""
         return _frame(self.records)
 
 
 @dataclass(frozen=True)
 class DownloadReport(JsonExportMixin):
+    """Transfer or dry-run outcomes for an explicitly scoped selection.
+
+    Attributes:
+        entries: Per-entry status, route, sample counts and available guidance.
+        scope: Selection/sample/dry-run flags and transfer-engine context.
+
+    complete is False for empty or unexecuted/dry-run selections. A successful sample
+    covers only that sample. to_dict()/to_json() include entries, scope and complete;
+    to_dataframe() displays entries only."""
     entries: tuple[dict, ...]
     scope: dict = field(default_factory=dict)
 
     @property
     def complete(self):
-        """All selected entries completed; a sample never establishes full-dataset completion."""
+        """Report whether every entry in this selected transfer completed.
+
+        Returns:
+            True for a nonempty report containing only downloaded, verified_existing or
+            engine_completed entries; False for empty reports, dry runs and other outcomes.
+
+        Notes:
+            Completion covers this report's scope. A successful max_items sample does not
+            establish that the whole manifest or dataset has been downloaded."""
         return bool(self.entries) and all(
             r["status"] in {"downloaded", "verified_existing", "engine_completed"}
             for r in self.entries
         )
 
     def to_dict(self):
-        """Include completion for this selection, including sample/dry-run scope."""
+        """Export outcomes, sample/dry-run scope and selection completion without pandas.
+
+        Returns:
+            An independent JSON-compatible dictionary with entries, scope and complete.
+
+        Raises:
+            TypeError: A nested value or dictionary key is unsupported.
+            ValueError: A nested number is nonfinite.
+
+        Notes:
+            complete describes only this selection; inspect scope["is_sample"] when present.
+            No transfer, authentication or verification is performed by exporting a report."""
         return {**super().to_dict(), "complete": self.complete}
 
     def to_dataframe(self):
+        """Display the per-entry outcomes of this selected transfer.
+
+        Returns:
+            A pandas.DataFrame containing entries; use .scope and .complete for selection accounting.
+
+        Raises:
+            ImportError: The optional tables dependency is unavailable.
+
+        Notes:
+            Requires the tables extra. Use .to_dict()/.to_json() to preserve both outcomes
+            and scope in one export. This conversion does not verify files on disk."""
         return _frame(self.entries)
 
 
@@ -576,10 +673,39 @@ def _engine_summary(report, expected=None):
 
 class DownloadsMixin:
 
+    """Dataset planning, manifest convenience and explicit transfers exposed by TCIAClient."""
     def plan_downloads(
         self, short_title, *, download_ids=None, access_levels=None, dataset_type=None
     ):
-        """Get the shared REST/MCP plan; software interpretation lives on the service."""
+        """Review download groups, access terms and supported Python routes without transferring files.
+
+        Args:
+            short_title: Published dataset short title.
+            download_ids: Optional nonempty sequence of exact download IDs; omit for all current groups.
+            access_levels: Optional nonempty sequence of access labels to select groups.
+            dataset_type: Optional "collection" or "analysis_result" to disambiguate the title.
+
+        Returns:
+            DownloadPlan with rows, software-help catalog, scope, notes and provenance.
+            .to_dataframe() adds readable download_requirements; .to_dict()/.to_json() retain
+            raw rows plus the shared software catalog without requiring pandas.
+
+        Raises:
+            InvalidRequestError: A filter, identifier, or limit is invalid.
+            ProtocolError: Returned metadata or snapshot identity is inconsistent.
+            TCIAError: The service, a required component, or an HTTP request is unavailable.
+
+        Notes:
+            The shared service interprets published software requirements; the SDK labels
+            its supported Python routes. python_supported describes a route, not installed
+            prerequisites or your access approval. This call installs nothing, launches no
+            transfer engine, and does not authenticate controlled files. download_dataset()
+            calls it internally; an explicit inspection step is optional. download_manifest()
+            can use an existing manifest without this method.
+
+        Example:
+            plan = tcia.plan_downloads("CMB-GEC")
+            print(plan.to_json(indent=2))"""
         if dataset_type not in {None, "collection", "analysis_result"}:
             raise InvalidRequestError("dataset_type must be collection or analysis_result")
         params = _filters(download_ids=download_ids, access_levels=access_levels)
@@ -688,7 +814,26 @@ class DownloadsMixin:
         return DownloadPlan(tuple(rows), result.provenance, scope, data["software"], result.notes)
 
     def save_manifests(self, downloads, directory):
-        """Save unchanged official TCIA manifests with hashes; never download payloads."""
+        """Save unchanged official TCIA manifest files, not their image payloads.
+
+        Args:
+            downloads: DownloadPlan, list/tuple of download-group dictionaries, or DataFrame. Select manifest groups, not packages or individual files.
+            directory: Destination directory (string or pathlib.Path); created if needed.
+
+        Returns:
+            ManifestReport with destination and records containing local manifest names,
+            source URLs, SHA-256 hashes, recognized route columns and item counts.
+
+        Raises:
+            DownloadError: A row is not an official supported manifest or its contents are invalid.
+            InvalidRequestError: Input is not a supported collection of records.
+            OSError: The destination cannot be written.
+            TCIAError: A network request fails.
+
+        Notes:
+            Fetches the small manifests and validates their format. Existing regular files
+            with the generated names are replaced; symlinks are rejected. A controlled manifest
+            can be saved without credentials and does not grant access to its listed files."""
         rows = list(downloads.rows) if isinstance(downloads, DownloadPlan) else records(downloads)
         destination = Path(directory)
         destination.mkdir(parents=True, exist_ok=True)
@@ -750,16 +895,42 @@ class DownloadsMixin:
         resume=False,
         access_level=None,
     ):
-        """Download a local/HTTPS .tcia, CSV or TSV manifest without manual parsing.
+        """Download a local or HTTPS manifest without manually extracting its identifiers.
 
-        max_items selects at most that many whole series/files in input order.
-        It limits item count, not bytes; the report marks the selection as a sample.
-        A dry run reads this small manifest and checks local prerequisites only.
-        resume=True requests TDR skip-existing behavior. The transfer engine owns
-        layout, checksums, retries, archive extraction and controlled authorization.
-        Explicit data-policy acceptance is required for actual transfers. TDR rc1
-        inherits console progress and may privately cache a supplied credential.
-        """
+        Args:
+            manifest: Local path or HTTPS URL for .tcia, CSV or TSV with exactly one SeriesInstanceUID, imageUrl or drs_uri route column.
+            destination: Local destination directory (string or pathlib.Path). TDR owns its output layout.
+            credential_file: Path to your approved JSON API key for controlled files, or None for open data; pass a path, not key contents.
+            accept_data_policy: Set True after accepting the TCIA data usage policy. Required for actual transfers; default False.
+            dry_run: True to inspect metadata and prerequisites without a payload transfer or authentication; default False.
+            progress: Show SDK preparation messages (default True). The packaged transfer engine displays its own console progress.
+            max_items: Positive limit on whole series/files, not bytes, or None for the full selection. Samples keep their scope in the report.
+            overwrite: Request replacement behavior; default False. Cannot be combined with resume=True.
+            resume: Request TDR skip-existing checks (default False); does not guarantee byte-range resume.
+            access_level: Optional "open"/"public"/"open_noncommercial" or "controlled" label; otherwise inferred from the manifest route.
+
+        Returns:
+            DownloadReport with per-entry outcomes and selection scope. .complete describes
+            only the selected sample/full selection; inspect entries and scope before claiming
+            a dataset is complete. DownloadError.report retains outcomes when a transfer fails.
+
+        Raises:
+            InvalidRequestError: Selection or options are invalid.
+            DownloadError: A route, prerequisite, authorization or transfer fails; inspect .report when present.
+            TCIAError: A metadata request fails.
+            OSError: A local input or destination cannot be read or written.
+
+        Notes:
+            Actual transfers use the downloads extra (pip-installed tcia-data-retriever).
+            TDR owns authorization, retry/checksum behavior, archive extraction and file layout;
+            it may cache a supplied controlled key according to its documented credential policy.
+            Normal copy may download existing files again; use resume=True for skip-existing checks.
+            A dry run still reads/fetches the small manifest. max_items selects first items in
+            manifest order. This method does not require a preceding plan_downloads() call.
+
+        Example:
+            report = tcia.download_manifest("cohort.tcia", "sample", max_items=1,
+                                            accept_data_policy=True)"""
         _validate_resume(resume)
         _validate_max_items(max_items)
         _validate_policy(accept_data_policy, dry_run)
@@ -857,16 +1028,42 @@ class DownloadsMixin:
         resume=False,
         dataset_type=None,
     ):
-        """Download selected groups. Preflight all groups before transferring any.
+        """Download selected dataset groups after checking every selected route.
 
-        max_items selects a sample across the chosen groups, in inventory order.
-        resume=True requests the packaged transfer engine skip-existing behavior.
-        It does not guarantee byte-range resume of partial files.
-        Original packages without file-level routes cannot be sampled.
-        All groups are in scope unless filtered explicitly. Missing authorization
-        or engine support stops the entire selection rather than silently dropping
-        data. dry_run only queries metadata and checks local prerequisites.
-        """
+        Args:
+            short_title: Published dataset short title.
+            destination: Local destination directory (string or pathlib.Path). TDR owns its output layout.
+            credential_file: Path to your approved JSON API key for controlled files, or None for open data; pass a path, not key contents.
+            accept_data_policy: Set True after accepting the TCIA data usage policy. Required for actual transfers; default False.
+            dry_run: True to inspect metadata and prerequisites without a payload transfer or authentication; default False.
+            progress: Show SDK preparation messages (default True). The packaged transfer engine displays its own console progress.
+            max_items: Positive limit on whole series/files, not bytes, or None for the full selection. Samples keep their scope in the report.
+            overwrite: Request replacement behavior; default False. Cannot be combined with resume=True.
+            resume: Request TDR skip-existing checks (default False); does not guarantee byte-range resume.
+            download_ids: Optional nonempty sequence of exact download IDs; None includes all current groups.
+            access_levels: Optional nonempty sequence of access labels to select groups.
+            dataset_type: Optional "collection" or "analysis_result" to disambiguate the title.
+
+        Returns:
+            DownloadReport with per-entry outcomes and selection scope. .complete describes
+            only the selected sample/full selection; inspect entries and scope before claiming
+            a dataset is complete. DownloadError.report retains outcomes when a transfer fails.
+
+        Raises:
+            InvalidRequestError: Selection or options are invalid.
+            DownloadError: A route, prerequisite, authorization or transfer fails; inspect .report when present.
+            TCIAError: A metadata request fails.
+            OSError: A local input or destination cannot be read or written.
+
+        Notes:
+            Actual transfers use the downloads extra (pip-installed tcia-data-retriever).
+            TDR owns authorization, retry/checksum behavior, archive extraction and file layout;
+            it may cache a supplied controlled key according to its documented credential policy.
+            Normal copy may download existing files again; use resume=True for skip-existing checks.
+            Calls plan_downloads() internally; you need not call it first. Unsupported groups
+            or missing prerequisites stop the selection rather than silently omitting data.
+            max_items samples across groups in inventory order. Packages without file-level
+            routes cannot be sampled. A dry run checks readiness but does not establish access."""
         _validate_resume(resume)
         _validate_max_items(max_items)
         _validate_policy(accept_data_policy, dry_run)
@@ -903,7 +1100,37 @@ class DownloadsMixin:
         overwrite=False,
         resume=False,
     ):
-        """Download explicit files; max_items samples the first N records, without adding related images."""
+        """Download explicit file records without automatically adding related images.
+
+        Args:
+            files: List/tuple of file-grain dictionaries or DataFrame with an explicit public imageUrl/download_url or approved controlled drs_uri.
+            destination: Local destination directory (string or pathlib.Path). TDR owns its output layout.
+            credential_file: Path to your approved JSON API key for controlled files, or None for open data; pass a path, not key contents.
+            accept_data_policy: Set True after accepting the TCIA data usage policy. Required for actual transfers; default False.
+            dry_run: True to inspect metadata and prerequisites without a payload transfer or authentication; default False.
+            progress: Show SDK preparation messages (default True). The packaged transfer engine displays its own console progress.
+            max_items: Positive limit on whole series/files, not bytes, or None for the full selection. Samples keep their scope in the report.
+            overwrite: Request replacement behavior; default False. Cannot be combined with resume=True.
+            resume: Request TDR skip-existing checks (default False); does not guarantee byte-range resume.
+
+        Returns:
+            DownloadReport with per-entry outcomes and selection scope. .complete describes
+            only the selected sample/full selection; inspect entries and scope before claiming
+            a dataset is complete. DownloadError.report retains outcomes when a transfer fails.
+
+        Raises:
+            InvalidRequestError: Selection or options are invalid.
+            DownloadError: A route, prerequisite, authorization or transfer fails; inspect .report when present.
+            TCIAError: A metadata request fails.
+            OSError: A local input or destination cannot be read or written.
+
+        Notes:
+            Actual transfers use the downloads extra (pip-installed tcia-data-retriever).
+            TDR owns authorization, retry/checksum behavior, archive extraction and file layout;
+            it may cache a supplied controlled key according to its documented credential policy.
+            Normal copy may download existing files again; use resume=True for skip-existing checks.
+            max_items selects the first N records. Package or manifest rows must use
+            download_dataset() or download_manifest(); source_url alone is not a file route."""
         _validate_max_items(max_items)
         _validate_policy(accept_data_policy, dry_run)
         _notify(progress, "Preparing download selection...")

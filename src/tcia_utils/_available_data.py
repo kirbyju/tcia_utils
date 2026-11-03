@@ -34,10 +34,36 @@ def _segment(value: str) -> str:
 
 
 class AvailableDataMixin:
+    """Indexed public and controlled-access availability metadata exposed by TCIAClient."""
     def list_participant_assets(self, participant_key: str, *, access_levels=None,
                                 data_categories=None, data_types=None, file_formats=None,
                                 geometry_statuses=None, data_domains=None, limit=100, cursor=None):
-        """Inspect linked asset summaries; public series detail remains with IDC."""
+        """List indexed asset summaries linked to a participant.
+
+        Args:
+            participant_key: Exact dataset-scoped key from search_participants().
+            access_levels: Nonempty sequence of published labels, or None to omit this filter.
+            data_categories: Nonempty sequence of published labels, or None to omit this filter.
+            data_types: Nonempty sequence of published labels, or None to omit this filter.
+            file_formats: Nonempty sequence of published labels, or None to omit this filter.
+            geometry_statuses: Nonempty sequence of published labels, or None to omit this filter.
+            data_domains: Nonempty sequence of published labels, or None to omit this filter.
+            limit: Maximum records on this page, not an archive-wide total; see the bound below.
+            cursor: Opaque next_cursor from the same query, or None for the first page.
+
+        Returns:
+            Page of dictionaries. Use .items for this page, .iter_pages() for further pages,
+            .to_dict()/.to_json() for metadata-preserving exports, or .to_dataframe() with the tables extra.
+
+        Raises:
+            InvalidRequestError: A filter, identifier, or limit is invalid.
+            ProtocolError: Returned metadata or snapshot identity is inconsistent.
+            TCIAError: The service, a required component, or an HTTP request is unavailable.
+
+        Notes:
+            limit is 1–500 (default 100). Asset summaries can describe files or packages;
+            inspect asset_granularity and inventory_status. For an exact public image selection
+            use plan_participant_images(). Controlled metadata does not authorize downloads."""
         def validate(body):
             if body.get("participant_key") != participant_key or any(
                 row.get("participant_key") not in {None, participant_key} for row in body["assets"]
@@ -57,7 +83,34 @@ class AvailableDataMixin:
                              file_formats=None, modalities=None, geometry_statuses=None,
                              media_kinds=None, object_roles=None, requires_annotations=False,
                              limit=50, cursor=None):
-        """Search public non-DICOM assets, including documented IDC-missing exceptions."""
+        """Search indexed public non-DICOM files and packages.
+
+        Args:
+            short_titles: Nonempty sequence of dataset short titles, or None.
+            participant_id: Optional exact participant ID; constrain short_titles to avoid cross-dataset ambiguity.
+            file_formats: Nonempty sequence of published labels, or None to omit this filter.
+            modalities: Nonempty sequence of published labels, or None to omit this filter.
+            geometry_statuses: Nonempty sequence of published labels, or None to omit this filter.
+            media_kinds: Nonempty sequence of published labels, or None to omit this filter.
+            object_roles: Nonempty sequence of published labels, or None to omit this filter.
+            requires_annotations: True to require indexed annotation signals (default False).
+            limit: Maximum records on this page, not an archive-wide total; see the bound below.
+            cursor: Opaque next_cursor from the same query, or None for the first page.
+
+        Returns:
+            Page of dictionaries. Use .items for this page, .iter_pages() for further pages,
+            .to_dict()/.to_json() for metadata-preserving exports, or .to_dataframe() with the tables extra.
+
+        Raises:
+            InvalidRequestError: A filter, identifier, or limit is invalid.
+            ProtocolError: Returned metadata or snapshot identity is inconsistent.
+            TCIAError: The service, a required component, or an HTTP request is unavailable.
+
+        Notes:
+            limit is 1–500 (default 50). The inventory also admits narrowly documented
+            IDC-missing DICOM exceptions; it is not a complete public DICOM series catalog.
+            A source_url is not automatically a downloadable file. Inspect granularity, route
+            and geometry metadata before exporting or downloading records."""
         return self._page(
             "GET", "/v2/public-non-dicom/assets", "assets",
             params=_params(short_titles=short_titles, participant_id=participant_id,
@@ -85,7 +138,27 @@ class AvailableDataMixin:
 
     def search_controlled_datasets(self, *, modalities=None, file_types=None,
                                    requires_annotations=False, include_mixed=True, limit=25):
-        """Discover publicly described controlled datasets without credentials."""
+        """Discover controlled-access datasets using their public metadata.
+
+        Args:
+            modalities: Nonempty sequence of published labels, or None to omit this filter.
+            file_types: Nonempty sequence of published labels, or None to omit this filter.
+            requires_annotations: True to require annotation signals (default False).
+            include_mixed: Include datasets containing both open and controlled data (default True).
+            limit: Maximum datasets, 1–200 (default 25); no cursor is available.
+
+        Returns:
+            Result with .data["datasets"], count, limit, controlled_access_policy_url and note;
+            completeness is unknown.
+
+        Raises:
+            InvalidRequestError: A filter, identifier, or limit is invalid.
+            ProtocolError: Returned metadata or snapshot identity is inconsistent.
+            TCIAError: The service, a required component, or an HTTP request is unavailable.
+
+        Notes:
+            No credentials are needed to inspect this metadata. Retrieving controlled files
+            requires the applicable account, data usage agreement, study approval and credentials."""
         return self._available_bounded(
             "/v2/controlled-access/datasets", "datasets",
             params=_params(modalities=modalities, file_types=file_types,
@@ -97,7 +170,32 @@ class AvailableDataMixin:
     def list_controlled_files(self, short_title: str, *, route_systems=None, modalities=None,
                               file_types=None, body_part=None, participant_id=None, patient_id=None,
                               has_drs_uri=None, limit=50):
-        """Inspect a bounded public inventory; returned locations do not grant access."""
+        """Inspect a bounded public inventory of controlled-access files.
+
+        Args:
+            short_title: Published dataset short title.
+            route_systems: Optional nonempty sequence of source route labels.
+            modalities: Nonempty sequence of published labels, or None to omit this filter.
+            file_types: Nonempty sequence of published labels, or None to omit this filter.
+            body_part: Optional body-part label.
+            participant_id: Optional exact dataset-scoped participant ID.
+            patient_id: Optional source patient-ID filter; do not infer a cross-dataset identity from it.
+            has_drs_uri: True/False to filter DRS availability, or None for either.
+            limit: Maximum files, 1–500 (default 50); no cursor is available.
+
+        Returns:
+            Result with .data["files"], count, limit, access policy and warning;
+            completeness is unknown.
+
+        Raises:
+            InvalidRequestError: A filter, identifier, or limit is invalid.
+            ProtocolError: Returned metadata or snapshot identity is inconsistent.
+            TCIAError: The service, a required component, or an HTTP request is unavailable.
+
+        Notes:
+            DRS identifiers and public file descriptions are not download authorization.
+            Use the approved-key workflow for actual transfers; missing indexed metadata does
+            not prove no matching controlled data exist."""
         result = self._available_bounded(
             f"/v2/controlled-access/{_segment(short_title)}/files", "files",
             params=_params(route_systems=route_systems, modalities=modalities, file_types=file_types,
@@ -115,7 +213,27 @@ class AvailableDataMixin:
 
     def search_annotation_downloads(self, *, query=None, short_titles=None, modalities=None,
                                     access_levels=None, limit=25):
-        """Inspect download-level annotation signals, without inferring source images."""
+        """Find download groups with DICOM annotation signals.
+
+        Args:
+            query: Optional free-text filter.
+            short_titles: Nonempty sequence of dataset short titles, or None.
+            modalities: Nonempty sequence of published labels, or None to omit this filter.
+            access_levels: Nonempty sequence of published labels, or None to omit this filter.
+            limit: Maximum download groups, 1–200 (default 25); no cursor is available.
+
+        Returns:
+            Result with .data["downloads"], routing_note, scope and public_dicom_annotation_detail;
+            completeness is unknown.
+
+        Raises:
+            InvalidRequestError: A filter, identifier, or limit is invalid.
+            ProtocolError: Returned metadata or snapshot identity is inconsistent.
+            TCIAError: The service, a required component, or an HTTP request is unavailable.
+
+        Notes:
+            This is group-level discovery. A signal does not identify every annotated
+            participant, establish segmentation/source correspondence, or add source images."""
         return self._available_bounded(
             "/v2/dicom/annotation-downloads", "downloads",
             params=_params(query=query, short_titles=short_titles, modalities=modalities,

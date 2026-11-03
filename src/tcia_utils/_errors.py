@@ -4,7 +4,17 @@ from __future__ import annotations
 
 
 class TCIAError(Exception):
-    """Base error retaining the server's problem details when available."""
+    """Base exception for TCIA client and service failures.
+
+    Attributes:
+        detail: Human-readable error description.
+        code: Machine-readable problem code when available.
+        status: HTTP status when a response is available.
+        retryable: Whether retry may succeed; not a guarantee.
+
+    Concrete subclasses distinguish invalid inputs, missing records, unavailable
+    components, transport failures and inconsistent protocol responses. A missing
+    component is an error, not a successful zero-match result."""
 
     def __init__(
         self,
@@ -14,6 +24,16 @@ class TCIAError(Exception):
         status: int | None = None,
         retryable: bool = False,
     ) -> None:
+        """Create a typed error retaining service problem details when available.
+
+        Args:
+            detail: Human-readable error description.
+            code: Optional machine-readable problem code.
+            status: Optional HTTP status; None for failures without a response.
+            retryable: Whether retry may succeed (default False); not a guarantee.
+
+        Returns:
+            None. Initializes the detail, code, status and retryable attributes."""
         super().__init__(detail)
         self.detail = detail
         self.code = code
