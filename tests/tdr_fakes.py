@@ -10,7 +10,7 @@ def success(total):
     return dict(
         schema_version=1,
         status="success",
-        version="0.1.0rc1",
+        version="0.1.0rc2",
         total=total,
         downloaded=total,
         synced=0,

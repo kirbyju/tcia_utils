@@ -2,12 +2,12 @@
 
 TCIA Utils is a Python client for discovering TCIA datasets, participants, clinical evidence, available data, citations, and verified analytical publications. It uses the shared TCIA V2 REST service. A researcher can start with a question about a dataset without choosing the underlying catalog or storage system.
 
-Version **4.0.0a12** is an opt-in preview for testing the redesigned interface.
+Version **4.0.0a13** is an opt-in preview for testing the redesigned interface.
 Ordinary pip installations continue selecting stable 3.x. Install this version
 explicitly in a fresh Python 3.11+ environment:
 
 ```sh
-python -m pip install "tcia_utils[tables,downloads]==4.0.0a12"
+python -m pip install "tcia_utils[tables,downloads]==4.0.0a13"
 ```
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/TCIA_Dataset_and_Participant_Queries.ipynb)
@@ -31,7 +31,7 @@ with TCIAClient(base_url="https://tcia.duckdns.org") as tcia:
 
 Searches return one `Page` at a time. Call `page.next_page()` or iterate `page.iter_pages()` when more results are needed. Detail calls return a `Result` containing the service's named fields and notes. Both expose observed release provenance and completeness. `partial` means more cursor pages are available; `unknown` means the route has no exhaustive cursor or contains a bounded sublist. An empty successful page is a real zero-match result. Failures raise typed `TCIAError` subclasses: for example, `ServiceUnavailableError` for a missing capability or HTTP 503, `HTTPResponseError` for HTTP 500, and `TransportError` for a connection failure.
 
-For pandas-free applications, install `tcia_utils==4.0.0a12` without extras.
+For pandas-free applications, install `tcia_utils==4.0.0a13` without extras.
 Every public result provides `.to_dict()` and `.to_json()`; these retain records,
 provenance and completeness instead of requiring a DataFrame. For example,
 `page.to_json(indent=2)` serializes the current search page, while
@@ -55,7 +55,7 @@ with TCIAClient(base_url="https://tcia.duckdns.org", pin_snapshot=True) as tcia:
     #     download_ids=[chosen_download_id], max_items=1, accept_data_policy=True)
 ```
 
-Optional transfers delegate to `tcia-data-retriever==0.1.0rc1`, including its pip-bundled headless executable. `tcia_utils[downloads]` installs it. The shared TCIA service resolves basic public DICOM and non-DICOM participant selections; it reuses IDC metadata for DICOM. The Python client does not install `idc-index`. Advanced IDC queries and viewers remain available through IDC's own tools. The SDK prepares exact, bounded selections and reports; TDR owns downloads, retries, verification, authorization and output layout. No separate Go/desktop installation is needed. Aspera groups remain external-only. See the [download guide](docs/v4/user-guide.md#download-from-python) for policy acceptance, credential-cache behavior and current interface limits.
+Optional transfers delegate to `tcia-data-retriever==0.1.0rc2`, including its pip-bundled headless executable. `tcia_utils[downloads]` installs it. The shared TCIA service resolves basic public DICOM and non-DICOM participant selections; it reuses IDC metadata for DICOM. The Python client does not install `idc-index`. Advanced IDC queries and viewers remain available through IDC's own tools. The SDK prepares exact, bounded selections and reports; TDR owns downloads, retries, verification, authorization and output layout. No separate Go/desktop installation is needed. Aspera groups remain external-only. See the [download guide](docs/v4/user-guide.md#download-from-python) for policy acceptance, credential handling and current interface limits.
 
 Use [the task-oriented guide](docs/v4/user-guide.md) for methods, evidence scope, selection exports, and tool handoffs. The [migration guide](MIGRATION.md) explains the 3.x API change; [troubleshooting](docs/v4/troubleshooting.md) covers setup and response errors. The canonical [guided workshop](https://github.com/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/TCIA_Dataset_and_Participant_Queries.ipynb) teaches dataset discovery/download planning, participant cohorts, brain MR segmentations, and controlled CT/SEG access in one conversational lesson. It uses real public metadata by default; public image cells run bounded samples; controlled transfers remain opt-in. It shows download categories and uses package helpers for page collection, clinical enrichment, manifest saving, and direct Python downloads. Original slide packages need configured transfer software; indexed NIfTI paths still require their published package rather than an invented per-file URL.
 
@@ -102,6 +102,7 @@ manifest-hash directory layers. Normalized transfer lists are kept in
 
 Download preparation is visible immediately. Actual transfers require explicit
 `accept_data_policy=True`. `resume=True` requests TDR skip-existing behavior;
-normal copy can download existing files again. The current TDR wrapper always
-inherits console progress and may privately cache supplied controlled keys.
+normal copy can download existing files again. TCIA Utils requests plain progress
+lines, which TDR streams into Python/notebook output. Controlled keys are
+invocation-only and are not copied into the GUI credential cache.
 Read the download guide before using credentials. No dependency is installed at runtime.

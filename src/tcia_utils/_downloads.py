@@ -524,8 +524,8 @@ def _prerequisite_guidance(status):
             "https://github.com/kirbyju/TCIA_Notebooks/blob/main/TCIA_Aspera_CLI_Downloads.ipynb",
         ),
         "requires_python_download_extra": (
-            "The packaged Python transfer dependency is missing.",
-            "Install tcia_utils[downloads] in the environment running the notebook.",
+            "The packaged Python transfer dependency is missing or its imported wrapper is outdated.",
+            "Install tcia_utils[downloads] in this environment, then restart the Colab/Jupyter runtime if it already imported the older transfer package.",
             "https://github.com/kirbyju/tcia_utils/blob/main/docs/v4/user-guide.md#download-from-python",
         ),
         "requires_credential": (
@@ -591,6 +591,11 @@ def _tdr():
         import tcia_data_retriever
     except ImportError:
         raise DownloadError("Install tcia_utils[downloads] for Python downloads") from None
+    from inspect import signature
+    if "progress" not in signature(tcia_data_retriever.download).parameters:
+        raise DownloadError(
+            "Install tcia_utils[downloads] with TDR 0.1.0rc2 and restart the Python/Colab runtime"
+        )
     return tcia_data_retriever
 
 
@@ -903,7 +908,7 @@ class DownloadsMixin:
             credential_file: Path to your approved JSON API key for controlled files, or None for open data; pass a path, not key contents.
             accept_data_policy: Set True after accepting the TCIA data usage policy. Required for actual transfers; default False.
             dry_run: True to inspect metadata and prerequisites without a payload transfer or authentication; default False.
-            progress: Show SDK preparation messages (default True). The packaged transfer engine displays its own console progress.
+            progress: Show SDK preparation messages (default True). TDR streams periodic progress lines into Python/notebook output.
             max_items: Positive limit on whole series/files, not bytes, or None for the full selection. Samples keep their scope in the report.
             overwrite: Request replacement behavior; default False. Cannot be combined with resume=True.
             resume: Request TDR skip-existing checks (default False); does not guarantee byte-range resume.
@@ -923,7 +928,7 @@ class DownloadsMixin:
         Notes:
             Actual transfers use the downloads extra (pip-installed tcia-data-retriever).
             TDR owns authorization, retry/checksum behavior, archive extraction and file layout;
-            it may cache a supplied controlled key according to its documented credential policy.
+            supplied CLI/Python keys are used only for this invocation, without a saved copy.
             Normal copy may download existing files again; use resume=True for skip-existing checks.
             A dry run still reads/fetches the small manifest. max_items selects first items in
             manifest order. This method does not require a preceding plan_downloads() call.
@@ -1036,7 +1041,7 @@ class DownloadsMixin:
             credential_file: Path to your approved JSON API key for controlled files, or None for open data; pass a path, not key contents.
             accept_data_policy: Set True after accepting the TCIA data usage policy. Required for actual transfers; default False.
             dry_run: True to inspect metadata and prerequisites without a payload transfer or authentication; default False.
-            progress: Show SDK preparation messages (default True). The packaged transfer engine displays its own console progress.
+            progress: Show SDK preparation messages (default True). TDR streams periodic progress lines into Python/notebook output.
             max_items: Positive limit on whole series/files, not bytes, or None for the full selection. Samples keep their scope in the report.
             overwrite: Request replacement behavior; default False. Cannot be combined with resume=True.
             resume: Request TDR skip-existing checks (default False); does not guarantee byte-range resume.
@@ -1058,7 +1063,7 @@ class DownloadsMixin:
         Notes:
             Actual transfers use the downloads extra (pip-installed tcia-data-retriever).
             TDR owns authorization, retry/checksum behavior, archive extraction and file layout;
-            it may cache a supplied controlled key according to its documented credential policy.
+            supplied CLI/Python keys are used only for this invocation, without a saved copy.
             Normal copy may download existing files again; use resume=True for skip-existing checks.
             Calls plan_downloads() internally; you need not call it first. Unsupported groups
             or missing prerequisites stop the selection rather than silently omitting data.
@@ -1108,7 +1113,7 @@ class DownloadsMixin:
             credential_file: Path to your approved JSON API key for controlled files, or None for open data; pass a path, not key contents.
             accept_data_policy: Set True after accepting the TCIA data usage policy. Required for actual transfers; default False.
             dry_run: True to inspect metadata and prerequisites without a payload transfer or authentication; default False.
-            progress: Show SDK preparation messages (default True). The packaged transfer engine displays its own console progress.
+            progress: Show SDK preparation messages (default True). TDR streams periodic progress lines into Python/notebook output.
             max_items: Positive limit on whole series/files, not bytes, or None for the full selection. Samples keep their scope in the report.
             overwrite: Request replacement behavior; default False. Cannot be combined with resume=True.
             resume: Request TDR skip-existing checks (default False); does not guarantee byte-range resume.
@@ -1127,7 +1132,7 @@ class DownloadsMixin:
         Notes:
             Actual transfers use the downloads extra (pip-installed tcia-data-retriever).
             TDR owns authorization, retry/checksum behavior, archive extraction and file layout;
-            it may cache a supplied controlled key according to its documented credential policy.
+            supplied CLI/Python keys are used only for this invocation, without a saved copy.
             Normal copy may download existing files again; use resume=True for skip-existing checks.
             max_items selects the first N records. Package or manifest rows must use
             download_dataset() or download_manifest(); source_url alone is not a file route."""
@@ -1385,7 +1390,7 @@ class DownloadsMixin:
             ) from None
         if not progress:
             warnings.warn(
-                "progress=False silences SDK messages; tcia-data-retriever 0.1.0rc1 still inherits console progress.",
+                "progress=False silences SDK messages; TDR transfer progress remains enabled.",
                 UserWarning,
                 stacklevel=2,
             )
@@ -1413,6 +1418,7 @@ class DownloadsMixin:
                     accept_data_policy=True,
                     credential_file=key_path if controlled else None,
                     skip_existing=resume,
+                    progress="plain",
                 )
                 summary = _engine_summary(raw, expected)
                 for i in indexes:
