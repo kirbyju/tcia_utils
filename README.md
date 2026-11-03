@@ -97,14 +97,18 @@ marks a sample and counts what was selected and omitted. The limit counts whole
 DICOM series/files, not bytes; original packages without file-level selection
 cannot be sampled. See the sample-download section of the v4 user guide.
 
-The destination is passed directly to TDR, which creates the collection,
-participant, study and series folders beneath it. The SDK adds no dataset or
-manifest-hash directory layers. Normalized transfer lists are kept in
+The destination is passed directly to TDR, which arranges files using available
+metadata. Public DICOM has collection, participant, study and series folders;
+file manifests can have fewer levels. The SDK adds no dataset or manifest-hash
+directory layers. Normalized transfer lists are kept in
 `destination/manifests/`. See the download guide for resuming older output trees.
 
 Download preparation is visible immediately. Actual transfers require explicit
-`accept_data_policy=True`. `resume=True` requests TDR skip-existing behavior;
-normal copy can download existing files again. TCIA Utils requests plain progress
-lines, which TDR streams into Python/notebook output. Controlled keys are
+`accept_data_policy=True`. To expand a sample, keep the same destination and omit
+`max_items`; TDR can reuse existing files without requiring `resume=True`.
+`resume=True` explicitly requests skip-existing checks, not partial-file byte-range
+resume. In TDR RC2, `Downloaded` also includes reused direct/controlled files;
+`Synced` is specific to the public DICOM sync route. See the guide for details.
+TCIA Utils requests plain progress lines, which TDR streams into Python/notebook output. Controlled keys are
 invocation-only and are not copied into the GUI credential cache.
 Read the download guide before using credentials. No dependency is installed at runtime.

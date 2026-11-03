@@ -166,12 +166,23 @@ Aspera groups stop the selection; use the official separate application workflow
 
 The SDK retains discovery, cohort filtering, exact selection scope, local/URL
 manifest convenience, max_items sampling and reports. TDR owns payload transfer,
-retries, checksums, authorization and output layout. ZIP archives can be extracted
-automatically. The SDK no longer implements token exchange, DRS resolution or HTTP
-file streaming. Existing files follow TDR copy/skip-existing behavior rather than
-the former SDK-specific verifier. Normal copy can download existing files again.
-Pass `resume=True` with the same destination to request skip-existing checks;
-this is not a byte-range resume guarantee. Do not combine resume and overwrite.
+retries, checksums, authorization and output layout. Archive extraction depends on
+the route; direct/controlled file downloads preserve ZIP archives. The SDK no longer implements token exchange, DRS resolution or HTTP
+file streaming. TDR normally checks existing files even without `resume=True`.
+After inspecting a sample, keep the same destination and omit `max_items` to
+expand the selection and reuse files already present. Public DICOM uses its
+existing-series sync behavior; direct and controlled files use local checks,
+including supplied sizes/checksums when available. With neither size nor checksum,
+a regular existing file can be accepted based on presence alone.
+`resume=True` explicitly requests skip-existing checks; it is not required for
+ordinary sample-to-full reuse and does not guarantee partial-file byte-range
+resume. Do not combine resume and overwrite.
+
+TDR RC2 summary categories differ by route. `Synced` identifies public DICOM sync
+jobs; a sync job can still transfer missing files. For direct and controlled files,
+`Downloaded` counts both newly transferred and already-present accepted files.
+`Downloaded: N, Synced: 0` therefore does not establish that N payloads were fetched
+again. This is TDR's reporting behavior, not an additional SDK transfer.
 
 Progress is on by default. The SDK asks TDR RC2 for `plain` progress: readable
 newline snapshots, normally about every five seconds during active transfers,
@@ -231,14 +242,25 @@ Malformed/mixed route columns, unrecognized DRS hosts, non-HTTPS file routes,
 unsafe names, and duplicate destinations fail before payload transfer. Original
 CSV filenames, sizes, and supported checksum fields are retained. Existing files
 follow the same verification/overwrite behavior as dataset downloads. Data files
-use the destination you supply as the TDR output root. TDR creates its collection,
-participant, study and series hierarchy beneath that root; the SDK adds no dataset,
+use the destination you supply as the TDR output root. TDR creates folders from
+the available metadata; public DICOM generally has collection, participant, study
+and series detail, while file manifests may have less. The SDK adds no dataset,
 manifest-hash, files or batch folders around it. A normalized transfer manifest is
 saved under `destination/manifests/`; TDR maintains its own `metadata/` alongside
 the data folders. Use
 `save_manifests()` when you also need an unmodified copy of an official manifest. Reports retain a content
 hash and item count, not keys, signed URLs, or a guessed dataset/participant identity.
 
+A standalone `download_manifest()` call supplies the generic collection label
+`manifest` in its normalized file manifest. TDR uses that label when arranging
+direct/controlled files and preserves their supplied filenames, including `.zip`.
+These archives are not automatically expanded by TDR RC2's direct/DRS file route.
+It cannot build the public DICOM hierarchy without the corresponding metadata.
+When dataset context is already known, `download_dataset(short_title, ...,
+download_ids=[...])` retains the real collection label. Changing that label later
+can change the path used for existing-file checks; keep it consistent when
+continuing a download. Renaming archives or inferring participants from their
+contents is not necessary to reuse them.
 
 When continuing a download made before a12, use the previous TDR output root as
 `destination` with `resume=True`. For example, if the collection folder is inside
@@ -287,8 +309,9 @@ The Python adapter uses that reduced manifest.
 full dataset was downloaded or that all remaining files are authorized/available.
 A successful transfer also does not prove image quality or image/label alignment.
 Inspect the sample and report, then omit `max_items` to request the larger
-selection, preferably in a separate destination. The larger transfer repeats its
-normal checks. No automatic full download follows a successful sample.
+selection in the same destination. TDR repeats its normal checks and can reuse
+the sample; choose a separate destination only if you want a separate copy.
+No automatic full download follows a successful sample.
 
 External-application packages cannot be sampled by this SDK.
 The call reports `unsupported_sample` and transfers no payloads, including any
