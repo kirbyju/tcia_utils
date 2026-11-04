@@ -2,12 +2,12 @@
 
 TCIA Utils is a Python client for discovering TCIA datasets, participants, clinical evidence, available data, citations, and verified analytical publications. It uses the shared TCIA V2 REST service. A researcher can start with a question about a dataset without choosing the underlying catalog or storage system.
 
-Version **4.0.0a16** is an opt-in preview for testing the redesigned interface.
+Version **4.0.0a17** is an opt-in preview for testing the redesigned interface.
 Ordinary pip installations continue selecting stable 3.x. Install this version
 explicitly in a fresh Python 3.11+ environment:
 
 ```sh
-python -m pip install "tcia_utils[tables,downloads]==4.0.0a16"
+python -m pip install "tcia_utils[tables,downloads]==4.0.0a17"
 ```
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kirbyju/TCIA_Notebooks/blob/main/tcia_utils_v4/TCIA_Dataset_and_Participant_Queries.ipynb)
@@ -31,7 +31,7 @@ with TCIAClient(base_url="https://tcia.duckdns.org") as tcia:
 
 Searches return one `Page` at a time. Call `page.next_page()` or iterate `page.iter_pages()` when more results are needed. Detail calls return a `Result` containing the service's named fields and notes. Both expose observed release provenance and completeness. `partial` means more cursor pages are available; `unknown` means the route has no exhaustive cursor or contains a bounded sublist. An empty successful page is a real zero-match result. Failures raise typed `TCIAError` subclasses: for example, `ServiceUnavailableError` for a missing capability or HTTP 503, `HTTPResponseError` for HTTP 500, and `TransportError` for a connection failure.
 
-For pandas-free applications, install `tcia_utils==4.0.0a16` without extras.
+For pandas-free applications, install `tcia_utils==4.0.0a17` without extras.
 Every public result provides `.to_dict()` and `.to_json()`; these retain records,
 provenance and completeness instead of requiring a DataFrame. For example,
 `page.to_json(indent=2)` serializes the current search page, while
@@ -105,10 +105,18 @@ directory layers. Normalized transfer lists are kept in
 
 Download preparation is visible immediately. Actual transfers require explicit
 `accept_data_policy=True`. To expand a sample, keep the same destination and omit
-`max_items`; TDR can reuse existing files without requiring `resume=True`.
-`resume=True` explicitly requests skip-existing checks, not partial-file byte-range
-resume. TDR RC3 counts verified existing files as `Skipped`; `Synced` identifies
+`max_items`; TDR automatically checks and reuses existing files. To retry an
+interrupted download, rerun the same call with the same destination. This does
+not promise partial-file byte-range resume. TDR RC3 counts accepted existing files
+as `Skipped`; `Synced` identifies
 public DICOM sync jobs, which can still fetch missing files. See the guide for details.
 TCIA Utils requests plain progress lines, which TDR streams into Python/notebook output. Controlled keys are
 invocation-only and are not copied into the GUI credential cache.
 Read the download guide before using credentials. No dependency is installed at runtime.
+
+For selected participants whose files require Aspera, `export_aspera_manifest()`
+writes the exact `packageUrl,packagePath` CSV used by the TCIA Participant Explorer.
+It queries metadata only, preserves dataset-scoped identity and current package
+links, and supports `max_items` for a small file-list sample. The separate
+[Aspera notebook](https://github.com/kirbyju/TCIA_Notebooks/blob/main/TCIA_Aspera_CLI_Downloads.ipynb)
+installs and invokes Aspera; the SDK does not.

@@ -12,8 +12,7 @@ from test_v4_downloads import Client, row, fake_http
 
 
 @pytest.mark.parametrize('max_items', [None, 1])
-@pytest.mark.parametrize('resume', [False, True])
-def test_full_sample_and_resume_use_the_identical_caller_root(tmp_path, tdr_calls, max_items, resume):
+def test_full_sample_and_retries_use_the_identical_caller_root(tmp_path, tdr_calls, max_items):
     manifest = tmp_path / 'cohort.tcia'
     manifest.write_text('ListOfSeriesToDownload=\n1.2.3\n1.2.4\n')
     root = tmp_path / 'chosen-root'
@@ -21,12 +20,12 @@ def test_full_sample_and_resume_use_the_identical_caller_root(tmp_path, tdr_call
     existing.parent.mkdir(parents=True)
     existing.write_bytes(b'synthetic existing file')
     report = DownloadsMixin().download_manifest(
-        manifest, root, max_items=max_items, resume=resume, accept_data_policy=True,
+        manifest, root, max_items=max_items, accept_data_policy=True,
     )
     assert report.complete
     assert tdr_calls[0]['downloadDir'] == str(root)
     assert report.entries[0]['destination'] == str(root)
-    assert tdr_calls[0]['options']['skip_existing'] is resume
+    assert 'skip_existing' not in tdr_calls[0]['options']
     assert tdr_calls[0]['seriesInstanceUID'] == (['1.2.3'] if max_items else ['1.2.3', '1.2.4'])
     assert existing.read_bytes() == b'synthetic existing file'
     assert set(p.name for p in root.iterdir()) == {'cmb_gec', 'manifests'}

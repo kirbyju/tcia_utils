@@ -47,7 +47,7 @@ def test_core_only_install_has_actionable_download_prerequisite(tmp_path, monkey
 def test_metadata_dry_run_requires_neither_policy_acceptance_nor_launch(tmp_path, tdr_calls):
     p = tmp_path / "list.tcia"
     p.write_text("ListOfSeriesToDownload=\n1.2.3\n")
-    report = DownloadsMixin().download_manifest(p, tmp_path / "out", dry_run=True, resume=True)
+    report = DownloadsMixin().download_manifest(p, tmp_path / "out", dry_run=True)
     assert report.scope["data_policy_accepted"] is False
     assert not report.complete and not tdr_calls and not (tmp_path / "out").exists()
 
@@ -111,19 +111,13 @@ def test_engine_skip_existing_counts_are_retained_without_secret_extras(tmp_path
 
     install_tdr(monkeypatch, handler=skipped)
     report = DownloadsMixin().download_files(
-        [row()], tmp_path, resume=True, accept_data_policy=True
+        [row()], tmp_path, accept_data_policy=True
     )
     assert report.complete and report.entries[0]["engine_summary"]["skipped"] == 1
     text = json.dumps(report.entries) + json.dumps(report.scope)
     assert "FAKE-KEY" not in text and "SECRET" not in text
 
 
-def test_resume_and_overwrite_do_not_silently_compete(tmp_path, tdr_calls):
-    with pytest.raises(InvalidRequestError, match="Choose overwrite"):
-        DownloadsMixin().download_files(
-            [row()], tmp_path, resume=True, overwrite=True, accept_data_policy=True
-        )
-    assert not tdr_calls
 
 
 def test_sdk_no_longer_implements_payload_auth_or_streaming():

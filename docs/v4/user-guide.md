@@ -168,18 +168,17 @@ The SDK retains discovery, cohort filtering, exact selection scope, local/URL
 manifest convenience, max_items sampling and reports. TDR owns payload transfer,
 retries, checksums, authorization and output layout. Archive extraction depends on
 the route; direct/controlled file downloads preserve ZIP archives. The SDK no longer implements token exchange, DRS resolution or HTTP
-file streaming. TDR normally checks existing files even without `resume=True`.
+file streaming. TDR automatically checks existing files.
 After inspecting a sample, keep the same destination and omit `max_items` to
 expand the selection and reuse files already present. Public DICOM uses its
 existing-series sync behavior; direct and controlled files use local checks,
 including supplied sizes/checksums when available. With neither size nor checksum,
 a regular existing file can be accepted based on presence alone.
-`resume=True` explicitly requests skip-existing checks; it is not required for
-ordinary sample-to-full reuse and does not guarantee partial-file byte-range
-resume. Do not combine resume and overwrite.
+To retry an interrupted download, rerun the same call with the same destination.
+Missing or incomplete files may be downloaded again; partial-file byte-range
+resume is not promised.
 
-TDR RC3 counts files accepted by existing-file prechecks as `Skipped`, both in
-normal runs and with `resume=True`. They still count toward completed progress.
+TDR RC3 counts files accepted by existing-file prechecks as `Skipped`. They still count toward completed progress.
 `Downloaded` counts new non-sync transfers. `Synced` identifies public DICOM sync
 jobs, which can still transfer missing files. Earlier RC2 builds included reused
 direct/controlled files under `Downloaded`; the new counts do not imply a change
@@ -281,7 +280,7 @@ continuing a download. Renaming archives or inferring participants from their
 contents is not necessary to reuse them.
 
 When continuing a download made before a12, use the previous TDR output root as
-`destination` with `resume=True`. For example, if the collection folder is inside
+`destination`. For example, if the collection folder is inside
 `old-root/manifest/<hash>/cmb_gec/`, pass `old-root/manifest/<hash>/` as the
 destination. Existing files are not moved automatically. Sample and full downloads
 now use the same root; omit `max_items` to expand the selection without adding
@@ -388,6 +387,41 @@ exports retain their original missing values. Formatting avoids pandas' implicit
 object downcasting and is tested with pandas 2.2 and 3.1.
 
 When upgrading from earlier transfer backends, use a fresh destination. TDR owns
-its file layout and completion metadata; resume=True does not migrate an earlier
-IDC or SDK HTTP output tree. Keep prior downloads separate until you have chosen
+its file layout and completion metadata; rerunning a download does not migrate
+an earlier IDC or SDK HTTP output tree. Keep prior downloads separate until you have chosen
 the layout for your workflow.
+
+
+## Hand a participant cohort to the Aspera notebook
+
+The SDK can export metadata for a separately installed application without
+installing or invoking that application. For exact indexed files in public TCIA
+Aspera packages, preserve the complete dataset-scoped participant records:
+
+```python
+manifest = tcia.export_aspera_manifest(
+    participants, "tcia_aspera_files.csv", modality="MR",
+    file_formats=["NIFTI"], max_items=2,
+)
+print(manifest.scope)
+print(manifest.to_json(indent=2))
+```
+
+The two CSV columns are `packageUrl,packagePath`, matching the Participant
+Explorer export. The helper validates each participant key against its dataset
+identity, follows every page of matching public-file metadata, and resolves
+current package links by download ID. It retains exact indexed paths, including
+follow-up studies; it never guesses folders or creates links for archive members.
+A missing, controlled, ambiguous or unsupported route raises before writing a
+partial manifest. Coverage includes requested participants with zero indexed
+matches. It does not establish complete source coverage or image/mask pairing.
+
+`max_items` limits exported files across the cohort, not bytes or participants.
+The report preserves the full matching count and per-participant coverage. Omit
+the limit for all matching files; use `overwrite=True` to replace an existing
+manifest intentionally. No pandas or downloads extra is required for record
+inputs and JSON output. Use the separate Aspera notebook to install the CLI and
+consume the CSV. The SDK still does not execute Aspera or provide its transfers.
+
+The redundant `resume` option was removed in 4.0.0a17. Remove it from old v4 calls;
+TDR's automatic reuse remains enabled.

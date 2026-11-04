@@ -17,9 +17,11 @@ from ._downloads import DownloadPlan, DownloadReport, ManifestReport, DownloadEr
 
 __all__ = [
     "format_table", "DownloadPlan", "DownloadReport", "ManifestReport", "DownloadError", "ParticipantImagePlan",
-    "TCIAClient", "Selection", "ExportReport", "Result", "Page", "Provenance", "Completeness", "ServiceStatus",
+    "AsperaManifestReport", "TCIAClient", "Selection", "ExportReport", "Result", "Page", "Provenance", "Completeness", "ServiceStatus",
     "TCIAError", "InvalidRequestError", "NotFoundError", "RetiredRouteError",
     "ServiceUnavailableError", "TransportError", "HTTPResponseError", "ProtocolError",
 ]
 
 from ._images import ParticipantImagePlan
+
+from ._handoffs import AsperaManifestReport

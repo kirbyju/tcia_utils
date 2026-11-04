@@ -19,6 +19,7 @@ from ._available_data import AvailableDataMixin
 from ._selection import select, export_selection
 from ._downloads import DownloadsMixin
 from ._images import ParticipantImagesMixin
+from ._handoffs import HandoffsMixin
 from ._research import ResearchMixin
 
 
@@ -39,7 +40,7 @@ def _identity_matches(first: Provenance, later: Provenance) -> None:
         raise ProtocolError("Service release or installed profile changed during pagination")
 
 
-class TCIAClient(DatasetMethods, CitationMethods, ParticipantsMixin, ClinicalMixin, AvailableDataMixin, DownloadsMixin, ParticipantImagesMixin, ResearchMixin):
+class TCIAClient(DatasetMethods, CitationMethods, ParticipantsMixin, ClinicalMixin, AvailableDataMixin, DownloadsMixin, ParticipantImagesMixin, ResearchMixin, HandoffsMixin):
     """Task-oriented synchronous client for TCIA dataset and participant workflows.
 
     Use an explicit service base_url and a with block. Metadata queries return Page

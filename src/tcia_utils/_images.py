@@ -9,7 +9,6 @@ from ._downloads import (
     DownloadError,
     _notify,
     _validate_max_items,
-    _validate_resume,
     _validate_policy,
 )
 from ._errors import InvalidRequestError, ProtocolError
@@ -327,7 +326,6 @@ class ParticipantImagesMixin:
         dry_run=False,
         overwrite=False,
         progress=True,
-        resume=False,
         accept_data_policy=False,
     ):
         """Download the public image selection returned by plan_participant_images().
@@ -339,8 +337,7 @@ class ParticipantImagesMixin:
             dry_run: True to inspect metadata and prerequisites without a payload transfer or authentication; default False.
             progress: Show SDK preparation messages (default True). TDR streams periodic progress lines into Python/notebook output.
             max_items: Positive limit on whole series/files, not bytes, or None for the full selection. Samples keep their scope in the report.
-            overwrite: Request replacement behavior; default False. Cannot be combined with resume=True.
-            resume: Request TDR skip-existing checks (default False); does not guarantee byte-range resume.
+            overwrite: Request replacement behavior; default False.
 
         Returns:
             DownloadReport with per-entry outcomes and selection scope. .complete describes
@@ -356,14 +353,13 @@ class ParticipantImagesMixin:
         Notes:
             Actual transfers use the downloads extra (pip-installed tcia-data-retriever).
             TDR owns authorization, retry/checksum behavior, file layout and route-specific extraction.
-            TDR normally checks/reuses existing files without resume=True. Keep the same
+            TDR automatically checks/reuses existing files. Keep the same
             destination when expanding a sample. Files accepted by existing-file checks
-            count as Skipped; Synced denotes public DICOM sync jobs. resume=True explicitly
-            requests skip-existing checks, not partial-file byte-range resume.
+            count as Skipped; Synced denotes public DICOM sync jobs. Rerun the same call
+            with the same destination to retry; partial-file byte-range resume is not promised.
             Only the plan's exact public images are selected; related source images are not
             added. Empty or unresolved plans cannot start a transfer. max_items applies across
             the selected series/files and retains sample scope."""
-        _validate_resume(resume)
         _validate_policy(accept_data_policy, dry_run)
         if not isinstance(plan, ParticipantImagePlan):
             raise InvalidRequestError(
@@ -417,7 +413,6 @@ class ParticipantImagesMixin:
             dry_run=dry_run,
             progress=progress,
             overwrite=overwrite,
-            resume=resume,
             accept_data_policy=accept_data_policy,
             max_items=max_items,
             manifest_inputs=inputs,

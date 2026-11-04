@@ -1,6 +1,6 @@
 # TCIA Utils 4.0 troubleshooting
 
-**Import still exposes the old provider modules.** Check `importlib.metadata.version("tcia_utils")` and `tcia_utils.__file__`. The package index may still serve 3.x; install the explicit 4.0.0a16 preview into a fresh environment. Avoid an editable checkout or a `PYTHONPATH` that points to another source tree when verifying notebooks.
+**Import still exposes the old provider modules.** Check `importlib.metadata.version("tcia_utils")` and `tcia_utils.__file__`. The package index may still serve 3.x; install the explicit 4.0.0a17 preview into a fresh environment. Avoid an editable checkout or a `PYTHONPATH` that points to another source tree when verifying notebooks.
 
 **Construction fails.** Supply an explicit HTTP(S) service root as `base_url`, without a `/v2` suffix. The client does not infer a default host. The timeout must be greater than zero and at most 120 seconds.
 
@@ -20,7 +20,7 @@
 
 ## Controlled ZIP reports a direct-file size mismatch
 
-Upgrade to `tcia_utils[downloads]==4.0.0a16` and restart the Colab/Jupyter runtime.
+Upgrade to `tcia_utils[downloads]==4.0.0a17` and restart the Colab/Jupyter runtime.
 Earlier previews could forward the inventory's uncompressed DICOM-series size as
 the expected ZIP byte count. The fix separates reported sizes from exact payload
 bytes and preserves TDR's response-length and checksum checks. A rounded manifest
