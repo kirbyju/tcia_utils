@@ -608,11 +608,6 @@ def _manifest_records(row, column, items):
     return child
 
 
-def _validate_resume(resume):
-    if not isinstance(resume, bool):
-        raise InvalidRequestError("resume must be a boolean")
-
-
 def _tdr():
     try:
         import tcia_data_retriever
@@ -925,7 +920,6 @@ class DownloadsMixin:
         progress=True,
         max_items=None,
         overwrite=False,
-        resume=False,
         access_level=None,
     ):
         """Download a local or HTTPS manifest without manually extracting its identifiers.
@@ -938,8 +932,7 @@ class DownloadsMixin:
             dry_run: True to inspect metadata and prerequisites without a payload transfer or authentication; default False.
             progress: Show SDK preparation messages (default True). TDR streams periodic progress lines into Python/notebook output.
             max_items: Positive limit on whole series/files, not bytes, or None for the full selection. Samples keep their scope in the report.
-            overwrite: Request replacement behavior; default False. Cannot be combined with resume=True.
-            resume: Request TDR skip-existing checks (default False); does not guarantee byte-range resume.
+            overwrite: Request replacement behavior; default False.
             access_level: Optional "open"/"public"/"open_noncommercial" or "controlled" label; otherwise inferred from the manifest route.
 
         Returns:
@@ -957,12 +950,13 @@ class DownloadsMixin:
             Actual transfers use the downloads extra (pip-installed tcia-data-retriever).
             TDR owns authorization, retry/checksum behavior, file layout and route-specific extraction;
             supplied CLI/Python keys are used only for this invocation, without a saved copy.
-            TDR normally checks/reuses existing files without resume=True. Keep the same
+            TDR automatically checks/reuses existing files. Keep the same
             destination when expanding a sample. Files accepted by existing-file checks
             count as Skipped; Synced denotes public DICOM sync jobs. For controlled inventory
             records, only download_size_bytes is an exact payload-size assertion; reported
-            file_size_bytes may describe uncompressed series data. resume=True explicitly
-            requests skip-existing checks, not partial-file byte-range resume.
+            file_size_bytes may describe uncompressed series data. Rerun the same call with
+            the same destination to retry or expand a sample; partial-file byte-range
+            resume is not promised.
             A dry run still reads/fetches the small manifest. max_items selects first items in
             manifest order. Standalone direct/controlled file manifests use the generic
             collection label "manifest"; TDR preserves supplied filenames and keeps these
@@ -972,7 +966,6 @@ class DownloadsMixin:
         Example:
             report = tcia.download_manifest("cohort.tcia", "sample", max_items=1,
                                             accept_data_policy=True)"""
-        _validate_resume(resume)
         _validate_max_items(max_items)
         _validate_policy(accept_data_policy, dry_run)
         _notify(progress, "Preparing download selection...")
@@ -1049,7 +1042,6 @@ class DownloadsMixin:
             progress=progress,
             max_items=max_items,
             overwrite=overwrite,
-            resume=resume,
             manifest_inputs={0: (content, suffix)},
         )
 
@@ -1066,7 +1058,6 @@ class DownloadsMixin:
         progress=True,
         max_items=None,
         overwrite=False,
-        resume=False,
         dataset_type=None,
     ):
         """Download selected dataset groups after checking every selected route.
@@ -1079,8 +1070,7 @@ class DownloadsMixin:
             dry_run: True to inspect metadata and prerequisites without a payload transfer or authentication; default False.
             progress: Show SDK preparation messages (default True). TDR streams periodic progress lines into Python/notebook output.
             max_items: Positive limit on whole series/files, not bytes, or None for the full selection. Samples keep their scope in the report.
-            overwrite: Request replacement behavior; default False. Cannot be combined with resume=True.
-            resume: Request TDR skip-existing checks (default False); does not guarantee byte-range resume.
+            overwrite: Request replacement behavior; default False.
             download_ids: Optional nonempty sequence of exact download IDs; None includes all current groups.
             access_levels: Optional nonempty sequence of access labels to select groups.
             dataset_type: Optional "collection" or "analysis_result" to disambiguate the title.
@@ -1100,17 +1090,17 @@ class DownloadsMixin:
             Actual transfers use the downloads extra (pip-installed tcia-data-retriever).
             TDR owns authorization, retry/checksum behavior, file layout and route-specific extraction;
             supplied CLI/Python keys are used only for this invocation, without a saved copy.
-            TDR normally checks/reuses existing files without resume=True. Keep the same
+            TDR automatically checks/reuses existing files. Keep the same
             destination when expanding a sample. Files accepted by existing-file checks
             count as Skipped; Synced denotes public DICOM sync jobs. For controlled inventory
             records, only download_size_bytes is an exact payload-size assertion; reported
-            file_size_bytes may describe uncompressed series data. resume=True explicitly
-            requests skip-existing checks, not partial-file byte-range resume.
+            file_size_bytes may describe uncompressed series data. Rerun the same call with
+            the same destination to retry or expand a sample; partial-file byte-range
+            resume is not promised.
             Calls plan_downloads() internally; you need not call it first. Unsupported groups
             or missing prerequisites stop the selection rather than silently omitting data.
             max_items samples across groups in inventory order. Packages without file-level
             routes cannot be sampled. A dry run checks readiness but does not establish access."""
-        _validate_resume(resume)
         _validate_max_items(max_items)
         _validate_policy(accept_data_policy, dry_run)
         _notify(progress, "Preparing download selection...")
@@ -1130,7 +1120,6 @@ class DownloadsMixin:
             progress=progress,
             max_items=max_items,
             overwrite=overwrite,
-            resume=resume,
         )
 
     def download_files(
@@ -1144,7 +1133,6 @@ class DownloadsMixin:
         progress=True,
         max_items=None,
         overwrite=False,
-        resume=False,
     ):
         """Download explicit file records without automatically adding related images.
 
@@ -1156,8 +1144,7 @@ class DownloadsMixin:
             dry_run: True to inspect metadata and prerequisites without a payload transfer or authentication; default False.
             progress: Show SDK preparation messages (default True). TDR streams periodic progress lines into Python/notebook output.
             max_items: Positive limit on whole series/files, not bytes, or None for the full selection. Samples keep their scope in the report.
-            overwrite: Request replacement behavior; default False. Cannot be combined with resume=True.
-            resume: Request TDR skip-existing checks (default False); does not guarantee byte-range resume.
+            overwrite: Request replacement behavior; default False.
 
         Returns:
             DownloadReport with per-entry outcomes and selection scope. .complete describes
@@ -1174,12 +1161,13 @@ class DownloadsMixin:
             Actual transfers use the downloads extra (pip-installed tcia-data-retriever).
             TDR owns authorization, retry/checksum behavior, file layout and route-specific extraction;
             supplied CLI/Python keys are used only for this invocation, without a saved copy.
-            TDR normally checks/reuses existing files without resume=True. Keep the same
+            TDR automatically checks/reuses existing files. Keep the same
             destination when expanding a sample. Files accepted by existing-file checks
             count as Skipped; Synced denotes public DICOM sync jobs. For controlled inventory
             records, only download_size_bytes is an exact payload-size assertion; reported
-            file_size_bytes may describe uncompressed series data. resume=True explicitly
-            requests skip-existing checks, not partial-file byte-range resume.
+            file_size_bytes may describe uncompressed series data. Rerun the same call with
+            the same destination to retry or expand a sample; partial-file byte-range
+            resume is not promised.
             max_items selects the first N records. Package or manifest rows must use
             download_dataset() or download_manifest(); source_url alone is not a file route."""
         _validate_max_items(max_items)
@@ -1219,7 +1207,6 @@ class DownloadsMixin:
             progress=progress,
             max_items=max_items,
             overwrite=overwrite,
-            resume=resume,
         )
 
     def _download(
@@ -1234,22 +1221,16 @@ class DownloadsMixin:
         overwrite,
         manifest_inputs=None,
         max_items=None,
-        resume=False,
         accept_data_policy=False,
     ):
-        _validate_resume(resume)
         _validate_policy(accept_data_policy, dry_run)
         if type(dry_run) is not bool or type(overwrite) is not bool:
             raise InvalidRequestError("dry_run and overwrite must be booleans")
-        if overwrite and resume:
-            raise InvalidRequestError("Choose overwrite=True or resume=True, not both")
         if type(progress) is not bool:
             raise InvalidRequestError("progress must be a boolean")
         scope = {
             **scope,
             "dry_run": dry_run,
-            "resume_requested": resume,
-            "public_dicom_resume_requested": resume,
             "transfer_engine": "tcia-data-retriever",
             "data_policy_accepted": accept_data_policy,
         }
@@ -1463,7 +1444,6 @@ class DownloadsMixin:
                     folder,
                     accept_data_policy=True,
                     credential_file=key_path if controlled else None,
-                    skip_existing=resume,
                     progress="plain",
                 )
                 summary = _engine_summary(raw, expected)

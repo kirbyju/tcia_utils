@@ -54,12 +54,12 @@ class Client(DownloadsMixin):
         return DownloadPlan(tuple(self.rows), None, {"selected_groups": len(self.rows)})
 
 
-def test_file_metadata_and_resume_are_delegated_to_tdr(tmp_path, monkeypatch, tdr_calls):
+def test_file_metadata_and_repeat_downloads_are_delegated_to_tdr(tmp_path, monkeypatch, tdr_calls):
     checksum = hashlib.md5(b"FAKE").hexdigest()
     c = Client([row(file_name="data.bin", checksum=checksum, checksum_algorithm="md5")])
     assert c.download_dataset("EXAMPLE", tmp_path, accept_data_policy=True).complete
-    assert c.download_dataset("EXAMPLE", tmp_path, resume=True, accept_data_policy=True).complete
-    assert [c["options"]["skip_existing"] for c in tdr_calls] == [False, True]
+    assert c.download_dataset("EXAMPLE", tmp_path, accept_data_policy=True).complete
+    assert all("skip_existing" not in c["options"] for c in tdr_calls)
     record = tdr_calls[0]["records"][0]
     assert record["file_name"] == "data.bin" and record["md5"] == checksum
     assert record["file_size_bytes"] == "4"

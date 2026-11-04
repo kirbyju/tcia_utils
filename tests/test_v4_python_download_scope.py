@@ -28,7 +28,7 @@ def test_early_progress_precedes_manifest_fetch_and_transfer(
 
 
 @pytest.mark.parametrize("api", ["manifest", "dataset"])
-def test_transfer_resume_is_explicit_without_a_local_idc_index(
+def test_repeat_transfers_keep_tdr_defaults_without_a_local_idc_index(
     tmp_path, monkeypatch, capsys, api, tdr_calls
 ):
     path = tmp_path / "cohort.tcia"
@@ -49,16 +49,16 @@ def test_transfer_resume_is_explicit_without_a_local_idc_index(
     monkeypatch.setitem(sys.modules, "pandas", None)
     download = c.download_dataset if api == "dataset" else c.download_manifest
     source = "EXAMPLE" if api == "dataset" else path
-    for resume in [False, False, True]:
-        report = download(source, tmp_path / "out", resume=resume, accept_data_policy=True)
-        assert report.complete and report.scope["resume_requested"] is resume
-    assert [c["options"]["skip_existing"] for c in tdr_calls] == [False, False, True]
+    for _ in range(3):
+        report = download(source, tmp_path / "out", accept_data_policy=True)
+        assert report.complete and "resume_requested" not in report.scope
+    assert all("skip_existing" not in c["options"] for c in tdr_calls)
 
 
-def test_dry_run_never_launches_tdr_for_resume(tmp_path, monkeypatch, tdr_calls):
+def test_dry_run_never_launches_tdr_for_repeat_downloads(tmp_path, monkeypatch, tdr_calls):
     p = tmp_path / "cohort.csv"
     p.write_text("SeriesInstanceUID\n1.2.3\n")
-    report = DownloadsMixin().download_manifest(p, tmp_path / "out", resume=True, dry_run=True)
+    report = DownloadsMixin().download_manifest(p, tmp_path / "out", dry_run=True)
     assert not tdr_calls and not report.complete and not (tmp_path / "out").exists()
 
 
@@ -135,30 +135,8 @@ def test_invalid_progress_fails_before_any_metadata(tmp_path, monkeypatch):
         )
 
 
-@pytest.mark.parametrize("resume", [None, 0, 1, "yes", []])
-def test_invalid_resume_fails_before_metadata_or_payload(monkeypatch, tmp_path, resume):
-    fake_http(
-        monkeypatch, lambda _: pytest.fail("Invalid options must not fetch metadata or files")
-    )
-    with TCIAClient(base_url="https://metadata.example.org") as c:
-        monkeypatch.setattr(c, "_result", lambda *a, **kw: pytest.fail("No service queries"))
-        for download, source in [
-            (c.download_manifest, "https://example.org/cohort.tcia"),
-            (c.download_dataset, "EXAMPLE"),
-            (c.download_images, None),
-        ]:
-            with pytest.raises(InvalidRequestError, match="resume must be a boolean"):
-                download(source, tmp_path, resume=resume)
-    assert not list(tmp_path.iterdir())
 
 
-def test_resume_for_files_uses_the_engine_skip_existing_option(tmp_path, monkeypatch, tdr_calls):
-    p = tmp_path / "files.csv"
-    p.write_text("imageUrl,file_name\nhttps://example.org/image.nii.gz,image.nii.gz\n")
-    report = DownloadsMixin().download_manifest(
-        p, tmp_path / "out", resume=True, accept_data_policy=True
-    )
-    assert report.complete and tdr_calls[0]["options"]["skip_existing"] is True
 
 
 @pytest.mark.parametrize('entrypoint', ['manifest', 'dataset', 'files'])
