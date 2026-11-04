@@ -257,3 +257,23 @@ def test_controlled_manifest_preserves_filename_and_scope(tmp_path, monkeypatch,
     ).complete
     assert tdr_calls[0]["records"][0]["file_name"] == "original.zip"
     assert tdr_calls[0]["options"]["credential_file"] == key.resolve()
+
+
+@pytest.mark.parametrize('downloaded,skipped', [(0, 2), (1, 1)])
+def test_existing_files_counted_as_skipped_still_complete_selection(tmp_path, monkeypatch, downloaded, skipped):
+    from tdr_fakes import install_tdr, success
+
+    def handler(call):
+        return {**success(len(call['records'])), 'version': '0.1.0rc3',
+                'downloaded': downloaded, 'skipped': skipped}
+
+    install_tdr(monkeypatch, handler=handler)
+    selection = Client([
+        row(download_id='a', file_name='a.bin', download_url='https://files.example.org/a.bin'),
+        row(download_id='b', file_name='b.bin', download_url='https://files.example.org/b.bin'),
+    ])
+    report = selection.download_dataset('EXAMPLE', tmp_path, accept_data_policy=True)
+    assert report.complete
+    assert all(entry['status'] == 'engine_completed' for entry in report.entries)
+    assert all(entry['engine_summary']['downloaded'] == downloaded
+               and entry['engine_summary']['skipped'] == skipped for entry in report.entries)

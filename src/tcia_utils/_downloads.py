@@ -621,7 +621,7 @@ def _tdr():
     from inspect import signature
     if "progress" not in signature(tcia_data_retriever.download).parameters:
         raise DownloadError(
-            "Install tcia_utils[downloads] with TDR 0.1.0rc2 and restart the Python/Colab runtime"
+            "Install tcia_utils[downloads] with TDR 0.1.0rc3 and restart the Python/Colab runtime"
         )
     return tcia_data_retriever
 
@@ -958,8 +958,8 @@ class DownloadsMixin:
             TDR owns authorization, retry/checksum behavior, file layout and route-specific extraction;
             supplied CLI/Python keys are used only for this invocation, without a saved copy.
             TDR normally checks/reuses existing files without resume=True. Keep the same
-            destination when expanding a sample. RC2 counts reused direct/controlled files
-            under Downloaded; Synced denotes public DICOM sync jobs. For controlled inventory
+            destination when expanding a sample. Files accepted by existing-file checks
+            count as Skipped; Synced denotes public DICOM sync jobs. For controlled inventory
             records, only download_size_bytes is an exact payload-size assertion; reported
             file_size_bytes may describe uncompressed series data. resume=True explicitly
             requests skip-existing checks, not partial-file byte-range resume.
@@ -1101,8 +1101,8 @@ class DownloadsMixin:
             TDR owns authorization, retry/checksum behavior, file layout and route-specific extraction;
             supplied CLI/Python keys are used only for this invocation, without a saved copy.
             TDR normally checks/reuses existing files without resume=True. Keep the same
-            destination when expanding a sample. RC2 counts reused direct/controlled files
-            under Downloaded; Synced denotes public DICOM sync jobs. For controlled inventory
+            destination when expanding a sample. Files accepted by existing-file checks
+            count as Skipped; Synced denotes public DICOM sync jobs. For controlled inventory
             records, only download_size_bytes is an exact payload-size assertion; reported
             file_size_bytes may describe uncompressed series data. resume=True explicitly
             requests skip-existing checks, not partial-file byte-range resume.
@@ -1175,8 +1175,8 @@ class DownloadsMixin:
             TDR owns authorization, retry/checksum behavior, file layout and route-specific extraction;
             supplied CLI/Python keys are used only for this invocation, without a saved copy.
             TDR normally checks/reuses existing files without resume=True. Keep the same
-            destination when expanding a sample. RC2 counts reused direct/controlled files
-            under Downloaded; Synced denotes public DICOM sync jobs. For controlled inventory
+            destination when expanding a sample. Files accepted by existing-file checks
+            count as Skipped; Synced denotes public DICOM sync jobs. For controlled inventory
             records, only download_size_bytes is an exact payload-size assertion; reported
             file_size_bytes may describe uncompressed series data. resume=True explicitly
             requests skip-existing checks, not partial-file byte-range resume.

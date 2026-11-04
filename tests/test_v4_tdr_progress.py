@@ -21,7 +21,7 @@ from tcia_utils._downloads import DownloadsMixin, _tdr as real_backend
 @pytest.mark.parametrize('success', [True, False])
 def test_wrapper_relays_both_streams_before_completion(tmp_path, monkeypatch, success):
     tdr = pytest.importorskip('tcia_data_retriever')
-    assert tdr.build_info()['version'] == '0.1.0rc2'
+    assert tdr.build_info()['version'] == '0.1.0rc3'
     finish = tmp_path / 'finish'
     child = tmp_path / 'synthetic-tdr'
     child.write_text('#!' + sys.executable + '\n' + '''
@@ -37,7 +37,7 @@ while not finish.exists() and time.monotonic()<deadline:
     time.sleep(0.01)
 ok=SUCCESS
 report=dict(schema_version=1, status='success' if ok else 'failed',
-    version='0.1.0rc2', total=1, downloaded=1 if ok else 0,
+    version='0.1.0rc3', total=1, downloaded=1 if ok else 0,
     synced=0, skipped=0, failed=0 if ok else 1, elapsed_seconds=0.1)
 Path(args[args.index('--report-json')+1]).write_text(json.dumps(report))
 print('Run complete' if ok else 'Run failed', file=sys.stderr, flush=True)

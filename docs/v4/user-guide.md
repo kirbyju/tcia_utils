@@ -152,7 +152,7 @@ For basic public DICOM series selection from a TCIA cohort, use `plan_participan
 
 Install `tcia_utils[downloads]` for the packaged transfer engine. Supported public
 DICOM, public files and approved controlled files delegate to
-`tcia-data-retriever==0.1.0rc2`, including its pip-bundled headless executable.
+`tcia-data-retriever==0.1.0rc3`, including its pip-bundled headless executable.
 No separate application installation is required. Core imports and metadata
 queries do not launch it. Basic public participant image planning and manifest
 downloads need no IDC Python package. Install IDC's tools independently for
@@ -178,13 +178,14 @@ a regular existing file can be accepted based on presence alone.
 ordinary sample-to-full reuse and does not guarantee partial-file byte-range
 resume. Do not combine resume and overwrite.
 
-TDR RC2 summary categories differ by route. `Synced` identifies public DICOM sync
-jobs; a sync job can still transfer missing files. For direct and controlled files,
-`Downloaded` counts both newly transferred and already-present accepted files.
-`Downloaded: N, Synced: 0` therefore does not establish that N payloads were fetched
-again. This is TDR's reporting behavior, not an additional SDK transfer.
+TDR RC3 counts files accepted by existing-file prechecks as `Skipped`, both in
+normal runs and with `resume=True`. They still count toward completed progress.
+`Downloaded` counts new non-sync transfers. `Synced` identifies public DICOM sync
+jobs, which can still transfer missing files. Earlier RC2 builds included reused
+direct/controlled files under `Downloaded`; the new counts do not imply a change
+in which files are transferred.
 
-Progress is on by default. The SDK asks TDR RC2 for `plain` progress: readable
+Progress is on by default. The SDK asks TDR RC3 for `plain` progress: readable
 newline snapshots, normally about every five seconds during active transfers,
 plus phase messages and a final result. TDR forwards child-process output through
 Python's stdout/stderr so Colab and Jupyter can display it while the call runs.
@@ -195,9 +196,9 @@ progress renderer or subprocess launcher is maintained in this package.
 
 After upgrading in Colab/Jupyter, restart a runtime that already imported the older
 TDR wrapper, then rerun from the top. The current downloads extra requires
-`tcia-data-retriever==0.1.0rc2`.
+`tcia-data-retriever==0.1.0rc3`.
 
-For controlled data, pass only `credential_file=...`, never key contents. TDR RC2
+For controlled data, pass only `credential_file=...`, never key contents. TDR RC3
 uses the supplied key for that CLI/Python invocation only; it does not save a copy
 or fall back to a saved GUI key. The desktop GUI's credential behavior is separate.
 See [TDR's progress and credential documentation](https://github.com/TCIA/data-retriever/blob/2dcad4bd6fe0bd62b42e67834d0ad42240694f42/docs/cli-progress-and-credentials.md).
@@ -271,7 +272,7 @@ hash and item count, not keys, signed URLs, or a guessed dataset/participant ide
 A standalone `download_manifest()` call supplies the generic collection label
 `manifest` in its normalized file manifest. TDR uses that label when arranging
 direct/controlled files and preserves their supplied filenames, including `.zip`.
-These archives are not automatically expanded by TDR RC2's direct/DRS file route.
+These archives are not automatically expanded by TDR RC3's direct/DRS file route.
 It cannot build the public DICOM hierarchy without the corresponding metadata.
 When dataset context is already known, `download_dataset(short_title, ...,
 download_ids=[...])` retains the real collection label. Changing that label later

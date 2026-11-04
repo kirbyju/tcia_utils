@@ -125,7 +125,7 @@ jobs:
           import subprocess
           import tcia_data_retriever as tdr
           from inspect import signature
-          assert tdr.build_info()["version"] == "0.1.0rc2"
+          assert tdr.build_info()["version"] == "0.1.0rc3"
           assert "progress" in signature(tdr.download).parameters
           print(tcia_utils.__file__)
           result = subprocess.run([str(tdr.executable()), "--version"], check=True, capture_output=True, text=True)
