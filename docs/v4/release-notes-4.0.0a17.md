@@ -15,7 +15,7 @@ can also consume saved participant cohorts or Participant Explorer CSV exports.
 
 TDR remains pinned to 0.1.0rc3. No TDR, REST/MCP or artifact update is required.
 
-Validation: 346 SDK tests and 34 notebook/adapter checks passed. Both lessons
+Validation: 346 SDK tests and 35 notebook/adapter checks passed. Both lessons
 executed against public metadata and then offline from captured responses with
 an installed SDK wheel. The Aspera lesson exported two of 70 indexed files for
 two participants. Every imaging transfer was blocked or intercepted; Ruby/Aspera
