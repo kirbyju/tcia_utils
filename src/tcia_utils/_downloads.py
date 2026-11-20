@@ -616,7 +616,7 @@ def _tdr():
     from inspect import signature
     if "progress" not in signature(tcia_data_retriever.download).parameters:
         raise DownloadError(
-            "Install tcia_utils[downloads] with TDR 0.1.0rc3 and restart the Python/Colab runtime"
+            "Install tcia_utils[downloads] with TDR 0.1.0rc4 and restart the Python/Colab runtime"
         )
     return tcia_data_retriever
 
@@ -672,9 +672,20 @@ def _transfer_csv(items, column):
 
 
 def _engine_summary(report, expected=None):
-    fields = ("total", "downloaded", "synced", "skipped", "failed")
-    if not isinstance(report, dict) or report.get("schema_version") != 1:
+    if (
+        not isinstance(report, dict)
+        or type(report.get("schema_version")) is not int
+        or report["schema_version"] not in (1, 2)
+    ):
         raise DownloadError("Transfer engine returned an unsupported completion report")
+    # Schema 2 aggregates transfers and accepted existing items as completed
+    # under the retained `downloaded` wire field. Preserve schema 1 accounting
+    # for callers that still have the previous engine installed.
+    completed_fields = (
+        ("downloaded", "synced", "skipped")
+        if report["schema_version"] == 1 else ("downloaded",)
+    )
+    fields = ("total", *completed_fields, "failed")
     if any(type(report.get(k)) is not int or report[k] < 0 for k in fields):
         raise DownloadError("Transfer engine returned invalid completion counts")
     safe = {
@@ -692,7 +703,7 @@ def _engine_summary(report, expected=None):
     }
     if report.get("status") != "success" or report["failed"] or not report["total"]:
         raise DownloadError("Transfer engine did not complete the requested selection")
-    if sum(report[k] for k in ("downloaded", "synced", "skipped")) != report["total"]:
+    if sum(report[k] for k in completed_fields) != report["total"]:
         raise DownloadError("Transfer engine completion counts do not cover its selection")
     if expected is not None and report["total"] != expected:
         raise DownloadError("Transfer engine did not account for every selected series/file")
