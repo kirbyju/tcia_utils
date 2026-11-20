@@ -277,3 +277,23 @@ def test_existing_files_counted_as_skipped_still_complete_selection(tmp_path, mo
     assert all(entry['status'] == 'engine_completed' for entry in report.entries)
     assert all(entry['engine_summary']['downloaded'] == downloaded
                and entry['engine_summary']['skipped'] == skipped for entry in report.entries)
+
+
+@pytest.mark.parametrize("schema", [1, 2])
+def test_engine_accepts_supported_report_schemas(schema):
+    report = dict(schema_version=schema, status="success", total=2, downloaded=2, failed=0)
+    if schema == 1:
+        report.update(synced=0, skipped=0)
+    assert downloads._engine_summary(report, expected=2) == report
+
+
+@pytest.mark.parametrize("changes", [
+    {"downloaded": 1}, {"downloaded": 3}, {"downloaded": True},
+    {"failed": 1}, {"status": "failed"}, {"total": 1},
+    {"schema_version": 3}, {"schema_version": True},
+])
+def test_engine_rejects_invalid_schema2_reports(changes):
+    report = dict(schema_version=2, status="success", total=2, downloaded=2, failed=0)
+    report.update(changes)
+    with pytest.raises(DownloadError):
+        downloads._engine_summary(report, expected=2)
