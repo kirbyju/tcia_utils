@@ -616,7 +616,7 @@ def _tdr():
     from inspect import signature
     if "progress" not in signature(tcia_data_retriever.download).parameters:
         raise DownloadError(
-            "Install tcia_utils[downloads] with TDR 0.1.0rc4 and restart the Python/Colab runtime"
+            "Install tcia_utils[downloads] with TDR 0.1.0 and restart the Python/Colab runtime"
         )
     return tcia_data_retriever
 
